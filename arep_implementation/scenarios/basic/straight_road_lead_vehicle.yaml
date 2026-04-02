@@ -1,0 +1,50 @@
+scenario:
+  name: "straight_road_lead_vehicle"
+  version: "1.0"
+  description: "Ego vehicle following a slower lead vehicle — tests lane keeping and safe following"
+  duration: 30.0
+
+ego:
+  initial:
+    x: 0.0
+    y: 0.0
+    heading: 0.0
+    velocity: 20.0
+
+  constraints:
+    max_velocity: 30.0
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: "highway"
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.8
+
+  weather:
+    condition: "clear"
+    visibility: 1000.0
+
+traffic:
+  - id: "lead_vehicle"
+    type: "car"
+    initial:
+      x: 50.0
+      y: 0.0
+      heading: 0.0
+      velocity: 15.0
+    behavior:
+      type: "constant_velocity"
+      parameters: {}
+
+events: []
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0

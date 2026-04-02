@@ -1,0 +1,41 @@
+# AREP Default Configuration
+# Override per-environment in {env}.yaml or via AREP_* environment variables.
+
+env: development
+debug: false
+enable_visualization: true
+
+simulation:
+  timestep: 0.02          # seconds (50 Hz)
+  max_duration: 60.0      # seconds
+  max_steps: 3000
+  vehicle_length: 4.5     # metres
+  vehicle_width: 2.0
+  wheelbase: 2.7
+  max_velocity: 35.0      # m/s (~126 km/h)
+  max_acceleration: 3.0   # m/s²
+  max_deceleration: 8.0
+  max_steering_angle: 0.5 # radians
+  collision_tolerance: 0.000001
+
+execution:
+  num_workers: 4
+  model_timeout_ms: 50
+  default_num_runs: 100
+  default_master_seed: 42
+
+database:
+  url: "sqlite:///arep.db"
+  echo: false
+  pool_size: 5
+
+paths:
+  scenarios_dir: "scenarios"
+  results_dir: "results"
+  logs_dir: "logs"
+  models_dir: "models"
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  debug: false

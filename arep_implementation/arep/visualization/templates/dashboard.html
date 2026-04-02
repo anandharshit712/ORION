@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AREP - Autonomous Robustness Evaluation Platform</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --accent-orange: #fb923c;
+            --accent-purple: #a78bfa;
+            --border: #334155;
+            --glass: rgba(30, 41, 59, 0.7);
+            --radius: 12px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────────── */
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header-brand .logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 18px; color: white;
+        }
+
+        .header-brand h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-status {
+            display: flex; align-items: center; gap: 0.5rem;
+            font-size: 0.85rem; color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px; height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ── Layout ─────────────────────────────────────────── */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem 2rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* ── Cards ──────────────────────────────────────────── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+
+        .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 0.9rem; font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-value {
+            font-size: 2.5rem; font-weight: 800;
+            line-height: 1;
+        }
+
+        .card-subtitle {
+            font-size: 0.8rem; color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* ── Metric Colors ──────────────────────────────────── */
+        .metric-blue { color: var(--accent-blue); }
+        .metric-green { color: var(--accent-green); }
+        .metric-red { color: var(--accent-red); }
+        .metric-orange { color: var(--accent-orange); }
+        .metric-purple { color: var(--accent-purple); }
+
+        /* ── Score Ring ─────────────────────────────────────── */
+        .score-ring {
+            width: 120px; height: 120px;
+            position: relative;
+            margin: 0 auto 1rem;
+        }
+
+        .score-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+        .score-ring circle {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+        }
+
+        .score-ring .bg { stroke: var(--border); }
+        .score-ring .fg { transition: stroke-dashoffset 1s ease; }
+        .score-ring .label {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.75rem; font-weight: 800;
+        }
+
+        /* ── Controls ───────────────────────────────────────── */
+        .controls {
+            display: flex; gap: 1rem; margin-bottom: 1.5rem;
+            flex-wrap: wrap; align-items: center;
+        }
+
+        .control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+        .control-label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; }
+
+        select, input[type="number"] {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        select:focus, input:focus { border-color: var(--accent-blue); }
+
+        .btn {
+            padding: 0.6rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+        }
+
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* ── Table ──────────────────────────────────────────── */
+        .table-container { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:hover td { background: var(--bg-hover); }
+
+        .badge {
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-success { background: rgba(74, 222, 128, 0.15); color: var(--accent-green); }
+        .badge-danger { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+        .badge-warning { background: rgba(251, 146, 60, 0.15); color: var(--accent-orange); }
+        .badge-info { background: rgba(56, 189, 248, 0.15); color: var(--accent-blue); }
+
+        /* ── Loading ────────────────────────────────────────── */
+        .spinner {
+            width: 20px; height: 20px;
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading .spinner { display: inline-block; }
+        .loading .btn-text { display: none; }
+
+        /* ── Log ────────────────────────────────────────────── */
+        .log-panel {
+            background: #0c1222;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            max-height: 200px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        .log-entry { padding: 0.1rem 0; }
+        .log-info { color: var(--accent-blue); }
+        .log-success { color: var(--accent-green); }
+        .log-error { color: var(--accent-red); }
+        .log-warn { color: var(--accent-orange); }
+
+        /* ── Responsive ─────────────────────────────────────── */
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .grid-3 { grid-template-columns: 1fr; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .controls { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-brand">
+            <div class="logo">A</div>
+            <h1>AREP Dashboard</h1>
+        </div>
+        <div class="header-status">
+            <span class="status-dot"></span>
+            <span id="apiStatus">Connected</span>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <!-- Controls -->
+        <div class="controls">
+            <div class="control-group">
+                <span class="control-label">Model</span>
+                <select id="modelSelect">
+                    <option value="SimpleLaneKeep">SimpleLaneKeep</option>
+                    <option value="ConstantAction">ConstantAction</option>
+                    <option value="EmergencyBrake">EmergencyBrake</option>
+                    <option value="Random">Random</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <span class="control-label">Scenario</span>
+                <select id="scenarioSelect">
+                    <option value="scenarios/basic/straight_road_empty.yaml">Straight Road (Empty)</option>
+                    <option value="scenarios/basic/straight_road_lead_vehicle.yaml">Straight Road (Lead Vehicle)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <span class="control-label">Runs</span>
+                <input type="number" id="numRuns" value="10" min="1" max="1000" style="width: 80px;">
+            </div>
+            <div class="control-group">
+                <span class="control-label">Seed</span>
+                <input type="number" id="masterSeed" value="42" min="0" style="width: 100px;">
+            </div>
+            <div class="control-group" style="justify-content: flex-end;">
+                <span class="control-label">&nbsp;</span>
+                <button class="btn btn-primary" id="runBtn" onclick="runEvaluation()">
+                    <span class="btn-text">Run Evaluation</span>
+                    <span class="spinner"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid-3" id="summaryCards">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Composite Score</span>
+                </div>
+                <div class="score-ring">
+                    <svg viewBox="0 0 120 120">
+                        <circle class="bg" cx="60" cy="60" r="50"></circle>
+                        <circle class="fg" cx="60" cy="60" r="50"
+                                stroke="var(--accent-purple)"
+                                stroke-dasharray="314"
+                                stroke-dashoffset="314"
+                                id="compositeRing"></circle>
+                    </svg>
+                    <span class="label metric-purple" id="compositeValue">--</span>
+                </div>
+                <div class="card-subtitle" style="text-align:center;" id="compositeCI"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><span class="card-title">Safety</span></div>
+                <div class="card-value metric-red" id="safetyValue">--</div>
+                <div class="card-subtitle" id="collisionRate">Collision rate: --</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><span class="card-title">Compliance</span></div>
+                <div class="card-value metric-green" id="complianceValue">--</div>
+                <div class="card-subtitle" id="speedCompliance">Speed compliance: --</div>
+            </div>
+        </div>
+
+        <div class="grid-3">
+            <div class="card">
+                <div class="card-header"><span class="card-title">Stability</span></div>
+                <div class="card-value metric-blue" id="stabilityValue">--</div>
+                <div class="card-subtitle" id="jerkInfo">Mean jerk: --</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><span class="card-title">Reactivity</span></div>
+                <div class="card-value metric-orange" id="reactivityValue">--</div>
+                <div class="card-subtitle" id="responseTime">Response time: --</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><span class="card-title">Runs</span></div>
+                <div class="card-value metric-purple" id="totalRuns">0</div>
+                <div class="card-subtitle" id="avgDuration">Avg duration: --</div>
+            </div>
+        </div>
+
+        <!-- Results Table + Log -->
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Run Results</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Score</th>
+                                <th>Safety</th>
+                                <th>Collision</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTable">
+                            <tr><td colspan="6" style="text-align:center; color: var(--text-secondary);">
+                                No results yet - run an evaluation
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Activity Log</span>
+                </div>
+                <div class="log-panel" id="logPanel">
+                    <div class="log-entry log-info">[System] AREP Dashboard loaded</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        function log(msg, type = 'info') {
+            const panel = document.getElementById('logPanel');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${msg}`;
+            panel.appendChild(entry);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        function updateRing(id, value) {
+            const ring = document.getElementById(id);
+            const circumference = 314;
+            ring.style.strokeDashoffset = circumference * (1 - value);
+        }
+
+        function formatScore(val) {
+            return typeof val === 'number' ? val.toFixed(3) : '--';
+        }
+
+        async function runEvaluation() {
+            const btn = document.getElementById('runBtn');
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            const model = document.getElementById('modelSelect').value;
+            const scenario = document.getElementById('scenarioSelect').value;
+            const numRuns = parseInt(document.getElementById('numRuns').value);
+            const seed = parseInt(document.getElementById('masterSeed').value);
+
+            log(`Starting batch: ${model} x ${scenario} (${numRuns} runs, seed=${seed})`);
+
+            try {
+                const resp = await fetch(`${API_BASE}/evaluate/batch`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        scenario_path: scenario,
+                        model_name: model,
+                        num_runs: numRuns,
+                        master_seed: seed,
+                    }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || resp.statusText);
+                }
+
+                const data = await resp.json();
+                log(`Batch complete! Composite: ${data.aggregated.composite_mean.toFixed(4)}`, 'success');
+                updateDashboard(data);
+
+            } catch (e) {
+                log(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        function updateDashboard(data) {
+            const agg = data.aggregated;
+
+            // Summary cards
+            document.getElementById('compositeValue').textContent = formatScore(agg.composite_mean);
+            updateRing('compositeRing', agg.composite_mean);
+            document.getElementById('compositeCI').textContent =
+                `95% CI: [${agg.composite_95ci[0].toFixed(3)}, ${agg.composite_95ci[1].toFixed(3)}]`;
+
+            document.getElementById('safetyValue').textContent = formatScore(agg.safety_mean);
+            document.getElementById('collisionRate').textContent =
+                `Collision rate: ${(agg.collision_rate * 100).toFixed(1)}%`;
+
+            document.getElementById('complianceValue').textContent = formatScore(agg.compliance_mean);
+
+            document.getElementById('stabilityValue').textContent = formatScore(agg.stability_mean);
+            document.getElementById('reactivityValue').textContent = formatScore(agg.reactivity_mean);
+
+            document.getElementById('totalRuns').textContent = agg.num_runs;
+            document.getElementById('avgDuration').textContent =
+                `Avg duration: ${agg.mean_duration.toFixed(1)}s`;
+
+            // Results table
+            if (data.per_run && data.per_run.length > 0) {
+                const tbody = document.getElementById('resultsTable');
+                tbody.innerHTML = '';
+                data.per_run.forEach((run, i) => {
+                    const tr = document.createElement('tr');
+                    const statusBadge = run.collision_occurred
+                        ? '<span class="badge badge-danger">Collision</span>'
+                        : `<span class="badge badge-success">${run.termination_reason || 'OK'}</span>`;
+
+                    tr.innerHTML = `
+                        <td>${i + 1}</td>
+                        <td><strong>${run.composite_score.toFixed(3)}</strong></td>
+                        <td>${run.safety_score.toFixed(3)}</td>
+                        <td>${run.collision_occurred ? 'Yes' : 'No'}</td>
+                        <td>${run.duration.toFixed(1)}s</td>
+                        <td>${statusBadge}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        // Health check on load
+        fetch(`${API_BASE}/health`)
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('apiStatus').textContent = 'Connected';
+                log('API health check: OK', 'success');
+            })
+            .catch(e => {
+                document.getElementById('apiStatus').textContent = 'Disconnected';
+                log('API not available - start with: python -m arep.api.app', 'warn');
+            });
+    </script>
+</body>
+</html>
