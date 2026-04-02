@@ -1,0 +1,60 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+
+# ── Pytest / Coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Database files ────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Node / Frontend ──────────────────────────────────────────────────────────
+node_modules/
+orion-frontend/node_modules/
+orion-frontend/dist/
+orion-frontend/.vite/
+
+# ── Logs & temp ──────────────────────────────────────────────────────────────
+*.log
+setup_log.txt
+logs/
+*.tmp
+*.bak
+
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Secrets / Env ─────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+*.pyc
+*.whl

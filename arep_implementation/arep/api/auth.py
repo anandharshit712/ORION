@@ -16,7 +16,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 
 from arep.database.connection import get_session
@@ -33,15 +32,18 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 # ── Password hashing ────────────────────────────────────────────────────
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+import bcrypt
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # bcrypt throws ValueError if > 72 bytes. We safely truncate.
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    pwd_bytes = plain.encode('utf-8')[:72]
+    return bcrypt.checkpw(pwd_bytes, hashed.encode('utf-8'))
 
 
 # ── JWT ──────────────────────────────────────────────────────────────────
@@ -67,10 +69,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserRecord:
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
             raise credentials_exception
-    except JWTError:
+        user_id = int(str(user_id_str))
+    except (JWTError, ValueError):
         raise credentials_exception
 
     session = get_session()
@@ -123,6 +126,11 @@ auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 @auth_router.post("/register", response_model=UserResponse, status_code=201)
 def register(req: RegisterRequest):
     """Create a new user account."""
+    if len(req.password) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password cannot be longer than 72 characters",
+        )
     session = get_session()
     try:
         # Check duplicates
@@ -158,6 +166,11 @@ def register(req: RegisterRequest):
 @auth_router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest):
     """Authenticate and return a JWT token."""
+    if len(req.password) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
     session = get_session()
     try:
         user = session.query(UserRecord).filter(UserRecord.email == req.email).first()
@@ -171,7 +184,7 @@ def login(req: LoginRequest):
         user.last_login = datetime.datetime.utcnow()
         session.commit()
 
-        token = create_access_token(data={"sub": user.id, "email": user.email})
+        token = create_access_token(data={"sub": str(user.id), "email": user.email})
         logger.info("User logged in: %s", user.username)
         return TokenResponse(access_token=token)
     except HTTPException:
