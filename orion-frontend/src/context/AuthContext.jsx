@@ -22,8 +22,8 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  const login = async (email, password) => {
-    const data = await api.login(email, password);
+  const login = async (identifier, password) => {
+    const data = await api.login(identifier, password);
     localStorage.setItem('orion_token', data.access_token);
     setToken(data.access_token);
     const me = await api.getMe(data.access_token);

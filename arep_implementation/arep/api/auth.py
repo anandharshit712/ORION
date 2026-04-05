@@ -96,7 +96,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str
+    identifier: str
     password: str
 
 
@@ -173,11 +173,13 @@ def login(req: LoginRequest):
         )
     session = get_session()
     try:
-        user = session.query(UserRecord).filter(UserRecord.email == req.email).first()
+        user = session.query(UserRecord).filter(
+            (UserRecord.email == req.identifier) | (UserRecord.username == req.identifier)
+        ).first()
         if not user or not verify_password(req.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
+                detail="Invalid username/email or password",
             )
 
         # Update last_login

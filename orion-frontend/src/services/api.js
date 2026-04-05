@@ -28,10 +28,10 @@ export const api = {
       body: JSON.stringify({ email, username, password, full_name: fullName }),
     }),
 
-  login: (email, password) =>
+  login: (identifier, password) =>
     request('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
     }),
 
   getMe: (token) =>
