@@ -19,8 +19,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from arep.api.auth import auth_router
 from arep.api.routes import (
     health_router, models_router, scenarios_router,
-    evaluate_router, jobs_router, results_router,
+    evaluate_router, jobs_router, results_router, runs_router,
 )
+from arep.api.ws import ws_router
 from arep.database.connection import init_database
 from arep.utils.logging_config import get_logger
 
@@ -68,6 +69,8 @@ def create_app() -> FastAPI:
     app.include_router(evaluate_router)
     app.include_router(jobs_router)
     app.include_router(results_router)
+    app.include_router(runs_router)
+    app.include_router(ws_router)
 
     return app
 

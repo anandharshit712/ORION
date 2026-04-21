@@ -15,7 +15,10 @@ Step execution order (CRITICAL for determinism):
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import asyncio
+import math
+import time
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from arep.config import SimulationConfig
 from arep.core.state import WorldState, TerminationReason
@@ -183,3 +186,182 @@ class SimulationEngine:
         )
 
         return world
+
+    # ── Async / streaming interface (P1.1) ───────────────────────────
+
+    async def run_async(
+        self,
+        initial_world: WorldState,
+        model: ModelInterface,
+        rng: RandomManager,
+        on_tick: Callable[[WorldState, Action], Awaitable[None]],
+        max_steps: int = 3000,
+        tick_interval: float = 0.02,
+    ) -> WorldState:
+        """
+        Run a complete simulation in an async context, invoking ``on_tick``
+        after each step. Paces to ``tick_interval`` seconds of wall clock
+        per step (default 50 Hz). Pass ``tick_interval <= 0`` to run as
+        fast as possible (used for batch/headless mode).
+
+        Determinism is preserved: same seed → same world trajectory. Wall-
+        clock pacing affects delivery latency, not simulation outputs.
+        """
+        world = initial_world.copy()
+        previous_world: Optional[WorldState] = None
+
+        model.reset()
+        logger.info(
+            "Starting async simulation (max_steps=%d, dt=%.4f, pace=%.4fs)",
+            max_steps, self.dt, tick_interval,
+        )
+
+        next_deadline = time.monotonic() if tick_interval > 0 else 0.0
+
+        for step in range(max_steps):
+            observation = Observation.from_world_state(world, previous_world)
+
+            try:
+                action = model.predict(observation)
+            except Exception as e:
+                logger.error("Model error at step %d: %s", step, e)
+                world.is_terminated = True
+                world.termination_reason = TerminationReason.MODEL_ERROR
+                await on_tick(world, Action.zero())
+                break
+
+            previous_world = world
+            world = self.step(world, action, rng)
+
+            await on_tick(world, action)
+
+            if world.is_terminated:
+                break
+
+            if tick_interval > 0:
+                next_deadline += tick_interval
+                delay = next_deadline - time.monotonic()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                else:
+                    # Behind schedule — don't try to catch up, just yield.
+                    next_deadline = time.monotonic()
+                    await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(0)
+
+        if not world.is_terminated:
+            world.is_terminated = True
+            world.termination_reason = TerminationReason.TIMEOUT
+
+        logger.info(
+            "Async simulation complete: reason=%s, time=%.2fs, steps=%d",
+            world.termination_reason.value if world.termination_reason else "unknown",
+            world.sim_time,
+            world.timestep_count,
+        )
+        return world
+
+    def get_tick_frame(
+        self,
+        world: WorldState,
+        action: Optional[Action] = None,
+        scenario_name: str = "",
+        speed_limit: float = 0.0,
+    ) -> Dict[str, Any]:
+        """
+        Serialize the current world to the P1.1 WebSocket JSON frame schema.
+
+        This frame is intended for live visualisation only. Authoritative
+        metric values come from the offline ``CompositeEvaluator`` after
+        the run ends; the ``monitor.metrics_current`` block here is a
+        cheap per-tick proxy (collision + speed-limit compliance).
+        """
+        ego = world.ego_vehicle
+        cos_h = math.cos(ego.heading)
+        sin_h = math.sin(ego.heading)
+
+        collision = world.has_collision
+        speed_ok = speed_limit <= 0.0 or ego.velocity <= speed_limit * 1.10
+
+        safety_score = 0.0 if collision else 1.0
+        compliance_score = 1.0 if speed_ok else 0.7
+        stability_score = 1.0
+        reactivity_score = 1.0
+
+        if collision or world.termination_reason == TerminationReason.OFF_ROAD:
+            verdict = "FAIL"
+        elif not world.is_terminated and world.sim_time < 0.5:
+            verdict = "INCONCLUSIVE"
+        else:
+            verdict = "PASS"
+
+        npcs: List[Dict[str, Any]] = []
+        for obj in world.dynamic_objects:
+            bt_state = ""
+            behavior = world.npc_behaviors.get(obj.object_id)
+            if isinstance(behavior, dict):
+                bt_state = str(
+                    behavior.get("current_state")
+                    or behavior.get("state")
+                    or behavior.get("type", "")
+                )
+            npcs.append({
+                "id": obj.object_id,
+                "x": round(obj.position.x, 4),
+                "y": round(obj.position.y, 4),
+                "z": 0.0,
+                "heading": round(obj.heading, 4),
+                "speed": round(obj.velocity, 4),
+                "type": obj.object_type.value,
+                "bt_state": bt_state,
+            })
+
+        frame: Dict[str, Any] = {
+            "tick": world.timestep_count,
+            "t_ms": round(world.sim_time * 1000.0, 2),
+            "emit_ts_ms": round(time.time() * 1000.0, 2),
+            "scenario_name": scenario_name,
+            "ego": {
+                "id": ego.object_id,
+                "x": round(ego.position.x, 4),
+                "y": round(ego.position.y, 4),
+                "z": 0.0,
+                "heading": round(ego.heading, 4),
+                "speed": round(ego.velocity, 4),
+                "accel_x": round(ego.acceleration * cos_h, 4),
+                "accel_y": round(ego.acceleration * sin_h, 4),
+                "active_sensors": [],
+            },
+            "npcs": npcs,
+            "env": {
+                "weather_type": world.weather_condition,
+                "friction_mu": 1.0,
+                "visibility_m": world.visibility,
+                "time_of_day": "day",
+            },
+            "monitor": {
+                "active_criteria": ["no_collision", "speed_compliance"],
+                "metrics_current": {
+                    "safety_score": round(safety_score, 4),
+                    "compliance_score": round(compliance_score, 4),
+                    "stability_score": round(stability_score, 4),
+                    "reactivity_score": round(reactivity_score, 4),
+                },
+                "verdict_so_far": verdict,
+            },
+            "events": [],
+            "is_terminated": world.is_terminated,
+            "termination_reason": (
+                world.termination_reason.value if world.termination_reason else None
+            ),
+        }
+
+        if action is not None:
+            frame["ego"]["last_action"] = {
+                "steering": round(action.steering, 4),
+                "throttle": round(action.throttle, 4),
+                "brake": round(action.brake, 4),
+            }
+
+        return frame

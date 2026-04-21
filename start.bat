@@ -21,7 +21,7 @@ echo   ╚═══════════════════════�
 echo.
 
 :: ── dependency checks ──────────────────────────────────────
-where uvicorn >nul 2>&1
+python -m uvicorn --version >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] uvicorn not found.
     echo         Run:  cd arep_implementation ^&^& pip install -e ".[api]"
@@ -35,7 +35,7 @@ if errorlevel 1 (
 
 :: ── launch backend in its own window ───────────────────────
 echo [ORION] Starting backend  →  http://localhost:8000  (docs: /docs)
-start "ORION Backend" cmd /k "cd /d "%BACKEND_DIR%" && uvicorn arep.api.app:app --host 0.0.0.0 --port 8000 %UVICORN_EXTRA%"
+start "ORION Backend" cmd /k "cd /d "%BACKEND_DIR%" && python -m uvicorn arep.api.app:app --host 0.0.0.0 --port 8000 %UVICORN_EXTRA%"
 
 :: short pause so uvicorn binds before Vite opens the browser
 timeout /t 2 /nobreak >nul

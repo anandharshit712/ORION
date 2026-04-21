@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from arep.api.schemas import (
     RunSingleRequest, RunBatchRequest,
@@ -66,6 +67,7 @@ scenarios_router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 evaluate_router = APIRouter(prefix="/evaluate", tags=["Evaluate"])
 jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
 results_router = APIRouter(prefix="/results", tags=["Results"])
+runs_router = APIRouter(prefix="/api/runs", tags=["Runs"])
 
 
 # ── Health ───────────────────────────────────────────────────────────────
@@ -257,3 +259,108 @@ def get_results_by_batch(batch_job_id: int):
         repo = RunRepository(session)
         runs = repo.get_runs_for_batch(batch_job_id)
         return [RunRecordResponse.model_validate(r) for r in runs]
+
+
+# ── Runs (live streaming) ────────────────────────────────────────────────
+
+class StartRunRequest(BaseModel):
+    scenario_path: str
+    model_name: str
+    master_seed: int = Field(default=42)
+    tick_interval: float = Field(
+        default=0.02,
+        description="Wall-clock seconds between ticks; <=0 runs as fast as possible.",
+    )
+
+
+class StartRunResponse(BaseModel):
+    run_id: str
+    status: str
+    scenario_name: str
+    model_name: str
+    master_seed: int
+    ws_url: str
+
+
+class RunStatusResponse(BaseModel):
+    run_id: str
+    id: str
+    status: str
+    scenario_name: str
+    model_name: str
+    master_seed: int
+    started_at: str
+    completed_at: Optional[str] = None
+    subscribers: int
+    error: Optional[str] = None
+    composite_score: float = 0.0
+    safety_score: float = 0.0
+    compliance_score: float = 0.0
+    stability_score: float = 0.0
+    reactivity_score: float = 0.0
+    collision_occurred: bool = False
+
+
+@runs_router.post("/", response_model=StartRunResponse, status_code=201)
+async def start_run(req: StartRunRequest):
+    """Launch a live simulation run. Clients connect to the returned
+    ``ws_url`` (with ``?token=<jwt>``) to receive 50 Hz tick frames."""
+    if not Path(req.scenario_path).exists():
+        raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
+    if req.model_name not in AVAILABLE_MODELS:
+        raise HTTPException(
+            400,
+            f"Unknown model: {req.model_name!r}. "
+            f"Available: {list(AVAILABLE_MODELS.keys())}",
+        )
+
+    from arep.api.sim_registry import start_run as _start_run
+
+    try:
+        run = await _start_run(
+            scenario_path=req.scenario_path,
+            model_name=req.model_name,
+            master_seed=req.master_seed,
+            tick_interval=req.tick_interval,
+        )
+    except Exception as e:
+        logger.exception("Failed to start live run")
+        raise HTTPException(500, f"Failed to start run: {e}")
+
+    return StartRunResponse(
+        run_id=run.run_id,
+        status=run.status,
+        scenario_name=run.scenario_name,
+        model_name=run.model_name,
+        master_seed=run.master_seed,
+        ws_url=f"/ws/simulation/{run.run_id}",
+    )
+
+
+@runs_router.get("/", response_model=List[RunStatusResponse])
+async def list_live_runs():
+    from arep.api.sim_registry import get_registry
+    runs = await get_registry().list()
+    return [RunStatusResponse(**r.to_dict()) for r in runs]
+
+
+@runs_router.get("/{run_id}", response_model=RunStatusResponse)
+async def get_live_run(run_id: str):
+    from arep.api.sim_registry import get_registry
+    run = await get_registry().get(run_id)
+    if run is None:
+        raise HTTPException(404, "Run not found")
+    return RunStatusResponse(**run.to_dict())
+
+
+@runs_router.delete("/{run_id}", status_code=204)
+async def cancel_live_run(run_id: str):
+    from arep.api.sim_registry import get_registry
+    registry = get_registry()
+    run = await registry.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Run not found")
+    if run.producer_task is not None and not run.producer_task.done():
+        run.producer_task.cancel()
+    await registry.remove(run_id)
+    return None

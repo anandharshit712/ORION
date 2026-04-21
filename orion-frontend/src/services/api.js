@@ -17,6 +17,7 @@ async function request(endpoint, options = {}) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Request failed');
   }
+  if (res.status === 204) return null;
   return res.json();
 }
 
@@ -43,10 +44,10 @@ export const api = {
 
   // Runs / Results
   getRuns: (token, limit = 50) =>
-    request(`/results/runs?limit=${limit}`, { token }),
+    request(`/runs/?limit=${limit}`, { token }),
 
   getRunDetail: (token, runId) =>
-    request(`/results/runs/${runId}`, { token }),
+    request(`/runs/${runId}`, { token }),
 
   getBatchJobs: (token) =>
     request('/jobs/', { token }),
@@ -65,4 +66,24 @@ export const api = {
 
   // Health
   getHealth: () => request('/health'),
+
+  // Live runs (P1.1)
+  startRun: (token, scenarioPath, modelName, masterSeed = 42, tickInterval = 0.02) =>
+    request('/runs/', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({
+        scenario_path: scenarioPath,
+        model_name: modelName,
+        master_seed: masterSeed,
+        tick_interval: tickInterval,
+      }),
+    }),
+
+  listLiveRuns: (token) => request('/runs/', { token }),
+
+  getLiveRun: (token, runId) => request(`/runs/${runId}`, { token }),
+
+  cancelLiveRun: (token, runId) =>
+    request(`/runs/${runId}`, { method: 'DELETE', token }),
 };

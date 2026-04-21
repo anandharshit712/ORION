@@ -274,3 +274,85 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ── Launch Sim Panel ─────────────────────────────────────────────────── */
+
+.launch-sim-panel {
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.launch-sim-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.launch-sim-sub {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.launch-sim-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 0.7fr 0.9fr auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.launch-sim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.launch-sim-field span {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.launch-sim-field input,
+.launch-sim-field select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.launch-sim-field input:focus,
+.launch-sim-field select:focus {
+  outline: none;
+  border-color: #6c63ff;
+  background: rgba(108, 99, 255, 0.08);
+}
+
+.launch-sim-btn {
+  height: 38px;
+  white-space: nowrap;
+}
+
+.launch-sim-error {
+  margin-top: var(--space-3);
+  padding: 8px 12px;
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 6px;
+  font-size: var(--font-sm);
+}
+
+@media (max-width: 900px) {
+  .launch-sim-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .launch-sim-btn {
+    grid-column: 1 / -1;
+  }
+}

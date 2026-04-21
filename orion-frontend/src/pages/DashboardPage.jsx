@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import {
@@ -7,6 +8,99 @@ import {
   PolarAngleAxis, PolarRadiusAxis, BarChart, Bar,
 } from 'recharts';
 import './DashboardPage.css';
+
+const MODELS = ['EmergencyBrake', 'ConstantAction', 'SimpleLaneKeep', 'Random'];
+const SCENARIO_PRESETS = [
+  'scenarios/basic/straight_road_lead_vehicle.yaml',
+  'scenarios/basic/straight_road_empty.yaml',
+  'scenarios/lon/LON-003_emergency_stop.yaml',
+];
+
+function LaunchSimPanel() {
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const [scenarioPath, setScenarioPath] = useState(SCENARIO_PRESETS[0]);
+  const [modelName, setModelName] = useState('EmergencyBrake');
+  const [seed, setSeed] = useState(42);
+  const [tickInterval, setTickInterval] = useState(0.02);
+  const [launching, setLaunching] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const onLaunch = async () => {
+    setLaunching(true);
+    setErr(null);
+    try {
+      const res = await api.startRun(token, scenarioPath, modelName, Number(seed), Number(tickInterval));
+      navigate(`/simulation/${res.run_id}`);
+    } catch (e) {
+      setErr(e.message || 'Failed to start run');
+    } finally {
+      setLaunching(false);
+    }
+  };
+
+  return (
+    <div className="glass-card launch-sim-panel" id="launch-sim-panel">
+      <div className="launch-sim-header">
+        <h3 className="chart-title">Launch Live Simulation</h3>
+        <span className="launch-sim-sub">Streams 50 Hz tick frames to the 3D viewer.</span>
+      </div>
+      <div className="launch-sim-grid">
+        <label className="launch-sim-field">
+          <span>Scenario</span>
+          <input
+            list="scenario-presets"
+            value={scenarioPath}
+            onChange={(e) => setScenarioPath(e.target.value)}
+            disabled={launching}
+          />
+          <datalist id="scenario-presets">
+            {SCENARIO_PRESETS.map((p) => <option key={p} value={p} />)}
+          </datalist>
+        </label>
+        <label className="launch-sim-field">
+          <span>Model</span>
+          <select
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            disabled={launching}
+          >
+            {MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+        <label className="launch-sim-field">
+          <span>Seed</span>
+          <input
+            type="number"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            disabled={launching}
+          />
+        </label>
+        <label className="launch-sim-field">
+          <span>Tick interval (s)</span>
+          <input
+            type="number"
+            step="0.005"
+            min="0"
+            value={tickInterval}
+            onChange={(e) => setTickInterval(e.target.value)}
+            disabled={launching}
+          />
+        </label>
+        <button
+          className="btn btn-primary launch-sim-btn"
+          onClick={onLaunch}
+          disabled={launching || !scenarioPath}
+          id="launch-sim-button"
+        >
+          {launching ? 'Starting…' : '▶  Launch'}
+        </button>
+      </div>
+      {err && <div className="launch-sim-error">{err}</div>}
+    </div>
+  );
+}
 
 function MetricCard({ label, value, color, icon }) {
   const score = typeof value === 'number' ? value : 0;
@@ -84,14 +178,16 @@ export default function DashboardPage() {
   const [view, setView] = useState('overview');
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
     if (!token) return;
+    setLoading(true);
     api.getRuns(token, 50)
       .then(data => setRuns(Array.isArray(data) ? data : data.runs || []))
       .catch(() => setRuns([]))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, refreshCount]);
 
   // Compute aggregates
   const latestRuns = runs.slice(0, 20);
@@ -135,10 +231,21 @@ export default function DashboardPage() {
               {runs.length} runs recorded • {loading ? 'Loading…' : 'Up to date'}
             </p>
           </div>
+          <button
+            className="btn btn-ghost"
+            onClick={() => setRefreshCount(c => c + 1)}
+            disabled={loading}
+            title="Refresh"
+            style={{ fontSize: '1.1rem' }}
+          >
+            {loading ? '⏳' : '↻'} Refresh
+          </button>
         </header>
 
         {view === 'overview' && (
           <>
+            <LaunchSimPanel />
+
             {/* Metric Cards */}
             <div className="metrics-row">
               <MetricCard label="Composite" value={avgComposite} color="#6c63ff" icon="◆" />
@@ -217,8 +324,8 @@ export default function DashboardPage() {
                       <tr><td colSpan={8} className="table-empty">No runs yet — start an evaluation from the API.</td></tr>
                     ) : (
                       latestRuns.map(r => (
-                        <tr key={r.id}>
-                          <td>#{r.id}</td>
+                        <tr key={r.run_id || r.id}>
+                          <td title={r.run_id || r.id}>#{(r.run_id || r.id || '').slice(0, 8)}</td>
                           <td>{r.model_name}</td>
                           <td className="score-cell">{((r.composite_score || 0) * 100).toFixed(1)}</td>
                           <td>{((r.safety_score || 0) * 100).toFixed(1)}</td>

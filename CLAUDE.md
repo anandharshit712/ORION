@@ -79,7 +79,8 @@ ORION/
 └── orion-frontend/               # React frontend
     └── src/
         ├── pages/                # DashboardPage, LandingPage, LoginPage, SignupPage
-        ├── components/           # auth/, common/, landing/
+        ├── components/           # auth/, common/, landing/, simulation/
+        ├── hooks/                # useSimulationStream.js
         ├── context/              # AuthContext (JWT token management)
         └── services/api.js       # All fetch calls go through here — do not use fetch() directly
 ```
@@ -164,6 +165,29 @@ result = runner.run_batch(
 print(result.aggregated.to_dict())
 ```
 
+### Streaming a live run (P1.1)
+
+For frontend/3D visualisation — pairs with `WS /ws/simulation/{run_id}`:
+
+```python
+from arep.api.sim_registry import start_run, get_registry
+
+run = await start_run(
+    scenario_path="scenarios/basic/straight_road_lead_vehicle.yaml",
+    model_name="EmergencyBrake",
+    master_seed=42,
+    tick_interval=0.02,   # 50 Hz wall-clock; pass 0.0 for headless full-speed
+)
+q = run.subscribe()             # bounded asyncio.Queue, drops oldest on overflow
+frame = await q.get()            # dict matching engine.get_tick_frame() schema
+run.unsubscribe(q)
+```
+
+- `SimulationEngine.run_async(on_tick=...)` drives the loop and calls `on_tick(world, action)` each step. It preserves the synchronous `step()` determinism — wall-clock pacing only affects delivery latency.
+- `SimulationEngine.get_tick_frame(world, action, scenario_name, speed_limit)` is the single source of truth for the WebSocket JSON frame schema. Do not duplicate frame construction elsewhere; add fields here when extending the protocol.
+- `monitor.metrics_current` in the frame is a per-tick *proxy* (collision flag + speed-limit compliance). Authoritative scores still come from `CompositeEvaluator` after the run ends.
+- `LiveRun` (in `api/sim_registry.py`) stores `final_metrics` after run completion, populated from the last tick frame's `monitor.metrics_current`. Composite score is computed inline: `safety×0.5 + compliance×0.2 + stability×0.15 + reactivity×0.15`. These are proxy scores until P1.4 wires `CompositeEvaluator` to live runs.
+
 ---
 
 ## 6. Scenario System
@@ -226,15 +250,25 @@ TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags a
 FastAPI backend. All routes are prefixed `/api`. Auth is JWT Bearer token.
 
 ```
-GET  /api/health
-GET  /api/models
-GET  /api/scenarios/
-POST /api/evaluate/single    body: {scenario_name, model_name, master_seed}
-POST /api/evaluate/batch     body: {scenario_name, model_name, num_runs, master_seed}
-GET  /api/jobs/
-GET  /api/results/runs
-GET  /api/results/runs/{run_id}
+GET    /health
+GET    /models/
+GET    /scenarios/
+POST   /evaluate/single          body: {scenario_path, model_name, master_seed}
+POST   /evaluate/batch           body: {scenario_path, model_name, num_runs, master_seed}
+GET    /jobs/
+GET    /results/model/{model_name}
+GET    /results/batch/{batch_job_id}
+POST   /api/runs/                body: {scenario_path, model_name, master_seed, tick_interval}
+GET    /api/runs/                list live runs (returns score fields after completion)
+GET    /api/runs/{run_id}        live-run status + scores
+DELETE /api/runs/{run_id}        cancel a live run
+WS     /ws/simulation/{run_id}   live tick frames (auth: ?token=<jwt>)
 ```
+
+`GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` which includes:
+`composite_score`, `safety_score`, `compliance_score`, `stability_score`, `reactivity_score`, `collision_occurred` — populated once `status == "completed"`.
+
+Note: only the auth router (`/api/auth/*`) and the live-run router (`/api/runs/*`) are mounted under `/api`. Other routers are mounted without a prefix — keep this in mind when wiring the frontend proxy.
 
 Available built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
 `"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`
@@ -264,6 +298,24 @@ React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 
 Add it to `src/services/api.js` following the existing pattern, then call `api.myNewMethod(token)` in the component.
 
+### Live simulation WebSocket (P1.1 — complete)
+
+Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer is wired end-to-end:
+
+- `src/hooks/useSimulationStream.js` — owns the WebSocket. Returns `{ frame, isConnected, status, error, latencyRef }`. Handles exponential-backoff reconnect (max 3 attempts) and cleans up on unmount. Do not open sockets from components directly.
+- `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has a `← Dashboard` back button (glass style, centered top) for navigation.
+- Frame shape is the contract frozen in `SimulationEngine.get_tick_frame()`. To extend the protocol: add fields there, then consume in the hook/viewer.
+- Server closes with `{"event": "stream_end", ...}` — hook handles it before deciding whether to reconnect.
+- Latency is measured from `frame.emit_ts_ms` against the client's `Date.now()`; the running average and max are exposed via `latencyRef.current` for HUD display.
+- Control-plane calls (`POST /api/runs/`, etc.) go through `src/services/api.js` (`api.startRun`, `api.getLiveRun`, `api.cancelLiveRun`) — the hook only owns the WS.
+
+### Dashboard live-run display
+
+- `DashboardPage.jsx` fetches runs via `api.getRuns(token)` → `GET /api/runs/` (NOT `/results/runs` — that endpoint does not exist).
+- Has a **↻ Refresh** button that increments `refreshCount` state, triggering a data re-fetch. Use this after completing a run to see scores populate.
+- Run score fields (`composite_score`, `safety_score`, etc.) are populated only when `status == "completed"`.
+- Expected behavior per model on `straight_road_lead_vehicle.yaml`: `EmergencyBrake` → PASS, `ConstantAction` / `SimpleLaneKeep` / `Random` → FAIL (they do not brake — this is correct evaluation behavior, not a bug).
+
 ---
 
 ## 10. Database
@@ -292,8 +344,8 @@ Run these from `arep_implementation/` unless stated otherwise:
 python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev,api]"
 
-# Start backend API
-uvicorn arep.api.app:app --reload --port 8000
+# Start backend API (use python -m uvicorn — bare uvicorn may not be on PATH in all envs)
+python -m uvicorn arep.api.app:app --reload --port 8000
 
 # Start frontend (run from orion-frontend/)
 npm run dev
@@ -306,6 +358,10 @@ pytest tests/test_integration.py -v
 
 # Run with coverage
 pytest --cov=arep --cov-report=term-missing
+
+# End-to-end live-streaming smoke test (spawns in-process uvicorn,
+# hits POST /api/runs/, connects to WS, prints frames)
+PYTHONPATH=. python scripts/ws_smoke.py
 
 # Lint + format
 black arep/ tests/
@@ -335,11 +391,12 @@ start.bat         # Windows
 
 ## 13. What Is Not Built Yet (Active Development Areas)
 
-Refer to `AREP_IMPLEMENTATION_ROADMAP.md` as the source of truth. Current gaps:
+Refer to `AREP_IMPLEMENTATION_ROADMAP.MD` as the source of truth. Current gaps:
 
-1. **WebSocket telemetry stream** — backend sends no live data; frontend Three.js scene renders nothing live yet
-2. **Road topology engine** — only flat 2-lane straight road exists; intersections and merge lanes are not implemented
-3. **Sensor simulation** — no LiDAR, camera, GPS/IMU output; the observation system uses ground-truth world state
-4. **RL model training loop** — `local_executor.py` is a scaffold only
+1. **Road topology engine (P1.2)** — only flat 2-lane straight road exists; intersections and merge lanes are not implemented. This is the next item after P1.1 acceptance.
+2. **Sensor simulation** — no LiDAR, camera, GPS/IMU output; the observation system uses ground-truth world state.
+3. **RL model training loop** — `local_executor.py` is a scaffold only.
+4. **CompositeEvaluator wired to live runs (P1.4)** — dashboard scores are currently per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
+5. **3D visualization polish (P3.5)** — GLTF vehicle/pedestrian/animal models (Kenney CC0 assets), Sky/Fog/grass environment, instanced roadside trees and street lights, road surface texture. Deferred to Phase 3. Current visualization is flat bird's-eye box geometry.
 
 When working on these areas, check the roadmap document before writing any code.

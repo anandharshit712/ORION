@@ -2,7 +2,27 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(powershell -Command \"Rename-Item -Path 'C:\\\\Users\\\\anand\\\\Downloads\\\\AUTONOMOUS ROBUSTNESS EVALUATION PLATFORM \\(AREP\\)' -NewName 'ORION'\")"
+      "Bash(powershell -Command \"Rename-Item -Path 'C:\\\\Users\\\\anand\\\\Downloads\\\\AUTONOMOUS ROBUSTNESS EVALUATION PLATFORM \\(AREP\\)' -NewName 'ORION'\")",
+      "Bash(git -C /c/Users/anand/Downloads/ORION log --oneline -20)",
+      "Bash(git -C /c/Users/anand/Downloads/ORION status)",
+      "Bash(python -c \"from arep.api.app import create_app; app = create_app\\(\\); print\\('ok'\\); print\\('\\\\\\\\n'.join\\(str\\(r.path\\) for r in app.routes\\)\\)\")",
+      "Bash(python -m pytest tests/test_ws_smoke.py -v --tb=short)",
+      "Bash(python -m pytest tests/test_ws_smoke.py -v --tb=short -x)",
+      "Bash(python -u -m pytest tests/test_ws_smoke.py -v --tb=short)",
+      "Bash(wait)",
+      "Bash(python -u -m pytest tests/test_ws_smoke.py::test_start_run_and_stream_frames -v --tb=long)",
+      "Bash(pkill -f \"pytest tests/test_ws_smoke\")",
+      "Bash(tasklist //FI \"IMAGENAME eq python.exe\")",
+      "Bash(taskkill //F //PID 31896 //PID 31924 //PID 28124 //PID 272 //PID 32700 //PID 13200)",
+      "Bash(python -c \"import websockets\")",
+      "Bash(python -c \"import httpx\")",
+      "Bash(python scripts/ws_smoke.py)",
+      "Bash(PYTHONPATH=. python scripts/ws_smoke.py)",
+      "Bash(npm run *)",
+      "Bash(python -m pytest tests/test_ws_smoke.py -q --tb=short)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(taskkill //F //PID 21928 //PID 11840)",
+      "Bash(python -c \"import uvicorn; print\\(uvicorn.__version__, uvicorn.__file__\\)\")"
     ]
   }
 }

@@ -1121,6 +1121,175 @@ GET /api/dashboard/regression?scenario_id=LON-003
 
 ---
 
+## P3.5 — 3D Visualization Polish (GLTF Models + Full Environment)
+
+**Goal**: Replace the placeholder box-geometry vehicles and blank road with rich, low-poly GLTF assets and a complete environment — sky, atmosphere, foliage, street lights, road surface texture. All rendering changes are frontend-only; the backend simulation and WebSocket protocol are unchanged.
+
+**Dependency**: Requires P1.1 complete (already done). Road topology geometry in P1.2 will render correctly once that road graph is pushed through the existing `env.road_graph` frame field.
+
+### 3.5.1 Asset Acquisition
+
+All models come from [Kenney.nl](https://kenney.nl) — CC0 (public domain), no attribution required, designed for real-time use.
+
+**Packs to download and place in `orion-frontend/public/models/`**:
+
+| Pack | File | Use |
+|------|------|-----|
+| `kenney_car-kit` | `car.glb`, `truck.glb`, `suv.glb` | ego + NPC cars/trucks |
+| `kenney_city-kit` | `motorcycle.glb` | motorcycle NPC |
+| `kenney_animated-characters` | `character-male.glb`, `character-female.glb` | pedestrian NPCs |
+| `kenney_nature-kit` | `tree_default.glb`, `bush.glb` | roadside foliage |
+| `kenney_city-kit` | `streetLight.glb` | street lights |
+| `kenney_animal-pack` | `dog.glb`, `deer.glb` | animal NPCs |
+
+All `.glb` files are checked in to `public/models/` — Vite serves them as static assets. Do not import them as JS modules.
+
+### 3.5.2 Frontend — GLTF Vehicle Components
+
+**File to modify**: `orion-frontend/src/components/simulation/SimulationViewer.jsx`
+
+Replace the `<Vehicle>` component (currently `BoxGeometry`) with a GLTF-backed version:
+
+```javascript
+import { useGLTF } from '@react-three/drei';
+
+function GltfVehicle({ modelPath, x, y, heading, scale = 1 }) {
+  const { scene } = useGLTF(modelPath);
+  const ref = useRef();
+  useFrame(() => {
+    if (!ref.current) return;
+    ref.current.position.set(x, 0, -y);
+    ref.current.rotation.y = -heading;
+  });
+  return <primitive ref={ref} object={scene.clone()} scale={scale} castShadow />;
+}
+```
+
+NPC type → model path mapping:
+
+```javascript
+const MODEL_MAP = {
+  car:        '/models/car.glb',
+  truck:      '/models/truck.glb',
+  motorcycle: '/models/motorcycle.glb',
+  pedestrian: '/models/character-male.glb',
+  bicycle:    '/models/character-female.glb',  // placeholder until cycle model added
+  dog:        '/models/dog.glb',
+  deer:       '/models/deer.glb',
+  unknown:    '/models/car.glb',
+};
+```
+
+Ego vehicle always uses `/models/car.glb` with a distinct blue tint (`mesh.material.color.set('#5aa8ff')` after clone).
+
+**Preload all models on app start** (prevents pop-in during live run):
+
+```javascript
+Object.values(MODEL_MAP).forEach(path => useGLTF.preload(path));
+```
+
+### 3.5.3 Frontend — Environment
+
+**File to modify**: `orion-frontend/src/components/simulation/SimulationViewer.jsx`
+
+Add inside `<Scene>`:
+
+```jsx
+import { Sky, Fog, Environment } from '@react-three/drei';
+
+// Sky + atmosphere
+<Sky sunPosition={[100, 20, 100]} turbidity={8} rayleigh={0.5} />
+<fog attach="fog" args={['#c9d4e8', 120, 600]} />
+
+// Grass ground beyond the road
+<mesh rotation={[-Math.PI/2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+  <planeGeometry args={[2000, 2000]} />
+  <meshStandardMaterial color="#3a5a2a" />
+</mesh>
+```
+
+**Instanced roadside trees** (use `InstancedMesh` for performance — one draw call for all trees):
+
+```javascript
+function RoadsideTrees({ roadLength = 400, spacing = 20 }) {
+  const { nodes } = useGLTF('/models/tree_default.glb');
+  const count = Math.floor(roadLength / spacing) * 2; // both sides
+  const meshRef = useRef();
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  useEffect(() => {
+    let i = 0;
+    for (let x = -roadLength / 2; x < roadLength / 2; x += spacing) {
+      for (const z of [-10, 10]) {           // left and right of road edge
+        dummy.position.set(x, 0, z);
+        dummy.scale.setScalar(0.8 + Math.random() * 0.4);
+        dummy.updateMatrix();
+        meshRef.current.setMatrixAt(i++, dummy.matrix);
+      }
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, []);
+
+  return (
+    <instancedMesh ref={meshRef} args={[nodes.Mesh.geometry, nodes.Mesh.material, count]} castShadow />
+  );
+}
+```
+
+**Street lights** (instanced, every 40m, alternating sides):
+
+```javascript
+function StreetLights({ roadLength = 400, spacing = 40 }) { ... }
+// Same InstancedMesh pattern as RoadsideTrees using streetLight.glb
+```
+
+**Road surface texture** — replace the flat `#2a2a2f` material on the road plane with a tiled asphalt normal map using Three.js `TextureLoader`:
+
+```javascript
+const texture = useLoader(THREE.TextureLoader, '/textures/asphalt_diffuse.jpg');
+texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+texture.repeat.set(ROAD_LENGTH / 8, ROAD_WIDTH / 4);
+```
+
+Place `asphalt_diffuse.jpg` in `orion-frontend/public/textures/` — source from Kenney's `kenney_road-textures` pack (CC0).
+
+### 3.5.4 Backend — Animal NPC Type
+
+**File to modify**: `arep_implementation/arep/simulation/npc_bt.py`
+
+Add `AnimalBT` — an NPC that wanders across the road at low speed:
+
+```python
+class AnimalBT:
+    """
+    Wanders at low speed with random heading drift.
+    Freezes if ego is within freeze_distance.
+    """
+    def tick(self, npc_state, world, rng): ...
+```
+
+Register in `_BT_REGISTRY`:
+
+```python
+'animal': AnimalBT,
+```
+
+**File to modify**: `arep_implementation/arep/scenario/schema.py`
+
+Add `'animal'` to the allowed `type` values for NPC entries.
+
+### 3.5.5 Acceptance Criteria for P3.5
+
+- [ ] Opening `/simulation/{run_id}` shows GLTF car models (not boxes) for ego and NPCs
+- [ ] Sky, fog, and grass ground plane are visible
+- [ ] Roadside trees render via `InstancedMesh` (confirmed via browser devtools — single draw call)
+- [ ] A scenario with an `animal` NPC type loads and renders the correct GLTF model
+- [ ] First-load time increase is < 3 seconds on a 10 Mbps connection (models total < 3 MB)
+- [ ] Frame rate stays ≥ 30 FPS at 50 Hz simulation with 10 NPCs (Chrome devtools Performance panel)
+- [ ] No pop-in: all models preloaded before the WS stream starts
+
+---
+
 ---
 
 # Execution Rules
@@ -1134,7 +1303,7 @@ P1.1 → P1.2 → P1.3 → P1.4 → P1.5
        ↓
 P2.1 → P2.2 → P2.3 → P2.4
        ↓
-P3.1 → P3.2 → P3.3 → P3.4
+P3.1 → P3.2 → P3.3 → P3.4 → P3.5
 ```
 
 P1.2 and P1.3 can be developed in parallel (no dependency between them). All other items within a phase are sequential.
