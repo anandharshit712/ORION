@@ -1,0 +1,98 @@
+scenario:
+  name: "LON-003 Lead Vehicle Emergency Stop — Rear-End Avoidance with Occluded Cause"
+  version: "2.0"
+  description: >
+    Lead vehicle executes a staged emergency stop. The braking profile is randomised:
+    initial decel, hesitation window probability, and final decel all vary per run.
+    Ego initial speed and lead vehicle gap are also randomised so the AV model
+    cannot rely on fixed patterns. Maps to NHTSA Pre-Crash Type 14.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22   # overridden by parameterization at run time
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: lead_vehicle
+    type: car
+    initial:
+      x: 55.0          # overridden by parameterization
+      y: -1.75
+      heading: 0.0
+      velocity: 16.67  # overridden by parameterization
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: ttc
+        trigger_value: 3.5         # overridden by parameterization
+        initial_decel: -4.5        # overridden per run
+        initial_brake_duration:
+          min: 0.3
+          max: 1.1
+        hesitation_prob: 0.4       # overridden per run
+        hesitation_duration:
+          min: 0.2
+          max: 0.9
+        hesitation_accel:
+          min: 0.8
+          max: 2.5
+        final_decel: -9.0          # overridden per run
+        min_velocity: 0.0
+        max_velocity: 35.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 1003
+
+parameterization:
+  ego_velocity:
+    min: 16.67    # 60 km/h
+    max: 27.78    # 100 km/h
+  ego_x_jitter:
+    min: -5.0
+    max: 5.0
+  npc_overrides:
+    lead_vehicle:
+      initial_velocity:
+        min: 11.11    # 40 km/h
+        max: 19.44    # 70 km/h
+      initial_x:
+        min: 40.0
+        max: 80.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 5.0
+        initial_decel:
+          min: -6.5
+          max: -3.0
+        hesitation_prob:
+          min: 0.1
+          max: 0.7
+        final_decel:
+          min: -9.81
+          max: -6.5

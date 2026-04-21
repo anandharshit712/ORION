@@ -1,0 +1,51 @@
+scenario:
+  name: "VRU-003 Cyclist in Lane — Ego Overtake Decision"
+  version: "1.0"
+  description: >
+    Cyclist occupying ego's lane at 4.2 m/s (15 km/h). Ego approaches at 50 km/h.
+    Ego must either decelerate to follow safely or perform a lane change with
+    >1.5m clearance. No collision permitted.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 13.89   # 50 km/h
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: cyclist
+    type: bicycle
+    initial:
+      x: 40.0
+      y: -1.75
+      heading: 0.0
+      velocity: 4.17    # 15 km/h
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 4003

@@ -1,0 +1,51 @@
+scenario:
+  name: "EMG-004 Vehicle Control Loss — Sudden Black Ice Event"
+  version: "1.0"
+  description: >
+    Ego enters a 50m road segment (x=80 to x=130) where friction drops instantly
+    to 0.1 (ice). Ego must adapt steering and speed to avoid lane departure or
+    spinout (yaw slip <=15 deg). Maps to NHTSA Pre-Crash Type 01.
+    NOTE: Requires Level-3 physics (dynamic friction) for full fidelity.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 16.67   # 60 km/h
+  constraints:
+    max_velocity: 22.22
+    max_acceleration: 2.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: rural
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 16.67
+  weather:
+    condition: snow
+    visibility: 500.0
+
+traffic: []
+
+events:
+  - type: change_weather
+    trigger_time: 0.0
+    parameters:
+      condition: snow
+      friction_mu: 0.1     # black ice patch begins at simulation start for this segment
+      zone_x_start: 80.0
+      zone_x_end: 130.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 5004

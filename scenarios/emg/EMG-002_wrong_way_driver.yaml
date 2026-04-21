@@ -1,0 +1,52 @@
+scenario:
+  name: "EMG-002 Wrong-Way Driver — Head-On Avoidance in Ego Lane"
+  version: "1.0"
+  description: >
+    Vehicle driving the wrong way in ego's lane at 80 km/h closing speed.
+    Ego must execute emergency evasive action (steer right to shoulder or brake)
+    within 2 seconds of detection. Combined closing speed ~160 km/h.
+  duration: 12.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22   # 80 km/h
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  # Wrong-way vehicle in ego's own lane, driving toward ego
+  - id: wrong_way_driver
+    type: car
+    initial:
+      x: 200.0
+      y: -1.75    # same lane as ego
+      heading: 3.14159   # heading west (wrong way)
+      velocity: 22.22    # 80 km/h toward ego
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 12.0
+
+master_seed: 5002

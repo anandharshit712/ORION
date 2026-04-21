@@ -1,0 +1,51 @@
+scenario:
+  name: "EMG-001 Road Debris Avoidance — Static Obstacle in Lane"
+  version: "1.0"
+  description: >
+    Large static debris (truck tire) in ego's lane at highway speed. Ego must
+    detect and perform an evasive lane change or emergency stop without collision.
+    No advance warning. Debris first visible at approximately 50m.
+  duration: 15.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78   # 100 km/h
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: road_debris
+    type: car      # using car as proxy for large obstacle; treat as stationary blocker
+    initial:
+      x: 80.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 15.0
+
+master_seed: 5001

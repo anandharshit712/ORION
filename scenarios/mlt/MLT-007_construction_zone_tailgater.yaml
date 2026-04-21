@@ -1,0 +1,88 @@
+scenario:
+  name: "MLT-007 Construction Zone Stop with Adaptive Tailgater"
+  version: "2.0"
+  description: >
+    Static construction barrier ahead. Tailgater uses adaptive gap control:
+    maintains a randomised target TTC (0.5–1.2s) with Gaussian noise on each tick,
+    creating organic pressure. Ego must brake smoothly (<=0.4g) without triggering
+    a rear collision. Barrier distance and ego entry speed are varied per run.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 19.44
+  constraints:
+    max_velocity: 27.78
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 19.44
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: construction_barrier
+    type: truck
+    initial:
+      x: 120.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+  - id: tailgater
+    type: car
+    initial:
+      x: -18.0
+      y: -1.75
+      heading: 0.0
+      velocity: 20.83
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: adaptive_tailgate
+        target_ttc:
+          min: 0.5
+          max: 1.2
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 6007
+
+parameterization:
+  ego_velocity:
+    min: 16.67    # 60 km/h
+    max: 22.22    # 80 km/h
+  npc_overrides:
+    construction_barrier:
+      initial_x:
+        min: 90.0
+        max: 150.0
+    tailgater:
+      initial_x:
+        min: -25.0
+        max: -12.0
+      initial_velocity:
+        min: 18.06    # 65 km/h
+        max: 23.61    # 85 km/h
+      parameters:
+        target_ttc:
+          min: 0.4
+          max: 1.4

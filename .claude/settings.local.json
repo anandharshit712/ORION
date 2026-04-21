@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(powershell -Command \"Rename-Item -Path 'C:\\\\Users\\\\anand\\\\Downloads\\\\AUTONOMOUS ROBUSTNESS EVALUATION PLATFORM \\(AREP\\)' -NewName 'ORION'\")"
+    ]
+  }
+}

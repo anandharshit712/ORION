@@ -1,0 +1,52 @@
+scenario:
+  name: "LON-001 Lead Vehicle Gradual Slowdown"
+  version: "1.0"
+  description: "Lead vehicle decelerates at -2 m/s2 from highway speed. Ego must close-regulate following distance without collision."
+  duration: 30.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22   # 80 km/h
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78   # 100 km/h
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: lead_vehicle
+    type: car
+    initial:
+      x: 50.0
+      y: -1.75
+      heading: 0.0
+      velocity: 22.22  # same as ego initially
+    behavior:
+      type: scripted
+      parameters:
+        trigger_type: time
+        trigger_value: 3.0    # brakes 3 seconds into scenario
+        post_acceleration: -2.0
+        min_velocity: 11.11   # slows to 40 km/h
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+master_seed: 1001

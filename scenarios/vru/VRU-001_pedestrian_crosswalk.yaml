@@ -1,0 +1,74 @@
+scenario:
+  name: "VRU-001 Pedestrian at Marked Crosswalk — Cautious Crossing Behaviour"
+  version: "2.0"
+  description: >
+    Pedestrian exhibits cautious reactive crossing: steps out when triggered, may
+    hesitate mid-crossing if ego is approaching fast, and retreats if the ego is
+    very close without braking. Speed, hesitation probability, and trigger distance
+    are randomised per run. Ego approach speed is also varied.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 11.11
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: pedestrian_crosswalk
+    type: pedestrian
+    initial:
+      x: 50.0
+      y: -5.0
+      heading: 1.5708
+      velocity: 0.0
+    behavior:
+      type: reactive_pedestrian
+      parameters:
+        bt_type: cautious_pedestrian
+        trigger_type: proximity
+        trigger_value: 25.0
+        walk_speed:
+          min: 0.7
+          max: 1.4
+        mid_hesitation_prob: 0.35
+        start_y: -5.0     # retreat reference point
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 4001
+
+parameterization:
+  ego_velocity:
+    min: 8.33     # 30 km/h
+    max: 13.89    # 50 km/h
+  npc_overrides:
+    pedestrian_crosswalk:
+      initial_x:
+        min: 40.0
+        max: 65.0
+      parameters:
+        trigger_value:
+          min: 18.0
+          max: 32.0

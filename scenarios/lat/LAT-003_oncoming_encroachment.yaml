@@ -1,0 +1,53 @@
+scenario:
+  name: "LAT-003 Oncoming Vehicle Lane Encroachment"
+  version: "1.0"
+  description: "Oncoming vehicle drifts into ego's lane. Ego must evasively steer right or brake without leaving the road boundary."
+  duration: 15.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 13.89   # 50 km/h
+  constraints:
+    max_velocity: 22.22
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: oncoming_vehicle
+    type: car
+    initial:
+      x: 80.0
+      y: 1.75      # oncoming left lane (their right lane)
+      heading: 3.14159  # heading west
+      velocity: 13.89   # 50 km/h toward ego
+    behavior:
+      type: scripted
+      parameters:
+        trigger_type: proximity
+        trigger_value: 50.0     # at 50m gap, drifts into ego's lane
+        cut_in: true
+        lateral_target_y: -1.0  # encroaches 0.75m into ego's lane
+        lateral_speed: 0.8
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 15.0
+
+master_seed: 2003

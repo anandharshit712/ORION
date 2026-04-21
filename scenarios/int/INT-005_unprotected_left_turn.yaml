@@ -1,0 +1,64 @@
+scenario:
+  name: "INT-005 Unprotected Left Turn — Yield to Oncoming Traffic Gap Acceptance"
+  version: "1.0"
+  description: >
+    Ego must complete an unprotected left turn through a gap in oncoming traffic.
+    Two oncoming vehicles at road speed. Ego must accept a gap >=4.0s TTC and
+    complete the turn without causing oncoming decel >0.1g. Maps to NHTSA Type 2.
+  duration: 30.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 5.56    # 20 km/h, decelerating to turn
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 2.5
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  # First oncoming vehicle — closer gap (ego must yield)
+  - id: oncoming_v1
+    type: car
+    initial:
+      x: 60.0
+      y: 1.75
+      heading: 3.14159   # heading west
+      velocity: 13.89    # 50 km/h
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+  # Second oncoming vehicle — longer gap (acceptable for turn)
+  - id: oncoming_v2
+    type: car
+    initial:
+      x: 120.0
+      y: 1.75
+      heading: 3.14159
+      velocity: 13.89
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+master_seed: 3005

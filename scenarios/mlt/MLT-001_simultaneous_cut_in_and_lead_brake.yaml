@@ -1,0 +1,131 @@
+scenario:
+  name: "MLT-001 Simultaneous Cut-In and Lead Vehicle Emergency Brake"
+  version: "2.0"
+  description: >
+    Two randomised simultaneous threats: lead vehicle performs a hesitant brake AND
+    an adjacent vehicle initiates a cut-in that may abort if ego responds.
+    Trigger timing, brake profiles, and cut-in aggressiveness all vary per run,
+    forcing the AV model to triage threats dynamically rather than pattern-match.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: lead_vehicle
+    type: car
+    initial:
+      x: 45.0
+      y: -1.75
+      heading: 0.0
+      velocity: 22.22
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 2.0
+        initial_decel: -5.0
+        initial_brake_duration:
+          min: 0.3
+          max: 0.9
+        hesitation_prob: 0.45
+        hesitation_duration:
+          min: 0.2
+          max: 0.7
+        hesitation_accel:
+          min: 1.0
+          max: 2.5
+        final_decel: -8.5
+        min_velocity: 0.0
+        max_velocity: 35.0
+
+  - id: cut_in_vehicle
+    type: car
+    initial:
+      x: 15.0
+      y: 1.75
+      heading: 0.0
+      velocity: 23.61
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_cut_in
+        trigger_type: time
+        trigger_value: 2.0
+        signal_duration:
+          min: 0.2
+          max: 0.8
+        lateral_target_y: -1.75
+        lateral_speed:
+          min: 1.5
+          max: 3.0
+        abort_prob: 0.4
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 6001
+
+parameterization:
+  ego_velocity:
+    min: 19.44    # 70 km/h
+    max: 27.78    # 100 km/h
+  npc_overrides:
+    lead_vehicle:
+      initial_x:
+        min: 35.0
+        max: 60.0
+      initial_velocity:
+        min: 19.44
+        max: 27.78
+      parameters:
+        trigger_value:
+          min: 1.5
+          max: 3.5
+        initial_decel:
+          min: -7.0
+          max: -3.5
+        hesitation_prob:
+          min: 0.2
+          max: 0.7
+        final_decel:
+          min: -9.81
+          max: -6.5
+    cut_in_vehicle:
+      initial_x:
+        min: 10.0
+        max: 25.0
+      parameters:
+        trigger_value:
+          min: 1.5
+          max: 3.5
+        lateral_speed:
+          min: 1.0
+          max: 3.5
+        abort_prob:
+          min: 0.1
+          max: 0.7

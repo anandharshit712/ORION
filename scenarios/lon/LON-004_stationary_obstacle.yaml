@@ -1,0 +1,48 @@
+scenario:
+  name: "LON-004 Stationary Vehicle Ahead — Ego Approaching at Speed"
+  version: "1.0"
+  description: "Stationary vehicle blocking ego's lane. Ego must decelerate to a full stop before contact. No lead-up warning."
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 16.67   # 60 km/h
+  constraints:
+    max_velocity: 27.78
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 16.67   # 60 km/h
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: stopped_vehicle
+    type: car
+    initial:
+      x: 60.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0    # already stopped
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 1004

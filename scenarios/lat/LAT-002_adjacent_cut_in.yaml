@@ -1,0 +1,85 @@
+scenario:
+  name: "LAT-002 Adjacent Vehicle Cut-In on Highway — Hesitant Manoeuvre"
+  version: "2.0"
+  description: >
+    NPC in left lane initiates a cut-in but may abort mid-manoeuvre if the ego
+    vehicle brakes or slows. Signal duration, lateral speed, and abort probability
+    are randomised per run. Ego and NPC speeds are also varied. Maps to NHTSA Type 45.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: cut_in_vehicle
+    type: car
+    initial:
+      x: 20.0
+      y: 1.75
+      heading: 0.0
+      velocity: 23.61
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_cut_in
+        trigger_type: proximity
+        trigger_value: 22.0
+        signal_duration:
+          min: 0.3
+          max: 1.2
+        lateral_target_y: -1.75
+        lateral_speed:
+          min: 1.0
+          max: 2.5
+        abort_prob: 0.35
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 2002
+
+parameterization:
+  ego_velocity:
+    min: 19.44    # 70 km/h
+    max: 27.78    # 100 km/h
+  npc_overrides:
+    cut_in_vehicle:
+      initial_x:
+        min: 10.0
+        max: 30.0
+      initial_velocity:
+        min: 20.83    # 75 km/h
+        max: 27.78    # 100 km/h
+      parameters:
+        trigger_value:
+          min: 15.0
+          max: 30.0
+        lateral_speed:
+          min: 0.8
+          max: 3.0
+        abort_prob:
+          min: 0.1
+          max: 0.6

@@ -18,6 +18,7 @@ from arep.core.state import (
 )
 from arep.core.random_manager import RandomManager
 from arep.scenario.schema import ScenarioDefinition
+from arep.scenario.parameterizer import ScenarioParameterizer
 from arep.simulation.world import WorldManager
 
 
@@ -51,6 +52,7 @@ class ScenarioExecutor:
     def __init__(self, config: SimulationConfig):
         self.config = config
         self.world_manager = WorldManager(config)
+        self.parameterizer = ScenarioParameterizer()
 
     def create_initial_world(
         self,
@@ -67,12 +69,16 @@ class ScenarioExecutor:
         Returns:
             Ready-to-simulate WorldState.
         """
+        # L2: apply dynamic parameterization ranges before building world
+        self.parameterizer.apply(scenario, rng)
+
         ego = self._create_ego(scenario)
         objects = self._create_traffic_objects(scenario)
         lanes = self._create_lanes(scenario)
         lights = self._create_traffic_lights(scenario, rng)
+        npc_behaviors = self._build_npc_behaviors(scenario)
 
-        return self.world_manager.create_initial_world(
+        world = self.world_manager.create_initial_world(
             ego_initial=ego,
             dynamic_objects=objects,
             traffic_lights=lights,
@@ -80,6 +86,8 @@ class ScenarioExecutor:
             weather_condition=scenario.weather.condition,
             visibility=scenario.weather.visibility,
         )
+        world.npc_behaviors = npc_behaviors
+        return world
 
     # ── Private builders ─────────────────────────────────────────────
 
@@ -144,6 +152,27 @@ class ScenarioExecutor:
             ))
 
         return lanes
+
+    def _build_npc_behaviors(
+        self, scenario: ScenarioDefinition,
+    ) -> dict:
+        """Build the npc_behaviors registry from traffic object behavior definitions."""
+        registry = {}
+        for obj_def in scenario.traffic_objects:
+            btype = obj_def.behavior.type
+            if btype == "constant_velocity":
+                continue
+            entry: dict = {
+                "type": btype,
+                "parameters": dict(obj_def.behavior.parameters),
+                "_triggered": False,
+                "_trigger_time": None,
+            }
+            # Carry bt_type for reactive_vehicle / reactive_pedestrian dispatch
+            if btype in ("reactive_vehicle", "reactive_pedestrian"):
+                entry["bt_type"] = obj_def.behavior.parameters.get("bt_type", "")
+            registry[obj_def.id] = entry
+        return registry
 
     def _create_traffic_lights(
         self,

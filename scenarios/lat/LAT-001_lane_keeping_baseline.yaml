@@ -1,0 +1,39 @@
+scenario:
+  name: "LAT-001 Lane Keeping Baseline — Straight Road No Traffic"
+  version: "1.0"
+  description: "Empty straight road. Ego must maintain lane center within 0.3m lateral offset for the full duration. Baseline lateral control test."
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22   # 80 km/h
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic: []
+
+events: []
+
+termination:
+  conditions:
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 2001

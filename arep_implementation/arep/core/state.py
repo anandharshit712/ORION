@@ -18,7 +18,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -407,6 +407,10 @@ class WorldState:
     # Last applied action (for recording / replay)
     last_action: Optional[Any] = None
 
+    # NPC behavior registry: object_id → {type, parameters, _triggered, ...}
+    # Populated by ScenarioExecutor; mutated each tick by WorldManager.
+    npc_behaviors: Dict[str, dict] = field(default_factory=dict)
+
     # ── Queries ──────────────────────────────────────────────────────
 
     def get_object_by_id(self, object_id: str) -> Optional[VehicleState]:
@@ -482,6 +486,7 @@ class WorldState:
             last_action=(
                 self.last_action.copy() if self.last_action is not None else None
             ),
+            npc_behaviors=copy.deepcopy(self.npc_behaviors),
         )
 
     def __repr__(self) -> str:

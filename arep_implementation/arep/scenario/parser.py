@@ -186,6 +186,7 @@ class ScenarioParser:
                 events=events,
                 termination=termination,
                 master_seed=data.get("master_seed"),
+                parameterization=data.get("parameterization", {}),
             )
 
         except (KeyError, TypeError, ValueError) as e:

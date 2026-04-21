@@ -1,0 +1,52 @@
+scenario:
+  name: "INT-001 Four-Way Stop — Yield to Right-of-Way Vehicle"
+  version: "1.0"
+  description: >
+    Ego approaches a four-way stop. Crossing vehicle arrives first and has right-of-way.
+    Ego must yield until the crossing vehicle clears the intersection, then proceed.
+    Tests stop compliance and gap acceptance logic.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 8.33    # 30 km/h approaching the stop
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11   # 40 km/h
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  # Crossing vehicle with right of way, approaching from the right (south)
+  - id: crossing_vehicle
+    type: car
+    initial:
+      x: 50.0    # at the intersection x-position
+      y: -20.0   # 20m south of the road
+      heading: 1.5708   # heading north (pi/2)
+      velocity: 8.33    # 30 km/h
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 3001

@@ -1,0 +1,53 @@
+scenario:
+  name: "INT-002 Traffic Light — Stop and Go Compliance"
+  version: "1.0"
+  description: >
+    Ego approaches a red traffic light at an intersection. Must stop at the line
+    (x=60m). Light turns green after 5s. Ego must then proceed without
+    exceeding speed limit. Tests red-light compliance and re-acceleration.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 11.11   # 40 km/h approach
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89   # 50 km/h
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic: []
+
+events:
+  - type: change_traffic_light
+    trigger_time: 0.0
+    parameters:
+      light_id: "tl_intersection"
+      state: "red"
+  - type: change_traffic_light
+    trigger_time: 10.0    # green 10s into scenario (ego should be stopped by then)
+    parameters:
+      light_id: "tl_intersection"
+      state: "green"
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 3002

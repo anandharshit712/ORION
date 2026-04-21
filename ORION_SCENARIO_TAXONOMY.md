@@ -54,7 +54,7 @@ Every scenario adheres rigorously to the following required properties. If a sce
 
 | Field | Definition |
 | :--- | :--- |
-| **Threat Agent** | Lead vehicle decelerating at 0.9g from 80 km/h to 0. |
+| **Threat Agent** | Lead vehicle decelerating at 0.9g from 80 km/h to 0. Compliant (not adversarial). |
 | **Ego ROW Status** | N/A (Same-direction following). |
 | **Threat Direction** | Same direction (ahead of ego). |
 | **Trigger Type** | Proximity-triggered. |
@@ -62,7 +62,7 @@ Every scenario adheres rigorously to the following required properties. If a sce
 | **Occlusion State** | Lead vehicle visible. Cause of stop (30m ahead) is fully occluded by the lead vehicle. |
 | **Success Criterion** | No contact. Ego decelerates >= 0.3g within 0.8 seconds and stops within bounds. |
 | **Failure Conditions** | Collision; lane departure; deceleration onset > 2.0s delay. |
-| **Parameterization Profile** | Ego V: 60-100km/h. Distance: 20-60m. Weather: All. Road: Highway, Rural. |
+| **Parameterization Profile** | Ego V: 60-100km/h. Distance: 20-60m. Weather Allowed: All. Road: Highway, Rural. |
 | **Crash Anchor** | NHTSA Pre-Crash Typology: Type 14. |
 | **Engine Trigger Code** | `TRIGGER::LON_EMERGENCY_STOP_V1` |
 
@@ -79,9 +79,9 @@ Every scenario adheres rigorously to the following required properties. If a sce
 | **Trigger Type** | Continuous. |
 | **Trigger Condition** | Constant threat until ego acts. |
 | **Occlusion State** | Full visibility. *(Occluded variant exists as INT-005b)*. |
-| **Success Criterion** | Completes turn without causing oncoming decel >0.1g. Accepts gap >=4.0s TTC. |
+| **Success Criterion** | Completes turn without causing oncoming decel >0.1g. Accepts gap >=4.0s TTC. Ego does not block intersection for more than 15 seconds. |
 | **Failure Conditions** | Collision; entering turn with TTC <2.5s; >30s timeout blocked. |
-| **Parameterization Profile** | Oncoming V: 30-80km/h. Gap: random Poisson 5s mean. Weather: All. |
+| **Parameterization Profile** | Oncoming V: 30-80km/h. Gap: random Poisson 5s mean. Weather Allowed: All. |
 | **Crash Anchor** | NHTSA Pre-Crash Typology: Type 2. |
 | **Engine Trigger Code** | `TRIGGER::INT_UNPROTECTED_LEFT_V1` |
 
@@ -92,7 +92,7 @@ Every scenario adheres rigorously to the following required properties. If a sce
 
 | Field | Definition |
 | :--- | :--- |
-| **Threat Agent** | Child profile pedestrian (1.0m height, 1.0 m/s walking speed). Non-compliant. |
+| **Threat Agent** | Child profile pedestrian (1.0m height, 1.0 m/s walking speed). Non-compliant (jaywalking). |
 | **Ego ROW Status** | Ego has ROW, safety obligation overrides. |
 | **Threat Direction** | Crossing lateral. |
 | **Trigger Type** | Proximity-triggered. |
@@ -100,9 +100,66 @@ Every scenario adheres rigorously to the following required properties. If a sce
 | **Occlusion State** | Full occlusion until trigger. |
 | **Success Criterion** | No contact. Ego stops or decelerates below 5 km/h before crossing path. |
 | **Failure Conditions** | Collision; entering cross line >15 km/h; failure to detect within 0.5s of first visibility. |
-| **Parameterization Profile** | Ego V: 20-50 km/h. Walk Speed: 0.8-1.5 m/s. Gap Width: 0.8-1.5m. Weather: All. |
+| **Parameterization Profile** | Ego V: 20-50 km/h. Walk Speed: 0.8-1.5 m/s. Gap Width: 0.8-1.5m. Weather Allowed: All. |
 | **Crash Anchor** | Euro NCAP AEB VRU Test: Child Crossing — Occluded. |
 | **Engine Trigger Code** | `TRIGGER::VRU_OCCLUDED_CHILD_V1` |
+
+### SCN-ID: LAT-002
+**Scenario Name**: Adjacent Vehicle Cut-in on Highway
+**Behavioral Category**: Lateral Control
+**Behavioral Requirement**: The ego vehicle must maintain its lane and respond to a sudden cut-in from an adjacent lane by adjusting speed or position to avoid collision.
+
+| Field | Definition |
+| :--- | :--- |
+| **Threat Agent** | Adjacent vehicle traveling at +5 km/h relative to ego. Non-compliant (cutting in without safe gap). |
+| **Ego ROW Status** | Ego has ROW in its lane. |
+| **Threat Direction** | Merging (Lateral cut-in from side). |
+| **Trigger Type** | Proximity-triggered. |
+| **Trigger Condition** | Adjacent vehicle initiates lane change when ego's longitudinal gap to it is < 10m. |
+| **Occlusion State** | Full visibility. |
+| **Success Criterion** | No contact. Ego restores >= 2.0s headway within 5 seconds of the cut-in completion. |
+| **Failure Conditions** | Collision; lane departure to avoid collision; heavy emergency braking > 0.6g. |
+| **Parameterization Profile** | Ego V: 80-120 km/h. Initial Lateral distance: 3.5m. Weather Allowed: All. |
+| **Crash Anchor** | NHTSA Pre-Crash Typology: Type 45 (Changing lanes, same direction). |
+| **Engine Trigger Code** | `TRIGGER::LAT_ADJACENT_CUT_IN_V1` |
+
+### SCN-ID: EMG-004
+**Scenario Name**: Vehicle Control Loss — Sudden Black Ice Event
+**Behavioral Category**: Emergency/Anomalies
+**Behavioral Requirement**: The ego vehicle must detect severe friction loss during a maneuver and adjust its steering and speed rapidly to prevent a total spinout and remain within road boundaries.
+
+| Field | Definition |
+| :--- | :--- |
+| **Threat Agent** | The environment itself (Black Ice). Non-adversarial. |
+| **Ego ROW Status** | N/A. |
+| **Threat Direction** | N/A. |
+| **Trigger Type** | Event-triggered (Geofenced area). |
+| **Trigger Condition** | Ego enters a predefined 50m road segment where friction drops instantly. |
+| **Occlusion State** | Black ice is visually occluded (invisible to cameras, must be inferred via physics/slip). |
+| **Success Criterion** | Ego survives the patch without leaving the designated lane or exceeding 15 degrees of yaw slip angle. |
+| **Failure Conditions** | Departure from lane; complete spinout (>30 degrees yaw divergence); collision with barrier. |
+| **Parameterization Profile** | Ego V: 40-80 km/h. Road Curvature: Straight to mild curve. **Weather Required: Freezing/Ice conditions.** |
+| **Crash Anchor** | NHTSA Pre-Crash Typology: Type 01 (Control loss without prior action). |
+| **Engine Trigger Code** | `TRIGGER::EMG_ICE_LOSS_V1` |
+
+### SCN-ID: MLT-007
+**Scenario Name**: Complex Multi-Agent — Construction Zone Stop with Tailgating Follower
+**Behavioral Category**: Multi-Agent
+**Behavioral Requirement**: The ego vehicle must brake for a static construction obstacle while maintaining a sufficient deceleration curve to prevent being rear-ended by an aggressive tailgater.
+
+| Field | Definition |
+| :--- | :--- |
+| **Threat Agent** | Agent 1: Static construction barrier (compliant). Agent 2: Following vehicle close behind ego (non-compliant / aggressive). |
+| **Ego ROW Status** | N/A (Yielding to obstacle). |
+| **Threat Direction** | Agent 1: Same direction (ahead). Agent 2: Rear. |
+| **Trigger Type** | Continuous (Agent 2) + Proximity (Agent 1). |
+| **Trigger Condition** | Barrier becomes visible at 60m. Tailgater maintains 0.8s TTC continuously. |
+| **Occlusion State** | Full visibility. |
+| **Success Criterion** | Ego stops before the barrier without being hit from behind. Deceleration does not exceed 0.4g (forcing smooth braking to prevent rear-end). |
+| **Failure Conditions** | Collision with barrier; rear-ended by tailgater; sudden panic braking > 0.6g. |
+| **Parameterization Profile** | Ego V: 60-80 km/h. Tailgater TTC: 0.5s-1.2s. Weather Allowed: Clear/Rain. |
+| **Crash Anchor** | Derived (Multi-Agent composition of Type 11 & Type 14). |
+| **Engine Trigger Code** | `TRIGGER::MLT_TAILGATE_AND_STOP_V1` |
 
 ---
 

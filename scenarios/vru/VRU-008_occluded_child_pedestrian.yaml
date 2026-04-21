@@ -1,0 +1,86 @@
+scenario:
+  name: "VRU-008 Occluded Pedestrian — Child Entering Road from Between Parked Cars"
+  version: "2.0"
+  description: >
+    Child pedestrian uses erratic crossing behaviour: random speed changes, pauses,
+    and direction reversals on short intervals. The parked car creates full occlusion
+    until the child is at the road edge. Ego approach speed and child start position
+    are varied per run. Maps to Euro NCAP AEB VRU Child Crossing Occluded.
+  duration: 15.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 11.11
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: residential
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: parked_car
+    type: car
+    initial:
+      x: 35.0
+      y: -4.0
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+  - id: child_pedestrian
+    type: pedestrian
+    initial:
+      x: 38.0
+      y: -5.0     # hidden behind parked car
+      heading: 1.5708
+      velocity: 0.0
+    behavior:
+      type: reactive_pedestrian
+      parameters:
+        bt_type: erratic_pedestrian
+        trigger_type: proximity
+        trigger_value: 20.0
+        walk_speed_range:
+          min: 0.4
+          max: 1.6
+        decision_interval:
+          min: 0.2
+          max: 1.2
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 15.0
+
+master_seed: 4008
+
+parameterization:
+  ego_velocity:
+    min: 8.33     # 30 km/h
+    max: 13.89    # 50 km/h
+  npc_overrides:
+    child_pedestrian:
+      initial_x:
+        min: 34.0
+        max: 45.0
+      parameters:
+        trigger_value:
+          min: 15.0
+          max: 25.0

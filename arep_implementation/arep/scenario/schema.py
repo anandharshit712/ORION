@@ -154,6 +154,9 @@ class ScenarioDefinition:
     # Seed (optional override)
     master_seed: Optional[int] = None
 
+    # Dynamic parameterization ranges (applied by ScenarioParameterizer at run time)
+    parameterization: Dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
         return {
