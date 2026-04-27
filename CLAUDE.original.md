@@ -2,7 +2,8 @@
 
 # Claude Code Project Configuration
 
-> Claude Code reads file each session start. Project-local, no other project affected.
+> This file is read by Claude Code at the start of every session in this project.
+> It is project-local and does not affect any other project.
 
 ---
 
@@ -10,27 +11,28 @@
 
 After every completed task, feature, or significant code change, update this file:
 
-- Move completed items out of Section 13, document in relevant section
-- Add new classes, functions, API endpoints, conventions introduced
-- Add new commands if scripts or entrypoints created
-- Remove anything no longer accurate
+- Move anything newly completed out of Section 13 and document it in the relevant section
+- Add new classes, functions, API endpoints, or conventions that were introduced
+- Add new commands if any scripts or entrypoints were created
+- Remove anything that is no longer accurate
 
-Edits targeted — only update what changed, don't rewrite unrelated sections.
+Keep edits targeted — only update what changed, do not rewrite unrelated sections.
 
 ---
 
 ## 1. Project Overview
 
-ORION = deterministic, statistically rigorous eval platform for autonomous driving models.
-NOT game engine or 3D simulator. **Testing harness**: feed model, runs through parameterized scenarios hundreds of times, returns statistical safety scores.
+ORION is a deterministic, statistically rigorous evaluation platform for autonomous driving models.
+It is NOT a game engine or a 3D simulator. It is a **testing harness**: you feed it a model, it runs
+that model through parameterized scenarios hundreds of times, and it returns statistical safety scores.
 
 **Two-part architecture:**
 
 - `arep_implementation/` — Python backend (FastAPI + simulation core + evaluation pipeline)
 - `orion-frontend/` — React + Three.js + Vite frontend (dashboard UI, future 3D visualization)
 
-**Platform = ORION. Python package = `arep`.**
-Don't confuse names in code — imports always `from arep.*`.
+**The platform is called ORION. The Python package is called `arep`.**
+Do not confuse the two names in code — imports are always `from arep.*`.
 
 ---
 
@@ -90,14 +92,14 @@ ORION/
 ### Determinism first
 
 - Fixed timestep ONLY: `dt = 0.02s` (50 Hz). Never use `time.time()`, `datetime.now()`, or `random` module directly.
-- All randomness through `RandomManager` — always pass `rng: RandomManager` as parameter.
+- All randomness goes through `RandomManager` — always pass `rng: RandomManager` as a parameter.
 - Seeded per-run: `seed = master_seed + run_index`. Never change this pattern.
-- Dependency versions pinned in `pyproject.toml`. Don't upgrade without explicit instruction.
+- Dependency versions are pinned in `pyproject.toml`. Do not upgrade them without explicit instruction.
 
 ### Immutable state
 
-- `WorldState` and `VehicleState` copied before mutation. Use `.copy()` — never mutate in place.
-- Every `SimulationEngine.step()` returns NEW `WorldState`. Input world never modified.
+- `WorldState` and `VehicleState` are copied before mutation. Use `.copy()` — never mutate in place.
+- Every `SimulationEngine.step()` returns a NEW `WorldState`. The input world is never modified.
 
 ### Simulation step order (CRITICAL — never reorder)
 
@@ -131,7 +133,7 @@ class MyModel(ModelInterface):
         ...
 ```
 
-Never call `model.predict()` directly in production code — always wrap with `ModelWrapper` for timing and error logging.
+Never call `model.predict()` directly in production code — always wrap with `ModelWrapper` which handles timing and error logging.
 
 ### Action values
 
@@ -181,10 +183,10 @@ frame = await q.get()            # dict matching engine.get_tick_frame() schema
 run.unsubscribe(q)
 ```
 
-- `SimulationEngine.run_async(on_tick=...)` drives loop, calls `on_tick(world, action)` each step. Preserves synchronous `step()` determinism — wall-clock pacing only affects delivery latency.
-- `SimulationEngine.get_tick_frame(world, action, scenario_name, speed_limit)` = single source of truth for WebSocket JSON frame schema. Don't duplicate frame construction elsewhere; add fields here when extending protocol.
-- `monitor.metrics_current` in frame = per-tick *proxy* (collision flag + speed-limit compliance). Authoritative scores still come from `CompositeEvaluator` after run ends.
-- `LiveRun` (in `api/sim_registry.py`) stores `final_metrics` after run completion, populated from last tick frame's `monitor.metrics_current`. Composite score computed inline: `safety×0.5 + compliance×0.2 + stability×0.15 + reactivity×0.15`. Proxy scores until P1.4 wires `CompositeEvaluator` to live runs.
+- `SimulationEngine.run_async(on_tick=...)` drives the loop and calls `on_tick(world, action)` each step. It preserves the synchronous `step()` determinism — wall-clock pacing only affects delivery latency.
+- `SimulationEngine.get_tick_frame(world, action, scenario_name, speed_limit)` is the single source of truth for the WebSocket JSON frame schema. Do not duplicate frame construction elsewhere; add fields here when extending the protocol.
+- `monitor.metrics_current` in the frame is a per-tick *proxy* (collision flag + speed-limit compliance). Authoritative scores still come from `CompositeEvaluator` after the run ends.
+- `LiveRun` (in `api/sim_registry.py`) stores `final_metrics` after run completion, populated from the last tick frame's `monitor.metrics_current`. Composite score is computed inline: `safety×0.5 + compliance×0.2 + stability×0.15 + reactivity×0.15`. These are proxy scores until P1.4 wires `CompositeEvaluator` to live runs.
 
 ---
 
@@ -192,12 +194,12 @@ run.unsubscribe(q)
 
 ### File format
 
-All scenarios YAML. Two versions:
+All scenarios are YAML. Two versions exist:
 
 - **v1** (`arep_implementation/scenarios/basic/`) — simple, for unit tests
 - **v2** (`scenarios/*/`) — production format with full `parameterization:` block
 
-Always write new scenarios in v2 format. Use `LON-003_emergency_stop.yaml` as canonical template.
+Always write new scenarios in v2 format. Use existing files like `LON-003_emergency_stop.yaml` as the canonical template.
 
 ### Naming convention
 
@@ -206,7 +208,9 @@ Categories: `LON`, `LAT`, `INT`, `VRU`, `EMG`, `MLT`
 
 ### The foundational taxonomy rule
 
-**One scenario = one behavioral requirement.** Weather, lighting, surface friction = `parameterization` modifiers — NOT separate scenarios. Never create new scenario file just to change weather.
+**One scenario = one behavioral requirement.** Weather, lighting, and surface friction are
+`parameterization` modifiers — NOT separate scenarios. Never create a new scenario file
+just to change the weather.
 
 ### NPC behavior types (available in `behavior.type`)
 
@@ -215,14 +219,14 @@ Defined in `simulation/npc_bt.py`:
 - `constant_velocity` — maintains fixed speed
 - `reactive_vehicle` — responds to TTC triggers; supports `bt_type`: `hesitant_brake`, `aggressive_cut_in`
 - `follow_lane` — basic lane following
-- `scripted` — event-driven via `events:` block in YAML
+- `scripted` — event-driven via the `events:` block in YAML
 - `pedestrian` — VRU movement model
 
 ---
 
 ## 7. Evaluation Metrics
 
-Four metric modules in `arep/evaluation/`, each returns typed result dataclass:
+Four metric modules in `arep/evaluation/`, each returns a typed result dataclass:
 
 | Module          | Class               | Key output field                                                                       |
 | --------------- | ------------------- | -------------------------------------------------------------------------------------- |
@@ -231,19 +235,19 @@ Four metric modules in `arep/evaluation/`, each returns typed result dataclass:
 | `stability.py`  | `StabilityMetrics`  | `stability_score` — control smoothness                                                 |
 | `reactivity.py` | `ReactivityMetrics` | `reactivity_score` — response latency to threats                                       |
 
-`CompositeEvaluator` (in `evaluation/composite.py`) combines all four into single `composite_score`.
+`CompositeEvaluator` (in `evaluation/composite.py`) combines all four into a single `composite_score`.
 
-Test **passes** when: `collision_rate < 0.01` and `intervention_rate < 0.05` across N runs.
+A test **passes** when: `collision_rate < 0.01` and `intervention_rate < 0.05` across N runs.
 
-TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags critical step).
+TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags a critical step).
 
-**Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating specification document and all existing baselines.
+**Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating the specification document and all existing baselines.
 
 ---
 
 ## 8. API
 
-FastAPI backend. All routes prefixed `/api`. Auth = JWT Bearer token.
+FastAPI backend. All routes are prefixed `/api`. Auth is JWT Bearer token.
 
 ```
 GET    /health
@@ -261,16 +265,16 @@ DELETE /api/runs/{run_id}        cancel a live run
 WS     /ws/simulation/{run_id}   live tick frames (auth: ?token=<jwt>)
 ```
 
-`GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` with:
+`GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` which includes:
 `composite_score`, `safety_score`, `compliance_score`, `stability_score`, `reactivity_score`, `collision_occurred` — populated once `status == "completed"`.
 
-Note: only auth router (`/api/auth/*`) and live-run router (`/api/runs/*`) mounted under `/api`. Other routers mounted without prefix — keep in mind when wiring frontend proxy.
+Note: only the auth router (`/api/auth/*`) and the live-run router (`/api/runs/*`) are mounted under `/api`. Other routers are mounted without a prefix — keep this in mind when wiring the frontend proxy.
 
-Built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
+Available built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
 `"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`
 
-To add new model to API, add to `AVAILABLE_MODELS` dict in `api/routes.py`.
-Don't instantiate models outside that dict — dict is registry.
+To add a new model to the API, add it to the `AVAILABLE_MODELS` dict in `api/routes.py`.
+Do not instantiate models outside of that dict — the dict is the registry.
 
 All API errors return `{"detail": "..."}` — match this shape in new error handlers.
 
@@ -282,44 +286,44 @@ React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 
 ### Rules
 
-- All HTTP calls through `src/services/api.js` — never use `fetch()` directly in component.
+- All HTTP calls go through `src/services/api.js` — never use `fetch()` directly in a component.
 - Auth token lives in `AuthContext` — use `const { user, token, logout } = useAuth()` everywhere.
-- Never store JWT token in `localStorage` — managed in `AuthContext` already.
-- Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `settings` — string keys used in `Sidebar`.
-- Charts use Recharts (`LineChart`, `RadarChart`, `BarChart`) — don't add Chart.js or D3.
-- 3D visualization uses `@react-three/fiber` + `@react-three/drei` — don't use raw Three.js imperative API in React components.
-- CSS co-located: `Component.jsx` + `Component.css` same folder. No CSS modules, no Tailwind.
+- Never store the JWT token in `localStorage` — it is managed in `AuthContext` already.
+- Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `settings` — these are string keys used in `Sidebar`.
+- Charts use Recharts (`LineChart`, `RadarChart`, `BarChart`) — do not add Chart.js or D3.
+- 3D visualization uses `@react-three/fiber` + `@react-three/drei` — do not use raw Three.js imperative API in React components.
+- CSS is co-located: `Component.jsx` + `Component.css` in the same folder. No CSS modules, no Tailwind.
 
 ### Adding a new API call
 
-Add to `src/services/api.js` following existing pattern, then call `api.myNewMethod(token)` in component.
+Add it to `src/services/api.js` following the existing pattern, then call `api.myNewMethod(token)` in the component.
 
 ### Live simulation WebSocket (P1.1 — complete)
 
-Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer wired end-to-end:
+Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer is wired end-to-end:
 
-- `src/hooks/useSimulationStream.js` — owns WebSocket. Returns `{ frame, isConnected, status, error, latencyRef }`. Handles exponential-backoff reconnect (max 3 attempts), cleans up on unmount. Don't open sockets from components directly.
-- `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has `← Dashboard` back button (glass style, centered top).
-- Frame shape frozen in `SimulationEngine.get_tick_frame()`. To extend protocol: add fields there, consume in hook/viewer.
-- Server closes with `{"event": "stream_end", ...}` — hook handles before deciding reconnect.
-- Latency measured from `frame.emit_ts_ms` against client `Date.now()`; running average and max exposed via `latencyRef.current` for HUD display.
-- Control-plane calls (`POST /api/runs/`, etc.) go through `src/services/api.js` (`api.startRun`, `api.getLiveRun`, `api.cancelLiveRun`) — hook only owns WS.
+- `src/hooks/useSimulationStream.js` — owns the WebSocket. Returns `{ frame, isConnected, status, error, latencyRef }`. Handles exponential-backoff reconnect (max 3 attempts) and cleans up on unmount. Do not open sockets from components directly.
+- `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has a `← Dashboard` back button (glass style, centered top) for navigation.
+- Frame shape is the contract frozen in `SimulationEngine.get_tick_frame()`. To extend the protocol: add fields there, then consume in the hook/viewer.
+- Server closes with `{"event": "stream_end", ...}` — hook handles it before deciding whether to reconnect.
+- Latency is measured from `frame.emit_ts_ms` against the client's `Date.now()`; the running average and max are exposed via `latencyRef.current` for HUD display.
+- Control-plane calls (`POST /api/runs/`, etc.) go through `src/services/api.js` (`api.startRun`, `api.getLiveRun`, `api.cancelLiveRun`) — the hook only owns the WS.
 
 ### Dashboard live-run display
 
-- `DashboardPage.jsx` fetches runs via `api.getRuns(token)` → `GET /api/runs/` (NOT `/results/runs` — that endpoint doesn't exist).
-- Has **↻ Refresh** button incrementing `refreshCount` state, triggering data re-fetch. Use after completing run to see scores populate.
-- Run score fields (`composite_score`, `safety_score`, etc.) populated only when `status == "completed"`.
-- Expected behavior per model on `straight_road_lead_vehicle.yaml`: `EmergencyBrake` → PASS, `ConstantAction` / `SimpleLaneKeep` / `Random` → FAIL (don't brake — correct evaluation behavior, not bug).
+- `DashboardPage.jsx` fetches runs via `api.getRuns(token)` → `GET /api/runs/` (NOT `/results/runs` — that endpoint does not exist).
+- Has a **↻ Refresh** button that increments `refreshCount` state, triggering a data re-fetch. Use this after completing a run to see scores populate.
+- Run score fields (`composite_score`, `safety_score`, etc.) are populated only when `status == "completed"`.
+- Expected behavior per model on `straight_road_lead_vehicle.yaml`: `EmergencyBrake` → PASS, `ConstantAction` / `SimpleLaneKeep` / `Random` → FAIL (they do not brake — this is correct evaluation behavior, not a bug).
 
 ---
 
 ## 10. Database
 
-SQLAlchemy 2.0 with SQLite in dev (`sqlite:///arep.db`), PostgreSQL in prod.
-Connection URL from `config/default.yaml` `database.url` — never hardcode it.
+SQLAlchemy 2.0 with SQLite in development (`sqlite:///arep.db`) and PostgreSQL in production.
+Connection URL comes from `config/default.yaml` `database.url` — never hardcode it.
 
-Always use `session_scope()` context manager from `arep.database.connection`:
+Always use the `session_scope()` context manager from `arep.database.connection`:
 
 ```python
 with session_scope() as db:
@@ -327,13 +331,13 @@ with session_scope() as db:
     scenarios = repo.list_all()
 ```
 
-Never use raw `Session` — always go through repository classes in `database/repository.py`.
+Never use a raw `Session` — always go through repository classes in `database/repository.py`.
 
 ---
 
 ## 11. Common Commands
 
-Run from `arep_implementation/` unless stated otherwise:
+Run these from `arep_implementation/` unless stated otherwise:
 
 ```bash
 # Setup (first time)
@@ -375,25 +379,25 @@ start.bat         # Windows (cmd.exe)
 ## 12. Hard Rules — Never Do These
 
 - **Never mutate `WorldState` or `VehicleState` in place.** Always `.copy()` first.
-- **Never use Python's `random` module.** Use `RandomManager`, pass explicitly.
+- **Never use Python's `random` module.** Use `RandomManager` and pass it explicitly.
 - **Never use `time.time()` or `datetime.now()` inside simulation code.** Use `world.sim_time`.
-- **Never change simulation step order** (validate → physics → NPCs → lights → collision → termination → increment time).
-- **Never change pinned dependency versions** (`numpy==1.26.0`, `scipy==1.11.3`) without explicit instruction — breaks determinism tests.
-- **Never create new scenario for weather/lighting variant.** Add to `parameterization:` block.
+- **Never change the simulation step order** (validate → physics → NPCs → lights → collision → termination → increment time).
+- **Never change pinned dependency versions** (`numpy==1.26.0`, `scipy==1.11.3`) without explicit instruction — it breaks determinism tests.
+- **Never create a new scenario for a weather/lighting variant.** Add it to the `parameterization:` block.
 - **Never call `model.predict()` directly** in runner or API code — always use `ModelWrapper`.
 - **Never use `fetch()` directly in React components** — always use `src/services/api.js`.
-- **Never hardcode seeds, config values, or API URLs** — from `config/default.yaml` and `vite.config.js` proxy.
+- **Never hardcode seeds, config values, or API URLs** — they come from `config/default.yaml` and `vite.config.js` proxy.
 
 ---
 
 ## 13. What Is Not Built Yet (Active Development Areas)
 
-Refer to `AREP_IMPLEMENTATION_ROADMAP.MD` as source of truth. Current gaps:
+Refer to `AREP_IMPLEMENTATION_ROADMAP.MD` as the source of truth. Current gaps:
 
-1. **Road topology engine (P1.2)** — only flat 2-lane straight road; intersections and merge lanes not implemented. Next item after P1.1 acceptance.
-2. **Sensor simulation** — no LiDAR, camera, GPS/IMU output; observation system uses ground-truth world state.
-3. **RL model training loop** — `local_executor.py` scaffold only.
-4. **CompositeEvaluator wired to live runs (P1.4)** — dashboard scores currently per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
-5. **3D visualization polish (P3.5)** — GLTF vehicle/pedestrian/animal models (Kenney CC0 assets), Sky/Fog/grass environment, instanced roadside trees and street lights, road surface texture. Deferred to Phase 3. Current visualization = flat bird's-eye box geometry.
+1. **Road topology engine (P1.2)** — only flat 2-lane straight road exists; intersections and merge lanes are not implemented. This is the next item after P1.1 acceptance.
+2. **Sensor simulation** — no LiDAR, camera, GPS/IMU output; the observation system uses ground-truth world state.
+3. **RL model training loop** — `local_executor.py` is a scaffold only.
+4. **CompositeEvaluator wired to live runs (P1.4)** — dashboard scores are currently per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
+5. **3D visualization polish (P3.5)** — GLTF vehicle/pedestrian/animal models (Kenney CC0 assets), Sky/Fog/grass environment, instanced roadside trees and street lights, road surface texture. Deferred to Phase 3. Current visualization is flat bird's-eye box geometry.
 
-Check roadmap document before writing code in these areas.
+When working on these areas, check the roadmap document before writing any code.
