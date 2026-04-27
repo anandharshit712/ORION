@@ -369,8 +369,9 @@ ruff check arep/ tests/
 mypy arep/
 
 # Start everything (from project root)
-./start.sh        # Linux/Mac
-start.bat         # Windows
+./start.sh        # Linux/Mac (bash)
+start.bat         # Windows (cmd.exe)
+./start.ps1       # Windows (PowerShell) — pass -NoReload to disable uvicorn --reload
 ```
 
 ---

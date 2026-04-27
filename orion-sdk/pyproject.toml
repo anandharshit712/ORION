@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orion-sdk"
+version = "0.1.0"
+description = "ORION Evaluation Platform — Customer SDK"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31.0",         # HTTP client for API calls
+    "click>=8.1.0",             # CLI framework
+    "cloudpickle>=3.0.0",       # Model serialisation
+]
+
+[project.scripts]
+orion = "orion_sdk.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]

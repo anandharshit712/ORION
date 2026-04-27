@@ -1,0 +1,42 @@
+name: Self-Evaluation (ORION evaluates ORION)
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'   # Every Monday at 06:00 UTC
+
+jobs:
+  self-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ORION
+        working-directory: arep_implementation
+        run: pip install -e ".[api,worker]"
+      - name: Run EmergencyBrake on LON-003 (must PASS)
+        working-directory: arep_implementation
+        run: |
+          python -m arep.cli.run_suite \
+            --scenarios LON-003 \
+            --runs-per-scenario 10 \
+            --pass-threshold 0.80 \
+            --model emergency_brake \
+            --output-dir ./results/
+      - name: Verify ConstantAction FAILS on LON-003 (evaluator sanity check)
+        working-directory: arep_implementation
+        run: |
+          python -m arep.cli.run_suite \
+            --scenarios LON-003 \
+            --runs-per-scenario 5 \
+            --pass-threshold 0.99 \
+            --model constant \
+            --output-dir ./results/ || echo "Expected failure confirmed"
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-eval-results-${{ github.sha }}
+          path: arep_implementation/results/

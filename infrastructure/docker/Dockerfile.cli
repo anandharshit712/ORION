@@ -1,0 +1,22 @@
+# ORION CLI — CI/CD evaluation image
+# Used by the GitHub Action and GitLab CI integration.
+FROM python:3.11-slim
+
+WORKDIR /arep
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY arep_implementation/pyproject.toml arep_implementation/
+COPY arep_implementation/arep/ arep_implementation/arep/
+COPY arep_implementation/config/ arep_implementation/config/
+RUN pip install --no-cache-dir -e "arep_implementation[api,worker]"
+
+# Install the SDK CLI
+COPY orion-sdk/ /orion-sdk/
+RUN pip install --no-cache-dir /orion-sdk/
+
+COPY scenarios/ /arep/scenarios/
+
+ENTRYPOINT ["python", "-m", "arep.cli.run_suite"]

@@ -1,0 +1,18 @@
+# ORION Celery Worker
+FROM python:3.11-slim
+
+WORKDIR /arep
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY arep_implementation/pyproject.toml arep_implementation/
+COPY arep_implementation/arep/ arep_implementation/arep/
+COPY arep_implementation/config/ arep_implementation/config/
+RUN pip install --no-cache-dir -e "arep_implementation[api,worker,search,reporting]"
+
+COPY scenarios/ /arep/scenarios/
+
+CMD ["celery", "-A", "arep.worker.celery_app", "worker", \
+     "--loglevel=info", "--concurrency=4", "--queues=simulation"]

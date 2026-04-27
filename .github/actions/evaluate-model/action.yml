@@ -1,0 +1,46 @@
+name: ORION Safety Evaluation
+description: Evaluate your autonomous driving model against ORION safety scenarios
+author: ORION Evaluation Platform
+
+inputs:
+  api_key:
+    required: true
+    description: ORION API key (store as a GitHub Secret — ORION_API_KEY)
+  model_path:
+    required: true
+    description: Python import path to your ModelInterface class (e.g. myproject.model.MyModel)
+  scenarios:
+    required: false
+    default: all
+    description: Comma-separated scenario IDs or category names (LON, LAT, INT, VRU, EMG, MLT, or all)
+  runs_per_scenario:
+    required: false
+    default: "10"
+    description: Number of seeded runs per scenario
+  pass_threshold:
+    required: false
+    default: "0.80"
+    description: Minimum composite score required to pass (0.0–1.0)
+  fail_on_regression:
+    required: false
+    default: "true"
+    description: Fail the step if scores regress vs the previous run of the same model
+
+outputs:
+  composite_score:
+    description: Overall composite safety score (0.0–1.0)
+  passed:
+    description: "true" if all scenarios passed the threshold
+  report_url:
+    description: URL to the full evaluation report in the ORION dashboard
+
+runs:
+  using: docker
+  image: docker://ghcr.io/orioneval/cli:latest
+  env:
+    ORION_API_KEY: ${{ inputs.api_key }}
+    ORION_MODEL_PATH: ${{ inputs.model_path }}
+    ORION_SCENARIOS: ${{ inputs.scenarios }}
+    ORION_RUNS_PER_SCENARIO: ${{ inputs.runs_per_scenario }}
+    ORION_PASS_THRESHOLD: ${{ inputs.pass_threshold }}
+    ORION_FAIL_ON_REGRESSION: ${{ inputs.fail_on_regression }}

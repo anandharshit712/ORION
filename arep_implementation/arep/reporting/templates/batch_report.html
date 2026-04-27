@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Batch Evaluation Report — {{ batch.scenario_name }}{% endblock %}
+{% block content %}
+<h1>Batch Evaluation Report</h1>
+
+<div class="metric-row">
+  <div class="metric-card">
+    <div class="value">{{ "%.2f"|format(batch.aggregated.composite_mean) }}</div>
+    <div class="label">Composite Score (mean)</div>
+  </div>
+  <div class="metric-card">
+    <div class="value">{{ "%.0f"|format(batch.aggregated.pass_rate * 100) }}%</div>
+    <div class="label">Pass Rate</div>
+  </div>
+  <div class="metric-card">
+    <div class="value">{{ batch.num_runs }}</div>
+    <div class="label">Total Runs</div>
+  </div>
+  <div class="metric-card">
+    <div class="value">
+      <span class="badge {% if batch.aggregated.pass_rate >= 0.99 %}badge-pass{% else %}badge-fail{% endif %}">
+        {% if batch.aggregated.pass_rate >= 0.99 %}PASS{% else %}FAIL{% endif %}
+      </span>
+    </div>
+    <div class="label">Verdict</div>
+  </div>
+</div>
+
+<h2>Evaluation Parameters</h2>
+<table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Scenario</td><td>{{ batch.scenario_name }}</td></tr>
+  <tr><td>Model</td><td>{{ batch.model_name }}</td></tr>
+  <tr><td>Number of Runs</td><td>{{ batch.num_runs }}</td></tr>
+  <tr><td>Master Seed</td><td>{{ batch.master_seed }}</td></tr>
+  <tr><td>Physics Mode</td><td>{{ batch.physics_mode }}</td></tr>
+</table>
+
+<h2>Score Summary</h2>
+<table>
+  <tr><th>Metric</th><th>Mean</th><th>Std Dev</th><th>95% CI Low</th><th>95% CI High</th><th>Weight</th></tr>
+  <tr><td>Safety</td><td class="{% if batch.aggregated.safety_mean >= 0.8 %}score-pass{% else %}score-fail{% endif %}">{{ "%.3f"|format(batch.aggregated.safety_mean) }}</td><td>—</td><td>—</td><td>—</td><td>50%</td></tr>
+  <tr><td>Compliance</td><td>{{ "%.3f"|format(batch.aggregated.compliance_mean) }}</td><td>—</td><td>—</td><td>—</td><td>20%</td></tr>
+  <tr><td>Stability</td><td>{{ "%.3f"|format(batch.aggregated.stability_mean) }}</td><td>—</td><td>—</td><td>—</td><td>15%</td></tr>
+  <tr><td>Reactivity</td><td>{{ "%.3f"|format(batch.aggregated.reactivity_mean) }}</td><td>—</td><td>—</td><td>—</td><td>15%</td></tr>
+  <tr><td><strong>Composite</strong></td><td><strong>{{ "%.3f"|format(batch.aggregated.composite_mean) }}</strong></td><td>{{ "%.3f"|format(batch.aggregated.composite_std) }}</td><td>—</td><td>—</td><td>100%</td></tr>
+</table>
+
+<div class="methodology">
+  <strong>Methodology:</strong> Each run uses a unique seed (master_seed + run_index) for deterministic reproducibility.
+  A run PASSES when collision_rate &lt; 1% and intervention_rate &lt; 5% across all runs.
+  Confidence intervals will be added in Phase 2.
+</div>
+{% endblock %}

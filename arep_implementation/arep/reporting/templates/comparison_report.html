@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Model Comparison Report — {{ comparison.model_a_name }} vs {{ comparison.model_b_name }}{% endblock %}
+{% block content %}
+<h1>Model Comparison Report</h1>
+
+<div class="metric-row">
+  <div class="metric-card">
+    <div class="label">Baseline Model</div>
+    <div class="value" style="font-size:13pt">{{ comparison.model_a_name }}</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Candidate Model</div>
+    <div class="value" style="font-size:13pt">{{ comparison.model_b_name }}</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Overall Verdict</div>
+    <div class="value">
+      <span class="badge {% if comparison.regressions|length == 0 %}badge-pass{% else %}badge-fail{% endif %}">
+        {% if comparison.regressions|length == 0 %}SAFE TO DEPLOY{% else %}REGRESSION DETECTED{% endif %}
+      </span>
+    </div>
+  </div>
+</div>
+
+{% if comparison.regressions %}
+<h2>⚠ Regressions Detected</h2>
+<table>
+  <tr><th>Scenario</th><th>Metric</th><th>Baseline</th><th>Candidate</th><th>Delta</th></tr>
+  {% for r in comparison.regressions %}
+  <tr>
+    <td>{{ r.scenario_id }}</td>
+    <td>{{ r.metric }}</td>
+    <td>{{ "%.3f"|format(r.value_a) }}</td>
+    <td class="score-fail">{{ "%.3f"|format(r.value_b) }}</td>
+    <td class="score-fail">{{ "%+.3f"|format(r.delta) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Scenario-by-Scenario Comparison</h2>
+<table>
+  <tr><th>Scenario</th><th>Baseline Composite</th><th>Candidate Composite</th><th>Delta</th><th>Winner</th></tr>
+  {% for sc in comparison.scenario_comparisons %}
+  <tr>
+    <td>{{ sc.scenario_id }}</td>
+    <td>{{ "%.3f"|format(sc.baseline_composite) }}</td>
+    <td class="{% if sc.delta >= 0 %}score-pass{% else %}score-fail{% endif %}">{{ "%.3f"|format(sc.candidate_composite) }}</td>
+    <td class="{% if sc.delta >= 0 %}score-pass{% else %}score-fail{% endif %}">{{ "%+.3f"|format(sc.delta) }}</td>
+    <td>{{ sc.winner }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<div class="methodology">
+  <strong>Regression thresholds:</strong> Composite score drop &gt; 5%, Safety score drop &gt; 10%,
+  or collision rate increase &gt; 1pp triggers a regression flag.
+  Both models evaluated on identical scenario seeds for fair comparison.
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+version: '3.9'
+
+# ORION Local Development Stack
+# Start everything: docker compose up
+# Start specific service: docker compose up api worker
+
+services:
+
+  # ── Database ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orion
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orion"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Redis (Celery broker) ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI Backend ───────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      ORION_DATABASE_URL: postgresql://orion:orion_dev_password@postgres:5432/orion
+      ORION_REDIS_URL: redis://redis:6379/0
+      ORION_JWT_SECRET: dev_secret_change_in_production
+      ORION_MODEL_STORE_PATH: /tmp/orion_model_store
+    volumes:
+      - ../arep_implementation:/arep/arep_implementation   # live reload in dev
+      - ../scenarios:/arep/scenarios
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      python -m uvicorn arep.api.app:app
+      --host 0.0.0.0 --port 8000 --reload
+      --reload-dir /arep/arep_implementation/arep
+
+  # ── Celery Worker ─────────────────────────────────────────────────
+  worker:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    environment:
+      ORION_DATABASE_URL: postgresql://orion:orion_dev_password@postgres:5432/orion
+      ORION_REDIS_URL: redis://redis:6379/0
+      ORION_MODEL_STORE_PATH: /tmp/orion_model_store
+    volumes:
+      - ../arep_implementation:/arep/arep_implementation
+      - ../scenarios:/arep/scenarios
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Flower (monitoring UI) ─────────────────────────────────
+  flower:
+    image: mher/flower:2.0
+    command: celery flower --broker=redis://redis:6379/0 --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+  # ── React Frontend (dev only) ─────────────────────────────────────
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ../orion-frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  postgres_data:

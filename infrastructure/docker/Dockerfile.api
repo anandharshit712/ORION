@@ -1,0 +1,23 @@
+# ORION API Server
+FROM python:3.11-slim
+
+WORKDIR /arep
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python deps
+COPY arep_implementation/pyproject.toml arep_implementation/
+COPY arep_implementation/arep/ arep_implementation/arep/
+COPY arep_implementation/config/ arep_implementation/config/
+RUN pip install --no-cache-dir -e "arep_implementation[api,reporting]"
+
+# Copy scenarios library
+COPY scenarios/ /arep/scenarios/
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "arep.api.app:app", \
+     "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

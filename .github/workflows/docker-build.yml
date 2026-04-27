@@ -1,0 +1,17 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f infrastructure/docker/Dockerfile.api -t orion-api:${{ github.sha }} .
+      - name: Build Worker image
+        run: docker build -f infrastructure/docker/Dockerfile.worker -t orion-worker:${{ github.sha }} .
+      - name: Build CLI image
+        run: docker build -f infrastructure/docker/Dockerfile.cli -t orion-cli:${{ github.sha }} .
