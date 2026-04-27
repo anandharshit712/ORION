@@ -32,6 +32,9 @@ orion-frontend/node_modules/
 orion-frontend/dist/
 orion-frontend/.vite/
 
+# ── Graphify outputs ─────────────────────────────────────────────────────────
+graphify-out/
+
 # ── Logs & temp ──────────────────────────────────────────────────────────────
 *.log
 setup_log.txt
