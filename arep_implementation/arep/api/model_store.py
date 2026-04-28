@@ -66,21 +66,31 @@ class ModelStore:
         org_id: str,
         model_id: str,
         pickle_bytes: bytes,
-    ) -> str:
-        """
-        Store a cloudpickle-serialised model blob.
+    ) -> tuple[str, str, int]:
+        """Store a cloudpickle-serialised model blob.
 
-        Returns the artefact URI (local path or s3:// URL).
-
-        TODO [P1]: Replace local file store with S3 client (boto3).
-        TODO [P1]: Compute and verify SHA-256 hash of the blob.
+        Returns:
+            (artefact_uri, sha256_hex, size_bytes)
         """
         dest = self._store_path / org_id / f"{model_id}.pkl"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(pickle_bytes)
         uri = f"file://{dest}"
-        logger.info(f"Stored SDK model artefact: {uri} ({len(pickle_bytes)} bytes)")
-        return uri
+        digest = self.compute_hash(pickle_bytes)
+        size = len(pickle_bytes)
+        logger.info("Stored SDK model artefact: %s (%d bytes, sha256=%s)", uri, size, digest[:8])
+        return uri, digest, size
+
+    def delete(self, artefact_uri: str) -> None:
+        """Delete a stored artefact. Best-effort; missing files ignored."""
+        if artefact_uri.startswith("file://"):
+            path = Path(artefact_uri[7:])
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                logger.warning("Failed to delete artefact %s: %s", artefact_uri, e)
 
     def register_docker(
         self,

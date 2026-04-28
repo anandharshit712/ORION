@@ -56,6 +56,37 @@ class OrganisationRecord(Base):
         return f"<Organisation {self.slug} ({self.plan})>"
 
 
+class ModelRecord(Base):
+    """Customer-submitted model. Artefact lives in object storage; only metadata here."""
+    __tablename__ = "models"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=False, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1.0")
+    submission_type: Mapped[str] = mapped_column(String(16), nullable=False)  # python_sdk | docker
+    artefact_uri: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ready")
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+
+    __table_args__ = (
+        Index("ix_models_org_name_version", "org_id", "name", "version"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Model {self.name}@{self.version} type={self.submission_type} org={self.org_id}>"
+
+
 class ApiKeyRecord(Base):
     """API key for programmatic access. Stores hash, never plaintext."""
     __tablename__ = "api_keys"

@@ -190,7 +190,7 @@ async def start_run(
     scenario_executor = ScenarioExecutor(sim_config)
     rng = RandomManager(master_seed)
     initial_world = scenario_executor.create_initial_world(scenario_def, rng)
-    model = _get_model(model_name)
+    model = _get_model(model_name, org_id=org_id)
 
     speed_limit = initial_world.get_speed_limit()
     max_steps = int(scenario_def.duration / sim_config.timestep) or sim_config.max_steps

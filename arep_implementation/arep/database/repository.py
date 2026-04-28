@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from arep.database.models import (
     ScenarioRecord, RunRecord, BatchJobRecord,
-    OrganisationRecord, ApiKeyRecord, UserRecord,
+    OrganisationRecord, ApiKeyRecord, UserRecord, ModelRecord,
 )
 from arep.evaluation.composite import EvaluationResult
 from arep.statistics.aggregator import AggregatedMetrics
@@ -325,6 +325,60 @@ class ApiKeyRepository:
         key = self.session.query(ApiKeyRecord).filter_by(id=key_id).first()
         if key is not None:
             key.last_used_at = datetime.datetime.utcnow()
+
+
+class ModelRepository:
+    """CRUD for customer-submitted models, org-scoped."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(
+        self, org_id: str, user_id: Optional[int], name: str, version: str,
+        submission_type: str, artefact_uri: str,
+        content_hash: Optional[str] = None, size_bytes: Optional[int] = None,
+        status: str = "ready",
+    ) -> ModelRecord:
+        record = ModelRecord(
+            org_id=org_id, user_id=user_id, name=name, version=version,
+            submission_type=submission_type, artefact_uri=artefact_uri,
+            content_hash=content_hash, size_bytes=size_bytes, status=status,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def get(self, model_id: str, org_id: Optional[str] = None) -> Optional[ModelRecord]:
+        q = self.session.query(ModelRecord).filter_by(id=model_id)
+        if org_id is not None:
+            q = q.filter(ModelRecord.org_id == org_id)
+        return q.first()
+
+    def list_for_org(self, org_id: str) -> List[ModelRecord]:
+        return (
+            self.session.query(ModelRecord)
+            .filter_by(org_id=org_id)
+            .order_by(ModelRecord.created_at.desc())
+            .all()
+        )
+
+    def delete(self, model_id: str, org_id: str) -> Optional[ModelRecord]:
+        record = (
+            self.session.query(ModelRecord)
+            .filter_by(id=model_id, org_id=org_id)
+            .first()
+        )
+        if record is None:
+            return None
+        self.session.delete(record)
+        return record
+
+    def set_status(self, model_id: str, status: str, error: Optional[str] = None) -> None:
+        record = self.session.query(ModelRecord).filter_by(id=model_id).first()
+        if record is not None:
+            record.status = status
+            if error is not None:
+                record.error = error
 
 
 class UserRepository:

@@ -399,16 +399,16 @@ start.bat         # Windows (cmd.exe)
 
 **Priority authority**: `ORION_SAAS_ROADMAP.md`. **Implementation detail**: `AREP_IMPLEMENTATION_ROADMAP.md`. Read both before writing code in these areas.
 
-### Phase 1 — SaaS Platform Foundation (current phase, P1.1 complete)
+### Phase 1 — SaaS Platform Foundation (current phase, P1.1 + P1.2 complete)
 
-1. **Model submission system (P1.2 SaaS)** — only four hardcoded built-in models. No `POST /api/models/upload`, no SDK wired, no `HttpModelAdapter`/sandbox in use. `orion-sdk/` scaffold exists but most methods raise `NotImplementedError`. **Start here.**
-2. **Job queue & async batch execution (P1.3 SaaS)** — no Celery/Redis. Batch runs block the HTTP thread. No credit deduction logic. `worker/` directory does not exist yet.
-3. **Stripe billing (P1.4 SaaS)** — no payment, no tiers, no credit enforcement. `api/billing.py` scaffold only.
-4. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road. No intersections, merge lanes, roundabouts. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist.
+1. **Job queue & async batch execution (P1.3 SaaS)** — no Celery/Redis. Batch runs block the HTTP thread. No credit deduction logic. `worker/` directory does not exist yet. **Start here.**
+2. **Stripe billing (P1.4 SaaS)** — no payment, no tiers, no credit enforcement. `api/billing.py` scaffold only.
+3. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road. No intersections, merge lanes, roundabouts. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist.
 
-### Done (P1.1)
+### Done (P1.1 + P1.2)
 
 - **Multi-tenancy (P1.1)** — `organisations`, `api_keys` tables. JWT carries `org_id`+`role`. `OrgAuthMiddleware` resolves both JWT and API keys. `/api/orgs/me`, `/api/orgs/invite`, `/api/keys/` CRUD. All eval/batch/jobs/results/live-run routes scoped by `org_id`.
+- **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
 
 ### Deferred (Phase 2+)
 

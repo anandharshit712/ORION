@@ -1,18 +1,20 @@
 """
 ORION SDK — OrionClient.
 
-High-level client for the ORION REST API.
-Wraps all HTTP calls and provides a clean Python interface for:
+High-level client for the ORION REST API. Wraps all HTTP calls and
+provides a clean Python interface for:
   - Submitting models (SDK or Docker)
-  - Running batch evaluations
+  - Listing/managing models + API keys
+  - Running batch evaluations (Phase 1.3)
   - Fetching results
-  - Comparing models
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional
+
 import requests
 
 from orion_sdk.interface import ModelInterface
@@ -33,40 +35,56 @@ class BatchResult:
     collision_rate: Optional[float] = None
 
     def summary(self) -> str:
+        composite = (
+            f"{self.composite_mean:.3f}"
+            if self.composite_mean is not None else "pending"
+        )
+        pass_rate = (
+            f"{self.pass_rate:.1%}"
+            if self.pass_rate is not None else "pending"
+        )
         return (
             f"BatchResult(id={self.batch_id}, status={self.status}, "
-            f"composite={self.composite_mean:.3f if self.composite_mean else 'pending'}, "
-            f"pass_rate={self.pass_rate:.1%} if self.pass_rate else 'pending')"
+            f"composite={composite}, pass_rate={pass_rate})"
         )
 
 
+@dataclass
+class ApiKey:
+    id: str
+    label: str
+    key_prefix: str
+    created_at: str
+    revoked_at: Optional[str]
+
+
 class OrionClient:
-    """
-    Python client for the ORION evaluation platform API.
+    """Python client for the ORION evaluation platform API.
 
     Args:
-        api_key:  Your ORION API key (from Settings → API Keys).
+        api_key:  Your ORION API key (sk-orion-...).
         base_url: API base URL (default: https://api.orion.run).
-        timeout:  Request timeout in seconds (default: 30).
+        timeout:  Request timeout in seconds (default: 60).
     """
 
     def __init__(
         self,
         api_key: str,
         base_url: str = DEFAULT_BASE_URL,
-        timeout: float = 30.0,
+        timeout: float = 60.0,
     ):
+        if not api_key:
+            raise ValueError("api_key is required")
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
         self._session.headers.update({
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
             "User-Agent": "orion-sdk/0.1.0",
         })
 
-    # ── Model submission ──────────────────────────────────────────────
+    # ── Models ───────────────────────────────────────────────────────
 
     def submit_model(
         self,
@@ -74,15 +92,12 @@ class OrionClient:
         name: str,
         version: str = "v1.0",
     ) -> str:
-        """
-        Serialise and upload a ModelInterface instance to ORION.
-
-        Returns the model_id (UUID string) for use in run_batch().
-
-        TODO [P1]: Call _upload_model(model, name, version, self._session, self.base_url)
-        TODO [P1]: Return model_id from response.
-        """
-        raise NotImplementedError("OrionClient.submit_model not yet implemented [P1]")
+        """Serialise and upload a Python ModelInterface. Returns model_id."""
+        return _upload_model(
+            model=model, name=name, version=version,
+            base_url=self.base_url, session=self._session,
+            timeout=self.timeout,
+        )
 
     def register_docker_model(
         self,
@@ -91,83 +106,79 @@ class OrionClient:
         name: str,
         version: str = "v1.0",
     ) -> str:
-        """
-        Register a Docker container image as a model.
+        """Register a Docker container image as a model. Returns model_id."""
+        body = {"name": name, "version": version, "image": image, "port": port}
+        return self._post("/api/models/register", body)["id"]
 
-        Returns the model_id.
+    def list_models(self) -> list[dict]:
+        return self._get("/api/models/")
 
-        TODO [P1]: POST /api/models/register with image + port.
-        TODO [P1]: Return model_id.
-        """
-        raise NotImplementedError("OrionClient.register_docker_model not yet implemented [P1]")
+    def delete_model(self, model_id: str) -> None:
+        self._delete(f"/api/models/{model_id}")
 
-    # ── Batch evaluation ──────────────────────────────────────────────
+    # ── API keys ─────────────────────────────────────────────────────
+
+    def list_keys(self) -> list[dict]:
+        return self._get("/api/keys/")
+
+    def create_key(self, label: str) -> dict:
+        return self._post("/api/keys/", {"label": label})
+
+    def revoke_key(self, key_id: str) -> None:
+        self._delete(f"/api/keys/{key_id}")
+
+    # ── Batch evaluation ─────────────────────────────────────────────
 
     def run_batch(
         self,
         model_id: str,
-        scenarios: List[str],
-        runs_per_scenario: int = 10,
+        scenario_path: str,
+        num_runs: int = 10,
         seed: int = 42,
-        physics_mode: str = "kinematic",
     ) -> BatchResult:
+        """Submit a synchronous batch evaluation.
+
+        Note: P1.3 (Celery + async batch) will replace this with a polling
+        flow. For now, hits the synchronous /evaluate/batch endpoint.
         """
-        Submit a batch evaluation job.
+        body = {
+            "scenario_path": scenario_path,
+            "model_name": model_id,
+            "num_runs": num_runs,
+            "master_seed": seed,
+        }
+        resp = self._post("/evaluate/batch", body)
+        agg = resp.get("aggregated", {})
+        return BatchResult(
+            batch_id=resp.get("scenario_name", ""),
+            scenario_ids=[scenario_path],
+            model_id=model_id,
+            status="completed",
+            composite_mean=agg.get("composite_mean"),
+            safety_mean=agg.get("safety_mean"),
+            collision_rate=agg.get("collision_rate"),
+        )
 
-        Returns immediately with a BatchResult (status=queued).
-        Poll with get_batch_results(batch_id) until status=completed.
+    def get_run_status(self, run_id: str) -> dict:
+        """Fetch status of a single live run."""
+        return self._get(f"/api/runs/{run_id}")
 
-        TODO [P1]: POST /api/runs/batch for each scenario_id.
-        TODO [P1]: Return BatchResult with batch_id.
-        """
-        raise NotImplementedError("OrionClient.run_batch not yet implemented [P1]")
-
-    def get_batch_results(self, batch_id: str) -> BatchResult:
-        """
-        Fetch the current status and results of a batch job.
-
-        TODO [P1]: GET /api/runs/batch/{batch_id}/results
-        TODO [P1]: Return populated BatchResult.
-        """
-        raise NotImplementedError("OrionClient.get_batch_results not yet implemented [P1]")
-
-    def wait_for_batch(
+    def wait_for_run(
         self,
-        batch_id: str,
-        poll_interval: float = 5.0,
-        timeout: float = 3600.0,
-    ) -> BatchResult:
-        """
-        Block until a batch job completes (or timeout is reached).
-
-        Args:
-            batch_id:      Batch ID to wait for.
-            poll_interval: Seconds between polls (default: 5s).
-            timeout:       Maximum seconds to wait (default: 1 hour).
-
-        TODO [P1]: Poll get_batch_results() until status=completed or timeout.
-        """
-        raise NotImplementedError("OrionClient.wait_for_batch not yet implemented [P1]")
-
-    # ── Comparison ────────────────────────────────────────────────────
-
-    def compare_models(
-        self,
-        model_a_id: str,
-        model_b_id: str,
-        scenarios: List[str],
-        runs_per_scenario: int = 10,
-        seed: int = 42,
+        run_id: str,
+        poll_interval: float = 1.0,
+        timeout: float = 600.0,
     ) -> dict:
-        """
-        Run both models across scenarios and return a comparison report.
+        """Block until a live run completes (or timeout expires)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            run = self.get_run_status(run_id)
+            if run.get("status") in ("complete", "completed", "failed", "cancelled"):
+                return run
+            time.sleep(poll_interval)
+        raise TimeoutError(f"Run {run_id} did not finish within {timeout}s")
 
-        TODO [P2]: POST /api/compare
-        TODO [P2]: Wait for completion, return comparison dict.
-        """
-        raise NotImplementedError("OrionClient.compare_models not yet implemented [P2]")
-
-    # ── Internal helpers ──────────────────────────────────────────────
+    # ── Internal HTTP helpers ────────────────────────────────────────
 
     def _get(self, path: str) -> dict:
         resp = self._session.get(f"{self.base_url}{path}", timeout=self.timeout)
@@ -175,6 +186,12 @@ class OrionClient:
         return resp.json()
 
     def _post(self, path: str, body: dict) -> dict:
-        resp = self._session.post(f"{self.base_url}{path}", json=body, timeout=self.timeout)
+        resp = self._session.post(
+            f"{self.base_url}{path}", json=body, timeout=self.timeout,
+        )
         resp.raise_for_status()
         return resp.json()
+
+    def _delete(self, path: str) -> None:
+        resp = self._session.delete(f"{self.base_url}{path}", timeout=self.timeout)
+        resp.raise_for_status()

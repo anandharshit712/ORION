@@ -36,6 +36,7 @@ from arep.models.examples.example_models import (
     SimpleLaneKeepModel, RandomModel,
 )
 from arep.models.interface import ModelInterface
+from arep.models.resolver import resolve_model, is_uuid
 from arep.scenario.parser import ScenarioParser
 from arep.utils.logging_config import get_logger
 
@@ -51,13 +52,16 @@ AVAILABLE_MODELS = {
 }
 
 
-def _get_model(name: str) -> ModelInterface:
-    if name not in AVAILABLE_MODELS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown model: {name!r}. Available: {list(AVAILABLE_MODELS.keys())}",
-        )
-    return AVAILABLE_MODELS[name]()
+def _get_model(name: str, org_id: Optional[str] = None) -> ModelInterface:
+    """Resolve built-in name OR customer model UUID → ModelInterface."""
+    try:
+        return resolve_model(name, AVAILABLE_MODELS, org_id=org_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Model not found: {name}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Routers ──────────────────────────────────────────────────────────────
@@ -125,7 +129,7 @@ def run_single(req: RunSingleRequest, request: Request):
     if not Path(req.scenario_path).exists():
         raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
 
-    model = _get_model(req.model_name)
+    model = _get_model(req.model_name, org_id=org_id)
     runner = EvaluationRunner()
 
     try:
@@ -161,7 +165,7 @@ def run_batch(req: RunBatchRequest, request: Request):
     if not Path(req.scenario_path).exists():
         raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
 
-    model = _get_model(req.model_name)
+    model = _get_model(req.model_name, org_id=org_id)
     runner = EvaluationRunner()
 
     # Create batch job record
@@ -316,11 +320,12 @@ async def start_run(req: StartRunRequest, request: Request):
     org_id, user_id, _ = get_request_principal(request)
     if not Path(req.scenario_path).exists():
         raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
-    if req.model_name not in AVAILABLE_MODELS:
+    # Validate model resolution before launching producer task
+    if req.model_name not in AVAILABLE_MODELS and not is_uuid(req.model_name):
         raise HTTPException(
             400,
             f"Unknown model: {req.model_name!r}. "
-            f"Available: {list(AVAILABLE_MODELS.keys())}",
+            f"Available built-ins: {list(AVAILABLE_MODELS.keys())} or pass a model UUID.",
         )
 
     from arep.api.sim_registry import start_run as _start_run
