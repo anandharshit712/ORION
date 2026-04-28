@@ -2,6 +2,8 @@
 ORION Database Models.
 
 SQLAlchemy ORM models for persistent storage of:
+  - Organisations + ApiKeys (multi-tenancy)
+  - Users (with org_id + role)
   - Scenarios (parsed scenario metadata)
   - Runs (individual simulation runs)
   - BatchJobs (batch evaluation jobs)
@@ -11,6 +13,7 @@ SQLAlchemy ORM models for persistent storage of:
 from __future__ import annotations
 
 import datetime
+import uuid
 from typing import Optional
 
 from sqlalchemy import (
@@ -22,9 +25,62 @@ from sqlalchemy.orm import (
 )
 
 
+def _new_uuid() -> str:
+    return str(uuid.uuid4())
+
+
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
     pass
+
+
+# ── Multi-tenancy ────────────────────────────────────────────────────────
+
+class OrganisationRecord(Base):
+    """Tenant organisation. Owns users, api_keys, runs, batch jobs, models."""
+    __tablename__ = "organisations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    plan: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
+    run_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+
+    users: Mapped[list["UserRecord"]] = relationship(back_populates="organisation")
+    api_keys: Mapped[list["ApiKeyRecord"]] = relationship(back_populates="organisation")
+
+    def __repr__(self) -> str:
+        return f"<Organisation {self.slug} ({self.plan})>"
+
+
+class ApiKeyRecord(Base):
+    """API key for programmatic access. Stores hash, never plaintext."""
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
+    key_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)  # first 12 chars for display
+    label: Mapped[str] = mapped_column(String(128), nullable=False)
+    last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+    revoked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+
+    organisation: Mapped["OrganisationRecord"] = relationship(back_populates="api_keys")
+    user: Mapped["UserRecord"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<ApiKey {self.label} prefix={self.key_prefix} org={self.org_id}>"
 
 
 class ScenarioRecord(Base):
@@ -56,6 +112,9 @@ class BatchJobRecord(Base):
     __tablename__ = "batch_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=True, index=True
+    )
     scenario_name: Mapped[str] = mapped_column(String(256), nullable=False)
     model_name: Mapped[str] = mapped_column(String(256), nullable=False)
     num_runs: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -95,6 +154,9 @@ class RunRecord(Base):
     __tablename__ = "runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=True, index=True
+    )
     scenario_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("scenarios.id"), nullable=False
     )
@@ -152,6 +214,10 @@ class UserRecord(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=True, index=True
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
     email: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, index=True)
     username: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -164,5 +230,7 @@ class UserRecord(Base):
         DateTime, nullable=True
     )
 
+    organisation: Mapped[Optional["OrganisationRecord"]] = relationship(back_populates="users")
+
     def __repr__(self) -> str:
-        return f"<User {self.username} ({self.email})>"
+        return f"<User {self.username} ({self.email}) org={self.org_id} role={self.role}>"

@@ -1,5 +1,5 @@
 """
-ORION API Middleware.  [Phase 1]
+ORION API Middleware.
 
 Org-scoped authentication middleware.
 Resolves both JWT tokens and API keys to (org_id, user_id, role)
@@ -11,16 +11,24 @@ inspects the token itself.
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 from typing import Optional
 
 from fastapi import Request, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
+from arep.api.auth import decode_access_token
+from arep.database.connection import get_session
+from arep.database.models import UserRecord
+from arep.database.repository import ApiKeyRepository
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.middleware")
+
+API_KEY_PREFIX = "sk-orion-"
 
 # Routes that do NOT require authentication
 PUBLIC_PATHS = {
@@ -30,7 +38,31 @@ PUBLIC_PATHS = {
     "/openapi.json",
     "/api/auth/login",
     "/api/auth/signup",
+    "/api/auth/register",
+    "/api/auth/me",  # uses JWT dep directly — handled by route
 }
+
+# Path prefixes that bypass middleware (WebSocket auth handled separately)
+PUBLIC_PREFIXES = (
+    "/ws/",
+)
+
+
+def hash_api_key(plaintext: str) -> str:
+    """SHA256 hash of an API key. Fast, deterministic, suitable for indexed lookup."""
+    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+
+
+def generate_api_key() -> tuple[str, str, str]:
+    """Generate a fresh API key.
+
+    Returns:
+        (plaintext, key_hash, key_prefix) — plaintext returned to the user once,
+        only key_hash + key_prefix stored.
+    """
+    raw = secrets.token_urlsafe(32)
+    plaintext = f"{API_KEY_PREFIX}{raw}"
+    return plaintext, hash_api_key(plaintext), plaintext[: len(API_KEY_PREFIX) + 8]
 
 
 class OrgAuthMiddleware(BaseHTTPMiddleware):
@@ -38,43 +70,48 @@ class OrgAuthMiddleware(BaseHTTPMiddleware):
     Middleware that resolves auth credentials on every request.
 
     Resolution order:
-      1. Authorization: Bearer <jwt>   → decode JWT, extract org_id + role
-      2. Authorization: Bearer <api_key>  → hash lookup in api_keys table
+      1. Authorization: Bearer <api_key>  (starts with "sk-orion-")  → hash lookup
+      2. Authorization: Bearer <jwt>      → decode JWT, extract org_id + role
       3. Public path  → skip auth entirely
 
     On success, sets:
-      request.state.org_id  : str (UUID)
-      request.state.user_id : str (UUID)
+      request.state.org_id  : str
+      request.state.user_id : int
       request.state.role    : str  ("owner" | "admin" | "member" | "viewer")
 
-    On failure, returns 401.
+    On failure (token present but invalid), returns 401.
+    On no token + non-public path, sets state to None and lets route deps decide.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
-        # Skip auth for public paths and OPTIONS preflight
-        if request.method == "OPTIONS" or path in PUBLIC_PATHS:
+        # Skip preflight + public paths/prefixes
+        if (
+            request.method == "OPTIONS"
+            or path in PUBLIC_PATHS
+            or any(path.startswith(p) for p in PUBLIC_PREFIXES)
+        ):
+            request.state.org_id = None
+            request.state.user_id = None
+            request.state.role = None
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
         token = self._extract_token(auth_header)
 
         if token is None:
-            # Allow unauthenticated requests to pass through to routes
-            # that may have their own optional auth logic.
             request.state.org_id = None
             request.state.user_id = None
             request.state.role = None
             return await call_next(request)
 
         try:
-            org_id, user_id, role = await self._resolve_credentials(token, request)
+            org_id, user_id, role = self._resolve_credentials(token)
             request.state.org_id = org_id
             request.state.user_id = user_id
             request.state.role = role
         except HTTPException as e:
-            from starlette.responses import JSONResponse
             return JSONResponse(
                 status_code=e.status_code,
                 content={"detail": e.detail},
@@ -89,30 +126,63 @@ class OrgAuthMiddleware(BaseHTTPMiddleware):
         return None
 
     @staticmethod
-    async def _resolve_credentials(
-        token: str, request: Request
-    ) -> tuple[str, str, str]:
-        """
-        Resolve a token to (org_id, user_id, role).
+    def _resolve_credentials(token: str) -> tuple[str, int, str]:
+        """Resolve a token to (org_id, user_id, role).
 
-        Tries JWT first; falls back to API key lookup.
-        Raises HTTPException(401) if neither succeeds.
+        Tries API key first if it has the orion prefix, else JWT.
+        Raises HTTPException(401) on failure.
         """
-        # TODO [P1]: Implement JWT decode → extract org_id, user_id, role
-        # TODO [P1]: If JWT fails, hash token and look up in api_keys table
-        # TODO [P1]: Return (org_id, user_id, role) tuple
-        raise NotImplementedError("OrgAuthMiddleware._resolve_credentials not yet implemented")
+        if token.startswith(API_KEY_PREFIX):
+            return _resolve_api_key(token)
+        return _resolve_jwt(token)
+
+
+def _resolve_jwt(token: str) -> tuple[str, int, str]:
+    try:
+        payload = decode_access_token(token)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user_id_str = payload.get("sub")
+    org_id = payload.get("org_id")
+    role = payload.get("role")
+    if user_id_str is None or org_id is None or role is None:
+        raise HTTPException(status_code=401, detail="Token missing org claims")
+    try:
+        user_id = int(str(user_id_str))
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+    return str(org_id), user_id, str(role)
+
+
+def _resolve_api_key(plaintext: str) -> tuple[str, int, str]:
+    key_hash = hash_api_key(plaintext)
+    session = get_session()
+    try:
+        repo = ApiKeyRepository(session)
+        key = repo.get_by_hash(key_hash)
+        if key is None:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        repo.touch(key.id)
+        # Look up role from the user record
+        user = session.query(UserRecord).filter_by(id=key.user_id).first()
+        role = user.role if user is not None else "member"
+        org_id = key.org_id
+        user_id = key.user_id
+        session.commit()
+        return org_id, user_id, role
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def require_role(*allowed_roles: str):
-    """
-    Dependency factory that enforces a minimum role on a route.
-
-    Usage:
-        @router.post("/admin/thing")
-        def admin_thing(request: Request, _=Depends(require_role("owner", "admin"))):
-            ...
-    """
+    """Dependency factory that enforces a minimum role on a route."""
     def _check(request: Request):
         role = getattr(request.state, "role", None)
         if role not in allowed_roles:
@@ -124,16 +194,26 @@ def require_role(*allowed_roles: str):
 
 
 def require_plan(*allowed_plans: str):
-    """
-    Dependency factory that enforces a subscription plan on a route.
+    """Dependency factory that enforces a subscription plan on a route.
 
-    Usage:
-        @router.post("/api/search")
-        def adversarial_search(request: Request, _=Depends(require_plan("pro", "enterprise"))):
-            ...
+    Usage: `_=Depends(require_plan("pro", "enterprise"))`.
     """
+    from arep.database.repository import OrganisationRepository
+
     def _check(request: Request):
-        # TODO [P1]: Load org plan from DB or request.state and check against allowed_plans
-        # TODO [P1]: Raise HTTPException(402, "Requires Pro or Enterprise plan") if not allowed
-        pass
+        org_id = getattr(request.state, "org_id", None)
+        if not org_id:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        session = get_session()
+        try:
+            org = OrganisationRepository(session).get_by_id(org_id)
+            if org is None:
+                raise HTTPException(status_code=401, detail="Organisation not found")
+            if org.plan not in allowed_plans:
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Requires one of: {allowed_plans}. Current plan: {org.plan}",
+                )
+        finally:
+            session.close()
     return _check

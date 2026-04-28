@@ -17,6 +17,15 @@ After every completed task, feature, or significant code change, update this fil
 
 Edits targeted — only update what changed, don't rewrite unrelated sections.
 
+### Governing Documents
+
+Two roadmap documents exist. Know the difference:
+
+- **`ORION_SAAS_ROADMAP.md`** — governs **priority ordering**. What to build next. When two tasks compete, this doc wins. Source of truth for Phase 1–5 scope.
+- **`AREP_IMPLEMENTATION_ROADMAP.md`** — governs **technical implementation detail**. How to build it. Specific data structures, acceptance criteria, file names.
+
+When they conflict on priority: SaaS roadmap wins. When you need implementation depth: read the technical roadmap.
+
 ---
 
 ## 1. Project Overview
@@ -388,12 +397,22 @@ start.bat         # Windows (cmd.exe)
 
 ## 13. What Is Not Built Yet (Active Development Areas)
 
-Refer to `AREP_IMPLEMENTATION_ROADMAP.MD` as source of truth. Current gaps:
+**Priority authority**: `ORION_SAAS_ROADMAP.md`. **Implementation detail**: `AREP_IMPLEMENTATION_ROADMAP.md`. Read both before writing code in these areas.
 
-1. **Road topology engine (P1.2)** — only flat 2-lane straight road; intersections and merge lanes not implemented. Next item after P1.1 acceptance.
-2. **Sensor simulation** — no LiDAR, camera, GPS/IMU output; observation system uses ground-truth world state.
-3. **RL model training loop** — `local_executor.py` scaffold only.
-4. **CompositeEvaluator wired to live runs (P1.4)** — dashboard scores currently per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
-5. **3D visualization polish (P3.5)** — GLTF vehicle/pedestrian/animal models (Kenney CC0 assets), Sky/Fog/grass environment, instanced roadside trees and street lights, road surface texture. Deferred to Phase 3. Current visualization = flat bird's-eye box geometry.
+### Phase 1 — SaaS Platform Foundation (current phase, P1.1 complete)
 
-Check roadmap document before writing code in these areas.
+1. **Model submission system (P1.2 SaaS)** — only four hardcoded built-in models. No `POST /api/models/upload`, no SDK wired, no `HttpModelAdapter`/sandbox in use. `orion-sdk/` scaffold exists but most methods raise `NotImplementedError`. **Start here.**
+2. **Job queue & async batch execution (P1.3 SaaS)** — no Celery/Redis. Batch runs block the HTTP thread. No credit deduction logic. `worker/` directory does not exist yet.
+3. **Stripe billing (P1.4 SaaS)** — no payment, no tiers, no credit enforcement. `api/billing.py` scaffold only.
+4. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road. No intersections, merge lanes, roundabouts. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist.
+
+### Done (P1.1)
+
+- **Multi-tenancy (P1.1)** — `organisations`, `api_keys` tables. JWT carries `org_id`+`role`. `OrgAuthMiddleware` resolves both JWT and API keys. `/api/orgs/me`, `/api/orgs/invite`, `/api/keys/` CRUD. All eval/batch/jobs/results/live-run routes scoped by `org_id`.
+
+### Deferred (Phase 2+)
+
+- **Sensor simulation** — no LiDAR, camera, GPS/IMU; observation = ground-truth state. Explicitly deprioritised from Phase 1 in `ORION_SAAS_ROADMAP.md`.
+- **CompositeEvaluator wired to live runs** — dashboard scores are per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
+- **Statistical confidence intervals (P2.1)** — scores are point estimates, no CI or distribution analysis yet.
+- **3D visualization polish (P3.5)** — current viz = flat bird's-eye box geometry. GLTF assets, Sky/Fog, road textures deferred to Phase 3.

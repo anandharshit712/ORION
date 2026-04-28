@@ -13,7 +13,10 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from arep.database.models import ScenarioRecord, RunRecord, BatchJobRecord
+from arep.database.models import (
+    ScenarioRecord, RunRecord, BatchJobRecord,
+    OrganisationRecord, ApiKeyRecord, UserRecord,
+)
 from arep.evaluation.composite import EvaluationResult
 from arep.statistics.aggregator import AggregatedMetrics
 from arep.utils.logging_config import get_logger
@@ -84,11 +87,13 @@ class RunRepository:
         scenario_id: int,
         result: EvaluationResult,
         batch_job_id: Optional[int] = None,
+        org_id: Optional[str] = None,
     ) -> RunRecord:
         """Save an EvaluationResult as a RunRecord."""
         record = RunRecord(
             scenario_id=scenario_id,
             batch_job_id=batch_job_id,
+            org_id=org_id,
             model_name=result.model_name,
             master_seed=result.master_seed,
             duration=result.duration,
@@ -114,32 +119,37 @@ class RunRepository:
 
     def get_runs_for_model(
         self, model_name: str, limit: int = 100,
+        org_id: Optional[str] = None,
     ) -> List[RunRecord]:
+        q = self.session.query(RunRecord).filter_by(model_name=model_name)
+        if org_id is not None:
+            q = q.filter(RunRecord.org_id == org_id)
         return (
-            self.session.query(RunRecord)
-            .filter_by(model_name=model_name)
-            .order_by(RunRecord.created_at.desc())
+            q.order_by(RunRecord.created_at.desc())
             .limit(limit)
             .all()
         )
 
     def get_runs_for_scenario(
         self, scenario_id: int, limit: int = 100,
+        org_id: Optional[str] = None,
     ) -> List[RunRecord]:
+        q = self.session.query(RunRecord).filter_by(scenario_id=scenario_id)
+        if org_id is not None:
+            q = q.filter(RunRecord.org_id == org_id)
         return (
-            self.session.query(RunRecord)
-            .filter_by(scenario_id=scenario_id)
-            .order_by(RunRecord.created_at.desc())
+            q.order_by(RunRecord.created_at.desc())
             .limit(limit)
             .all()
         )
 
-    def get_runs_for_batch(self, batch_job_id: int) -> List[RunRecord]:
-        return (
-            self.session.query(RunRecord)
-            .filter_by(batch_job_id=batch_job_id)
-            .all()
-        )
+    def get_runs_for_batch(
+        self, batch_job_id: int, org_id: Optional[str] = None,
+    ) -> List[RunRecord]:
+        q = self.session.query(RunRecord).filter_by(batch_job_id=batch_job_id)
+        if org_id is not None:
+            q = q.filter(RunRecord.org_id == org_id)
+        return q.all()
 
 
 class BatchJobRepository:
@@ -154,12 +164,14 @@ class BatchJobRepository:
         model_name: str,
         num_runs: int,
         master_seed: int,
+        org_id: Optional[str] = None,
     ) -> BatchJobRecord:
         record = BatchJobRecord(
             scenario_name=scenario_name,
             model_name=model_name,
             num_runs=num_runs,
             master_seed=master_seed,
+            org_id=org_id,
             status="pending",
         )
         self.session.add(record)
@@ -193,13 +205,146 @@ class BatchJobRepository:
             job.status = "failed"
             job.completed_at = datetime.datetime.utcnow()
 
-    def get_recent(self, limit: int = 20) -> List[BatchJobRecord]:
+    def get_recent(
+        self, limit: int = 20, org_id: Optional[str] = None,
+    ) -> List[BatchJobRecord]:
+        q = self.session.query(BatchJobRecord)
+        if org_id is not None:
+            q = q.filter(BatchJobRecord.org_id == org_id)
         return (
-            self.session.query(BatchJobRecord)
-            .order_by(BatchJobRecord.created_at.desc())
+            q.order_by(BatchJobRecord.created_at.desc())
             .limit(limit)
             .all()
         )
 
-    def get_by_id(self, job_id: int) -> Optional[BatchJobRecord]:
-        return self.session.query(BatchJobRecord).get(job_id)
+    def get_by_id(
+        self, job_id: int, org_id: Optional[str] = None,
+    ) -> Optional[BatchJobRecord]:
+        q = self.session.query(BatchJobRecord).filter(BatchJobRecord.id == job_id)
+        if org_id is not None:
+            q = q.filter(BatchJobRecord.org_id == org_id)
+        return q.first()
+
+
+# ── Multi-tenancy repositories ──────────────────────────────────────────
+
+class OrganisationRepository:
+    """CRUD for organisations."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(
+        self, name: str, slug: str, plan: str = "free", run_credits: int = 50,
+    ) -> OrganisationRecord:
+        record = OrganisationRecord(
+            name=name, slug=slug, plan=plan, run_credits=run_credits,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def get_by_id(self, org_id: str) -> Optional[OrganisationRecord]:
+        return self.session.query(OrganisationRecord).filter_by(id=org_id).first()
+
+    def get_by_slug(self, slug: str) -> Optional[OrganisationRecord]:
+        return self.session.query(OrganisationRecord).filter_by(slug=slug).first()
+
+    def deduct_credits(self, org_id: str, amount: int) -> bool:
+        """Atomically deduct credits. Returns False if insufficient."""
+        org = (
+            self.session.query(OrganisationRecord)
+            .filter_by(id=org_id)
+            .with_for_update()
+            .first()
+        )
+        if org is None or org.run_credits < amount:
+            return False
+        org.run_credits -= amount
+        return True
+
+    def add_credits(self, org_id: str, amount: int) -> None:
+        org = (
+            self.session.query(OrganisationRecord)
+            .filter_by(id=org_id)
+            .with_for_update()
+            .first()
+        )
+        if org is not None:
+            org.run_credits += amount
+
+
+class ApiKeyRepository:
+    """CRUD for API keys. Keys stored as SHA256 hash, never plaintext."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(
+        self, org_id: str, user_id: int, key_hash: str,
+        key_prefix: str, label: str,
+    ) -> ApiKeyRecord:
+        record = ApiKeyRecord(
+            org_id=org_id, user_id=user_id, key_hash=key_hash,
+            key_prefix=key_prefix, label=label,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def get_by_hash(self, key_hash: str) -> Optional[ApiKeyRecord]:
+        """Lookup non-revoked key by hash."""
+        return (
+            self.session.query(ApiKeyRecord)
+            .filter_by(key_hash=key_hash, revoked_at=None)
+            .first()
+        )
+
+    def list_for_org(self, org_id: str) -> List[ApiKeyRecord]:
+        return (
+            self.session.query(ApiKeyRecord)
+            .filter_by(org_id=org_id)
+            .order_by(ApiKeyRecord.created_at.desc())
+            .all()
+        )
+
+    def revoke(self, key_id: str, org_id: str) -> bool:
+        """Revoke key. Returns True if found and revoked."""
+        key = (
+            self.session.query(ApiKeyRecord)
+            .filter_by(id=key_id, org_id=org_id, revoked_at=None)
+            .first()
+        )
+        if key is None:
+            return False
+        key.revoked_at = datetime.datetime.utcnow()
+        return True
+
+    def touch(self, key_id: str) -> None:
+        """Update last_used_at. Best-effort, no flush."""
+        key = self.session.query(ApiKeyRecord).filter_by(id=key_id).first()
+        if key is not None:
+            key.last_used_at = datetime.datetime.utcnow()
+
+
+class UserRepository:
+    """CRUD for users (org-scoped)."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get_by_id(self, user_id: int) -> Optional[UserRecord]:
+        return self.session.query(UserRecord).filter_by(id=user_id).first()
+
+    def get_by_email_or_username(self, identifier: str) -> Optional[UserRecord]:
+        return (
+            self.session.query(UserRecord)
+            .filter(
+                (UserRecord.email == identifier)
+                | (UserRecord.username == identifier)
+            )
+            .first()
+        )
+
+    def list_for_org(self, org_id: str) -> List[UserRecord]:
+        return self.session.query(UserRecord).filter_by(org_id=org_id).all()

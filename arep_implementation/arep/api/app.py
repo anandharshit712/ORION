@@ -17,6 +17,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from arep.api.auth import auth_router
+from arep.api.middleware import OrgAuthMiddleware
+from arep.api.orgs import keys_router, orgs_router
 from arep.api.routes import (
     health_router, models_router, scenarios_router,
     evaluate_router, jobs_router, results_router, runs_router,
@@ -52,7 +54,11 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # CORS
+    # Org-scoped auth middleware (added BEFORE CORS so it runs AFTER CORS in Starlette's
+    # reverse-add semantics — CORS sees requests first, auth resolves before route handlers).
+    app.add_middleware(OrgAuthMiddleware)
+
+    # CORS (outermost — handles preflight OPTIONS without auth)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -63,6 +69,8 @@ def create_app() -> FastAPI:
 
     # Mount routers
     app.include_router(auth_router)
+    app.include_router(orgs_router)
+    app.include_router(keys_router)
     app.include_router(health_router)
     app.include_router(models_router)
     app.include_router(scenarios_router)

@@ -1,25 +1,28 @@
 """
 ORION Authentication Module.
 
-JWT-based authentication with:
-  - POST /api/auth/register  — create an account
-  - POST /api/auth/login     — obtain a JWT token
-  - GET  /api/auth/me        — get current user profile
+JWT-based authentication with multi-tenancy:
+  - POST /api/auth/signup    — create org + first owner user atomically
+  - POST /api/auth/register  — alias of signup (legacy name)
+  - POST /api/auth/login     — obtain a JWT token (carries org_id + role)
+  - GET  /api/auth/me        — current user profile + org details
 """
 
 from __future__ import annotations
 
 import os
+import re
 import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
-from arep.database.connection import get_session
-from arep.database.models import UserRecord
+from arep.database.connection import get_session, session_scope
+from arep.database.models import UserRecord, OrganisationRecord
+from arep.database.repository import OrganisationRepository
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.auth")
@@ -35,7 +38,6 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 import bcrypt
 
 def hash_password(password: str) -> str:
-    # bcrypt throws ValueError if > 72 bytes. We safely truncate.
     pwd_bytes = password.encode('utf-8')[:72]
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
@@ -60,6 +62,11 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def decode_access_token(token: str) -> dict:
+    """Decode JWT. Raises JWTError on failure."""
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
 def get_current_user(token: str = Depends(oauth2_scheme)) -> UserRecord:
     """FastAPI dependency — decode JWT and return the UserRecord."""
     credentials_exception = HTTPException(
@@ -68,7 +75,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserRecord:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_access_token(token)
         user_id_str = payload.get("sub")
         if user_id_str is None:
             raise credentials_exception
@@ -86,13 +93,42 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserRecord:
         session.close()
 
 
+def get_request_principal(request: Request) -> tuple[str, int, str]:
+    """
+    Read (org_id, user_id, role) from request.state populated by OrgAuthMiddleware.
+    Raises 401 if unauthenticated.
+    """
+    org_id = getattr(request.state, "org_id", None)
+    user_id = getattr(request.state, "user_id", None)
+    role = getattr(request.state, "role", None)
+    if not org_id or user_id is None or not role:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return org_id, int(user_id), role
+
+
+# ── Slug helper ─────────────────────────────────────────────────────────
+
+_SLUG_RE = re.compile(r"[^a-z0-9-]+")
+
+
+def normalise_slug(raw: str) -> str:
+    s = _SLUG_RE.sub("-", raw.lower()).strip("-")
+    return s[:64] or "org"
+
+
 # ── Pydantic schemas ────────────────────────────────────────────────────
 
-class RegisterRequest(BaseModel):
+class SignupRequest(BaseModel):
     email: str = Field(..., min_length=5)
     username: str = Field(..., min_length=3, max_length=64)
     password: str = Field(..., min_length=6)
     full_name: Optional[str] = None
+    org_name: Optional[str] = Field(None, description="Organisation display name")
+    org_slug: Optional[str] = Field(None, description="URL-safe organisation slug")
 
 
 class LoginRequest(BaseModel):
@@ -103,6 +139,19 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    org_id: str
+    role: str
+
+
+class OrgSummary(BaseModel):
+    id: str
+    name: str
+    slug: str
+    plan: str
+    run_credits: int
+
+    class Config:
+        from_attributes = True
 
 
 class UserResponse(BaseModel):
@@ -111,8 +160,11 @@ class UserResponse(BaseModel):
     username: str
     full_name: Optional[str]
     is_active: bool
+    org_id: Optional[str]
+    role: str
     created_at: datetime.datetime
     last_login: Optional[datetime.datetime]
+    organisation: Optional[OrgSummary] = None
 
     class Config:
         from_attributes = True
@@ -123,17 +175,18 @@ class UserResponse(BaseModel):
 auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
-@auth_router.post("/register", response_model=UserResponse, status_code=201)
-def register(req: RegisterRequest):
-    """Create a new user account."""
+def _create_user_with_org(req: SignupRequest) -> UserRecord:
+    """Atomically create org + first owner user."""
     if len(req.password) > 72:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password cannot be longer than 72 characters",
         )
-    session = get_session()
-    try:
-        # Check duplicates
+    org_name = req.org_name or req.username
+    slug_seed = req.org_slug or req.username
+    slug = normalise_slug(slug_seed)
+
+    with session_scope() as session:
         existing = session.query(UserRecord).filter(
             (UserRecord.email == req.email) | (UserRecord.username == req.username)
         ).first()
@@ -143,29 +196,50 @@ def register(req: RegisterRequest):
                 detail="Email or username already registered",
             )
 
+        org_repo = OrganisationRepository(session)
+        # Resolve unique slug: append -2, -3, ... if collision.
+        candidate = slug
+        suffix = 2
+        while org_repo.get_by_slug(candidate) is not None:
+            candidate = f"{slug}-{suffix}"
+            suffix += 1
+        org = org_repo.create(name=org_name, slug=candidate, plan="free", run_credits=50)
+
         user = UserRecord(
+            org_id=org.id,
+            role="owner",
             email=req.email,
             username=req.username,
             hashed_password=hash_password(req.password),
             full_name=req.full_name,
         )
         session.add(user)
-        session.commit()
+        session.flush()
         session.refresh(user)
-        logger.info("New user registered: %s", user.username)
+        # Eager-load org for response
+        _ = user.organisation
+        session.expunge(user)
+        if user.organisation is not None:
+            session.expunge(user.organisation)
+        logger.info("Signed up user=%s org=%s slug=%s", user.username, org.id, candidate)
         return user
-    except HTTPException:
-        raise
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+
+@auth_router.post("/signup", response_model=UserResponse, status_code=201)
+def signup(req: SignupRequest):
+    """Create a new organisation and its first owner user."""
+    return _create_user_with_org(req)
+
+
+@auth_router.post("/register", response_model=UserResponse, status_code=201)
+def register(req: SignupRequest):
+    """Legacy alias of /signup."""
+    return _create_user_with_org(req)
 
 
 @auth_router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest):
-    """Authenticate and return a JWT token."""
+    """Authenticate and return a JWT token carrying org_id + role."""
     if len(req.password) > 72:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -181,14 +255,27 @@ def login(req: LoginRequest):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username/email or password",
             )
+        if not user.org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is not assigned to an organisation",
+            )
 
-        # Update last_login
         user.last_login = datetime.datetime.utcnow()
         session.commit()
 
-        token = create_access_token(data={"sub": str(user.id), "email": user.email})
-        logger.info("User logged in: %s", user.username)
-        return TokenResponse(access_token=token)
+        token = create_access_token(data={
+            "sub": str(user.id),
+            "email": user.email,
+            "org_id": user.org_id,
+            "role": user.role,
+        })
+        logger.info("User logged in: %s (org=%s)", user.username, user.org_id)
+        return TokenResponse(
+            access_token=token,
+            org_id=user.org_id,
+            role=user.role,
+        )
     except HTTPException:
         raise
     except Exception:
@@ -200,5 +287,5 @@ def login(req: LoginRequest):
 
 @auth_router.get("/me", response_model=UserResponse)
 def get_me(current_user: UserRecord = Depends(get_current_user)):
-    """Get the currently authenticated user's profile."""
+    """Get the currently authenticated user's profile (with org details)."""
     return current_user

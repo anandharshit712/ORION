@@ -42,6 +42,8 @@ class LiveRun:
     master_seed: int
     status: str                       # "running" | "complete" | "failed" | "cancelled"
     started_at: str
+    org_id: Optional[str] = None
+    user_id: Optional[int] = None
     completed_at: Optional[str] = None
     producer_task: Optional[asyncio.Task] = None
     subscribers: List[asyncio.Queue] = field(default_factory=list)
@@ -108,6 +110,7 @@ class LiveRun:
             "completed_at": self.completed_at,
             "subscribers": len(self.subscribers),
             "error": self.error,
+            "org_id": self.org_id,
             "composite_score": m.get("composite_score", 0.0),
             "safety_score": m.get("safety_score", 0.0),
             "compliance_score": m.get("compliance_score", 0.0),
@@ -161,6 +164,8 @@ async def start_run(
     model_name: str,
     master_seed: int,
     tick_interval: float = 0.02,
+    org_id: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> LiveRun:
     """
     Bootstrap a live simulation run and kick off its producer task.
@@ -199,6 +204,8 @@ async def start_run(
         master_seed=master_seed,
         status="running",
         started_at=datetime.now(timezone.utc).isoformat(),
+        org_id=org_id,
+        user_id=user_id,
     )
 
     async def on_tick(world, action) -> None:

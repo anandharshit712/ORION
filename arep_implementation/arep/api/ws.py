@@ -26,8 +26,8 @@ logger = get_logger("api.ws")
 ws_router = APIRouter()
 
 
-def _verify_token(token: str) -> Optional[int]:
-    """Decode a JWT access token; return user id on success, else None."""
+def _verify_token(token: str) -> Optional[tuple[int, Optional[str]]]:
+    """Decode a JWT access token; return (user_id, org_id) on success, else None."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
@@ -36,9 +36,11 @@ def _verify_token(token: str) -> Optional[int]:
     if sub is None:
         return None
     try:
-        return int(str(sub))
+        user_id = int(str(sub))
     except ValueError:
         return None
+    org_id = payload.get("org_id")
+    return user_id, (str(org_id) if org_id else None)
 
 
 @ws_router.websocket("/ws/simulation/{run_id}")
@@ -47,15 +49,16 @@ async def simulation_ws(
     run_id: str,
     token: str = Query(..., description="JWT access token"),
 ) -> None:
-    user_id = _verify_token(token)
-    if user_id is None:
+    verified = _verify_token(token)
+    if verified is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         logger.warning("WS auth rejected for run_id=%s", run_id)
         return
+    user_id, org_id = verified
 
     registry = get_registry()
     run = await registry.get(run_id)
-    if run is None:
+    if run is None or (run.org_id is not None and run.org_id != org_id):
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION,
             reason="run not found",

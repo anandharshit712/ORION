@@ -15,9 +15,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from arep.api.auth import get_request_principal
 from arep.api.schemas import (
     RunSingleRequest, RunBatchRequest,
     MetricsResponse, BatchResultResponse, AggregatedResponse,
@@ -118,8 +119,9 @@ def get_scenario(scenario_id: int):
 # ── Evaluate ─────────────────────────────────────────────────────────────
 
 @evaluate_router.post("/single", response_model=MetricsResponse)
-def run_single(req: RunSingleRequest):
+def run_single(req: RunSingleRequest, request: Request):
     """Run a single simulation and return metrics."""
+    org_id, _, _ = get_request_principal(request)
     if not Path(req.scenario_path).exists():
         raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
 
@@ -147,14 +149,15 @@ def run_single(req: RunSingleRequest):
             num_traffic_objects=len(scenario_def.traffic_objects),
         )
         run_repo = RunRepository(session)
-        run_repo.save_result(scenario_rec.id, result)
+        run_repo.save_result(scenario_rec.id, result, org_id=org_id)
 
     return MetricsResponse(**result.to_dict())
 
 
 @evaluate_router.post("/batch", response_model=BatchResultResponse)
-def run_batch(req: RunBatchRequest):
+def run_batch(req: RunBatchRequest, request: Request):
     """Run a batch evaluation and return aggregated metrics."""
+    org_id, _, _ = get_request_principal(request)
     if not Path(req.scenario_path).exists():
         raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
 
@@ -183,6 +186,7 @@ def run_batch(req: RunBatchRequest):
             model_name=req.model_name,
             num_runs=req.num_runs,
             master_seed=req.master_seed,
+            org_id=org_id,
         )
         batch_repo.mark_running(job.id)
         job_id = job.id
@@ -204,7 +208,7 @@ def run_batch(req: RunBatchRequest):
         batch_repo = BatchJobRepository(session)
 
         for result in batch_result.per_run_results:
-            run_repo.save_result(scenario_id, result, batch_job_id=job_id)
+            run_repo.save_result(scenario_id, result, batch_job_id=job_id, org_id=org_id)
 
         batch_repo.mark_completed(job_id, batch_result.aggregated)
 
@@ -224,18 +228,20 @@ def run_batch(req: RunBatchRequest):
 # ── Jobs ─────────────────────────────────────────────────────────────────
 
 @jobs_router.get("/", response_model=List[BatchJobResponse])
-def list_jobs(limit: int = Query(20, ge=1, le=100)):
+def list_jobs(request: Request, limit: int = Query(20, ge=1, le=100)):
+    org_id, _, _ = get_request_principal(request)
     with session_scope() as session:
         repo = BatchJobRepository(session)
-        jobs = repo.get_recent(limit)
+        jobs = repo.get_recent(limit, org_id=org_id)
         return [BatchJobResponse.model_validate(j) for j in jobs]
 
 
 @jobs_router.get("/{job_id}", response_model=BatchJobResponse)
-def get_job(job_id: int):
+def get_job(job_id: int, request: Request):
+    org_id, _, _ = get_request_principal(request)
     with session_scope() as session:
         repo = BatchJobRepository(session)
-        job = repo.get_by_id(job_id)
+        job = repo.get_by_id(job_id, org_id=org_id)
         if not job:
             raise HTTPException(404, "Job not found")
         return BatchJobResponse.model_validate(job)
@@ -245,19 +251,21 @@ def get_job(job_id: int):
 
 @results_router.get("/model/{model_name}", response_model=List[RunRecordResponse])
 def get_results_by_model(
-    model_name: str, limit: int = Query(100, ge=1, le=1000),
+    model_name: str, request: Request, limit: int = Query(100, ge=1, le=1000),
 ):
+    org_id, _, _ = get_request_principal(request)
     with session_scope() as session:
         repo = RunRepository(session)
-        runs = repo.get_runs_for_model(model_name, limit)
+        runs = repo.get_runs_for_model(model_name, limit, org_id=org_id)
         return [RunRecordResponse.model_validate(r) for r in runs]
 
 
 @results_router.get("/batch/{batch_job_id}", response_model=List[RunRecordResponse])
-def get_results_by_batch(batch_job_id: int):
+def get_results_by_batch(batch_job_id: int, request: Request):
+    org_id, _, _ = get_request_principal(request)
     with session_scope() as session:
         repo = RunRepository(session)
-        runs = repo.get_runs_for_batch(batch_job_id)
+        runs = repo.get_runs_for_batch(batch_job_id, org_id=org_id)
         return [RunRecordResponse.model_validate(r) for r in runs]
 
 
@@ -302,9 +310,10 @@ class RunStatusResponse(BaseModel):
 
 
 @runs_router.post("/", response_model=StartRunResponse, status_code=201)
-async def start_run(req: StartRunRequest):
+async def start_run(req: StartRunRequest, request: Request):
     """Launch a live simulation run. Clients connect to the returned
     ``ws_url`` (with ``?token=<jwt>``) to receive 50 Hz tick frames."""
+    org_id, user_id, _ = get_request_principal(request)
     if not Path(req.scenario_path).exists():
         raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
     if req.model_name not in AVAILABLE_MODELS:
@@ -322,6 +331,8 @@ async def start_run(req: StartRunRequest):
             model_name=req.model_name,
             master_seed=req.master_seed,
             tick_interval=req.tick_interval,
+            org_id=org_id,
+            user_id=user_id,
         )
     except Exception as e:
         logger.exception("Failed to start live run")
@@ -338,27 +349,34 @@ async def start_run(req: StartRunRequest):
 
 
 @runs_router.get("/", response_model=List[RunStatusResponse])
-async def list_live_runs():
+async def list_live_runs(request: Request):
+    org_id, _, _ = get_request_principal(request)
     from arep.api.sim_registry import get_registry
     runs = await get_registry().list()
-    return [RunStatusResponse(**r.to_dict()) for r in runs]
+    return [
+        RunStatusResponse(**r.to_dict())
+        for r in runs
+        if r.org_id == org_id
+    ]
 
 
 @runs_router.get("/{run_id}", response_model=RunStatusResponse)
-async def get_live_run(run_id: str):
+async def get_live_run(run_id: str, request: Request):
+    org_id, _, _ = get_request_principal(request)
     from arep.api.sim_registry import get_registry
     run = await get_registry().get(run_id)
-    if run is None:
+    if run is None or run.org_id != org_id:
         raise HTTPException(404, "Run not found")
     return RunStatusResponse(**run.to_dict())
 
 
 @runs_router.delete("/{run_id}", status_code=204)
-async def cancel_live_run(run_id: str):
+async def cancel_live_run(run_id: str, request: Request):
+    org_id, _, _ = get_request_principal(request)
     from arep.api.sim_registry import get_registry
     registry = get_registry()
     run = await registry.get(run_id)
-    if run is None:
+    if run is None or run.org_id != org_id:
         raise HTTPException(404, "Run not found")
     if run.producer_task is not None and not run.producer_task.done():
         run.producer_task.cancel()
