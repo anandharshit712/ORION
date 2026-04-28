@@ -1,4 +1,5 @@
 # ORION — SaaS Product Roadmap
+
 **Version**: 1.0  
 **Date**: 2026-04-26  
 **Authors**: Harshit Anand + Claude  
@@ -29,26 +30,26 @@ profile with confidence intervals, failure clustering, and regression tracking.
 
 ## Positioning Summary
 
-| Dimension | CARLA | ORION |
-|---|---|---|
-| Primary value | Photorealistic sensor data for training | Rigorous safety evaluation + scores |
-| Infrastructure | GPU workstation, local install | Browser-based SaaS, CPU cloud |
-| Evaluation rigor | Manual, no statistical framework | Automated, statistically rigorous |
-| CI/CD integration | Not possible (Unreal Engine) | First-class feature |
-| Target user | Perception ML engineers | Safety validation engineers, AV teams |
-| Pricing model | Free/open-source, self-hosted | Subscription (run credits per tier) |
+| Dimension         | CARLA                                   | ORION                                 |
+| ----------------- | --------------------------------------- | ------------------------------------- |
+| Primary value     | Photorealistic sensor data for training | Rigorous safety evaluation + scores   |
+| Infrastructure    | GPU workstation, local install          | Browser-based SaaS, CPU cloud         |
+| Evaluation rigor  | Manual, no statistical framework        | Automated, statistically rigorous     |
+| CI/CD integration | Not possible (Unreal Engine)            | First-class feature                   |
+| Target user       | Perception ML engineers                 | Safety validation engineers, AV teams |
+| Pricing model     | Free/open-source, self-hosted           | Subscription (run credits per tier)   |
 
 ---
 
 ## The Five Phases
 
-| Phase | Name | Duration (2-person team) | Outcome |
-|---|---|---|---|
-| **1** | SaaS Platform Foundation | ~3 months | Real paying customers can use it |
-| **2** | Evaluation Depth | ~2.5 months | Product is genuinely better than CARLA for evaluation |
-| **3** | CI/CD Integration | ~1.5 months | The killer feature that closes enterprise deals |
-| **4** | Ecosystem Expansion | ~2.5 months | Broad compatibility, real-world scenarios |
-| **5** | Visualization & Experience | ~1.5 months | Professional, polished, demo-worthy |
+| Phase | Name                       | Duration (2-person team) | Outcome                                               |
+| ----- | -------------------------- | ------------------------ | ----------------------------------------------------- |
+| **1** | SaaS Platform Foundation   | ~3 months                | Real paying customers can use it                      |
+| **2** | Evaluation Depth           | ~2.5 months              | Product is genuinely better than CARLA for evaluation |
+| **3** | CI/CD Integration          | ~1.5 months              | The killer feature that closes enterprise deals       |
+| **4** | Ecosystem Expansion        | ~2.5 months              | Broad compatibility, real-world scenarios             |
+| **5** | Visualization & Experience | ~1.5 months              | Professional, polished, demo-worthy                   |
 
 **Total to full platform: ~11 months**
 
@@ -186,6 +187,7 @@ orion models register \
 
 ORION spins up the container per-run alongside the simulation engine. The container exposes
 a simple HTTP interface:
+
 - `POST /predict` — receives `Observation` JSON, returns `Action` JSON
 - `POST /reset` — called before each run
 
@@ -260,6 +262,7 @@ Synchronous execution cannot provide this.
 the simplest production-proven option for Python async work queues.
 
 Add to `pyproject.toml`:
+
 ```
 celery>=5.3.0
 redis>=5.0.0
@@ -305,6 +308,7 @@ arep_implementation/arep/
 ### Credit Deduction Logic
 
 Credit deduction must be atomic:
+
 ```python
 # In routes.py, before enqueuing:
 with session_scope() as db:
@@ -334,12 +338,12 @@ If tasks fail, credits are refunded via a Celery failure callback.
 
 ### Subscription Tiers
 
-| Tier | Monthly Price | Run Credits/mo | Concurrent Runs | Scenario Access |
-|---|---|---|---|---|
-| **Free** | $0 | 50 | 1 | LON category only |
-| **Starter** | $49 | 500 | 3 | All categories |
-| **Pro** | $199 | 3,000 | 10 | All + adversarial search |
-| **Enterprise** | Custom | Unlimited | Custom | All + priority support + SLA |
+| Tier           | Monthly Price | Run Credits/mo | Concurrent Runs | Scenario Access              |
+| -------------- | ------------- | -------------- | --------------- | ---------------------------- |
+| **Free**       | $0            | 50             | 1               | LON category only            |
+| **Starter**    | $49           | 500            | 3               | All categories               |
+| **Pro**        | $199          | 3,000          | 10              | All + adversarial search     |
+| **Enterprise** | Custom        | Unlimited      | Custom          | All + priority support + SLA |
 
 Run credits roll over for 3 months. Top-up credits available at $0.10/run.
 
@@ -382,7 +386,7 @@ specification for this. Follow it exactly. Summary of what it delivers:
 - YAML `road.template` key parsed and wired into `WorldState`
 - Three.js scene renders the road graph geometry
 
-**This unlocks**: All INT-*, EMG-002, and MLT-* scenarios. Without it you are selling
+**This unlocks**: All INT-_, EMG-002, and MLT-_ scenarios. Without it you are selling
 a platform that cannot run roughly 35% of its advertised scenario library.
 
 Refer to `AREP_IMPLEMENTATION_ROADMAP.md § P1.2` for full implementation detail.
@@ -390,7 +394,7 @@ Refer to `AREP_IMPLEMENTATION_ROADMAP.md § P1.2` for full implementation detail
 ### Acceptance Criteria (same as original P1.2, reproduced here for completeness)
 
 - [ ] `road_templates.four_way_intersection()` returns a valid `RoadGraph`
-- [ ] An INT-* scenario with `template: four_way_intersection` loads and runs
+- [ ] An INT-\* scenario with `template: four_way_intersection` loads and runs
 - [ ] Three.js scene renders intersection geometry correctly
 - [ ] Traffic lights at junctions cycle and appear in the HUD
 
@@ -470,6 +474,7 @@ Both scipy and numpy are already pinned dependencies — no new deps required.
 ### Frontend: Distribution Display
 
 In `DashboardPage.jsx`, the score cards for a completed batch show:
+
 - The mean score as the primary number
 - The 95% CI as a ± annotation in smaller text
 - A small inline spark-histogram of the score distribution using Recharts `BarChart`
@@ -542,6 +547,7 @@ This is computed lazily on first request and cached in the DB.
 
 In `DashboardPage.jsx` scenario drill-down view, add a "Failure Analysis" panel below the
 score distribution. It shows each `FaultCondition` as a card with:
+
 - The description in bold
 - A horizontal bar showing failure rate (red fill)
 - "See example run →" link that opens the SimulationViewer for `example_run_id`
@@ -716,6 +722,7 @@ DELETE /api/webhooks/{id}   # remove
 ```
 
 On each event, POST to the customer's URL with:
+
 ```json
 {
   "event": "regression.detected",
@@ -774,6 +781,7 @@ runs:
 ```
 
 The Docker image runs `orion evaluate` CLI command which:
+
 1. Packages the model from `model_path` using cloudpickle
 2. Submits to `POST /api/models/upload`
 3. Submits batch evaluation job
@@ -869,6 +877,7 @@ against. This is about removing reasons not to use ORION.
 
 Extend the Docker submission path to support any language/runtime that can expose an HTTP
 server. Customer documentation provides adapters for:
+
 - **C++** (common in production AV stacks)
 - **ROS2** (see original roadmap P2.2 — implement the ZMQ bridge)
 - **MATLAB/Simulink** (common in automotive OEMs — expose via MATLAB Production Server)
@@ -920,6 +929,7 @@ This is the migration path for teams moving from CARLA. Make it as frictionless 
 Refer to `AREP_IMPLEMENTATION_ROADMAP.md § P3.1` for full implementation detail.
 
 **New API endpoint**:
+
 ```
 POST /api/scenarios/import/osc     # upload .osc → returns new scenario_id in org library
 GET  /api/scenarios                # list: shared (built-in) + org-owned (imported)
@@ -963,6 +973,7 @@ diagonal arrow). These are HTML overlays using R3F's `<Html>` component.
 
 **Playback controls**: the SimulationViewer should work in two modes — live (streaming)
 and replay (from stored run data). Add a playback bar at the bottom:
+
 - Play / Pause / Step-forward
 - Speed: 0.1× / 0.5× / 1× / 2× / 5×
 - Scrub timeline
@@ -987,6 +998,7 @@ models are served as static assets from the Vite server. The backend never touch
 The dashboard should surface insights proactively, not just display data.
 
 **Smart alerts panel** (top of dashboard):
+
 - "⚠ LON-003: safety score dropped 12% since last run — possible regression"
 - "✓ Your best-performing model is my-model-v3 (composite: 0.89)"
 - "💡 You have 3 failing scenarios in the INT category — run adversarial search to find worst-case parameters"
@@ -994,6 +1006,7 @@ The dashboard should surface insights proactively, not just display data.
 Each alert is generated by a lightweight rules engine that runs after each batch completes.
 
 **Onboarding flow** for new users:
+
 - Step 1: Upload your first model (SDK or Docker) → guided UI
 - Step 2: Run the Core Suite (18 scenarios, 10 runs each) → one-click
 - Step 3: View your first safety report → interactive walkthrough
@@ -1013,7 +1026,7 @@ A great SaaS product has documentation that matches its product quality.
 - API reference (auto-generated from FastAPI OpenAPI spec)
 - Scenario library catalogue (each scenario with description, parameters, sample results)
 - CI/CD integration guides (GitHub Actions, GitLab CI, Jenkins)
-- "How ORION evaluates your model" — the methodology page that explains metrics, 
+- "How ORION evaluates your model" — the methodology page that explains metrics,
   statistical rigor, and why this matters for safety validation
 - Model submission guide (Python SDK, Docker, HTTP bridge)
 
@@ -1023,13 +1036,13 @@ A great SaaS product has documentation that matches its product quality.
 
 # Risk Register
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Customer model code executes malicious code in our infra | Medium | Critical | Subprocess isolation in Phase 1; Firecracker microVMs before enterprise launch |
-| CARLA releases a hosted SaaS version | Low | High | Accelerate CI/CD integration (Phase 3) — they cannot do this with Unreal Engine |
-| 2-person team runs out of runway before Phase 3 | Medium | High | Phase 1 must be revenue-generating; do not start Phase 4 without paying customers |
-| Statistical methodology is challenged by a safety expert | Low | High | Get an external review of confidence interval approach before enterprise sales |
-| Docker model submission creates infrastructure complexity | High | Medium | Ship Python SDK first; Docker in Phase 2; defer Firecracker until needed |
+| Risk                                                      | Likelihood | Impact   | Mitigation                                                                        |
+| --------------------------------------------------------- | ---------- | -------- | --------------------------------------------------------------------------------- |
+| Customer model code executes malicious code in our infra  | Medium     | Critical | Subprocess isolation in Phase 1; Firecracker microVMs before enterprise launch    |
+| CARLA releases a hosted SaaS version                      | Low        | High     | Accelerate CI/CD integration (Phase 3) — they cannot do this with Unreal Engine   |
+| 2-person team runs out of runway before Phase 3           | Medium     | High     | Phase 1 must be revenue-generating; do not start Phase 4 without paying customers |
+| Statistical methodology is challenged by a safety expert  | Low        | High     | Get an external review of confidence interval approach before enterprise sales    |
+| Docker model submission creates infrastructure complexity | High       | Medium   | Ship Python SDK first; Docker in Phase 2; defer Firecracker until needed          |
 
 ---
 

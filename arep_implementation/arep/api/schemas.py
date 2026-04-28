@@ -100,11 +100,40 @@ class BatchJobResponse(BaseModel):
     status: str
     composite_mean: Optional[float]
     collision_rate: Optional[float]
+    runs_completed: int = 0
+    runs_failed: int = 0
+    error_message: Optional[str] = None
     created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class BatchEnqueueResponse(BaseModel):
+    """Returned by POST /api/runs/batch — accepted, fan-out happens in worker."""
+    batch_id: int
+    status: str
+    num_runs: int
+    enqueued: int
+    credits_remaining: int
+
+
+class BatchProgressResponse(BaseModel):
+    """Returned by GET /api/runs/batch/{batch_id}/status — live progress."""
+    batch_id: int
+    status: str
+    total: int
+    queued: int
+    running: int
+    completed: int
+    failed: int
+    composite_mean: Optional[float] = None
+    collision_rate: Optional[float] = None
+    error_message: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class RunRecordResponse(BaseModel):

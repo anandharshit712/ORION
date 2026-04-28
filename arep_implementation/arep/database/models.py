@@ -152,7 +152,13 @@ class BatchJobRecord(Base):
     master_seed: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="pending"
-    )  # pending, running, completed, failed
+    )  # pending, queued, running, completed, failed
+
+    # Live progress (P1.3 — async batch execution)
+    runs_completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    runs_failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scenario_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     # Aggregated results (populated on completion)
     composite_mean: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

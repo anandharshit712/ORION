@@ -165,6 +165,8 @@ class BatchJobRepository:
         num_runs: int,
         master_seed: int,
         org_id: Optional[str] = None,
+        scenario_path: Optional[str] = None,
+        status: str = "pending",
     ) -> BatchJobRecord:
         record = BatchJobRecord(
             scenario_name=scenario_name,
@@ -172,7 +174,8 @@ class BatchJobRepository:
             num_runs=num_runs,
             master_seed=master_seed,
             org_id=org_id,
-            status="pending",
+            scenario_path=scenario_path,
+            status=status,
         )
         self.session.add(record)
         self.session.flush()
@@ -183,6 +186,91 @@ class BatchJobRepository:
         if job:
             job.status = "running"
             job.started_at = datetime.datetime.utcnow()
+
+    def mark_queued(self, job_id: int) -> None:
+        job = self.session.query(BatchJobRecord).get(job_id)
+        if job:
+            job.status = "queued"
+
+    def increment_completed(self, job_id: int) -> None:
+        """Atomically bump runs_completed by 1."""
+        job = (
+            self.session.query(BatchJobRecord)
+            .filter_by(id=job_id)
+            .with_for_update()
+            .first()
+        )
+        if job:
+            job.runs_completed = (job.runs_completed or 0) + 1
+            if job.status == "queued":
+                job.status = "running"
+                job.started_at = datetime.datetime.utcnow()
+
+    def increment_failed(self, job_id: int) -> None:
+        """Atomically bump runs_failed by 1."""
+        job = (
+            self.session.query(BatchJobRecord)
+            .filter_by(id=job_id)
+            .with_for_update()
+            .first()
+        )
+        if job:
+            job.runs_failed = (job.runs_failed or 0) + 1
+            if job.status == "queued":
+                job.status = "running"
+                job.started_at = datetime.datetime.utcnow()
+
+    def set_error(self, job_id: int, message: str) -> None:
+        job = self.session.query(BatchJobRecord).get(job_id)
+        if job:
+            job.error_message = (message or "")[:2000]
+
+    def finalise_if_done(self, job_id: int) -> Optional[BatchJobRecord]:
+        """If all runs accounted for, aggregate per-run rows and mark completed/failed.
+
+        Returns the job if it transitioned to a terminal state, else None.
+        """
+        job = (
+            self.session.query(BatchJobRecord)
+            .filter_by(id=job_id)
+            .with_for_update()
+            .first()
+        )
+        if job is None or job.status in ("completed", "failed"):
+            return None
+        done = (job.runs_completed or 0) + (job.runs_failed or 0)
+        if done < job.num_runs:
+            return None
+
+        # Aggregate from per-run rows. Lazy import to avoid heavy deps in DB layer.
+        runs = (
+            self.session.query(RunRecord)
+            .filter_by(batch_job_id=job_id)
+            .all()
+        )
+        if runs:
+            import numpy as np
+            comp = np.array([r.composite_score for r in runs])
+            safe = np.array([r.safety_score for r in runs])
+            comp_l = np.array([r.compliance_score for r in runs])
+            stab = np.array([r.stability_score for r in runs])
+            reac = np.array([r.reactivity_score for r in runs])
+            collisions = sum(1 for r in runs if r.collision_occurred)
+            n = len(runs)
+            job.composite_mean = float(np.mean(comp))
+            job.composite_std = float(np.std(comp, ddof=1)) if n > 1 else 0.0
+            job.safety_mean = float(np.mean(safe))
+            job.compliance_mean = float(np.mean(comp_l))
+            job.stability_mean = float(np.mean(stab))
+            job.reactivity_mean = float(np.mean(reac))
+            job.collision_rate = collisions / n
+        # Status: failed if every run failed, else completed
+        if (job.runs_completed or 0) == 0 and (job.runs_failed or 0) > 0:
+            job.status = "failed"
+        else:
+            job.status = "completed"
+        job.completed_at = datetime.datetime.utcnow()
+        return job
 
     def mark_completed(
         self, job_id: int, aggregated: AggregatedMetrics,

@@ -268,6 +268,8 @@ GET    /api/runs/                list live runs (returns score fields after comp
 GET    /api/runs/{run_id}        live-run status + scores
 DELETE /api/runs/{run_id}        cancel a live run
 WS     /ws/simulation/{run_id}   live tick frames (auth: ?token=<jwt>)
+POST   /api/runs/batch           async batch — body: {scenario_path, model_name, num_runs, master_seed}; returns 202 {batch_id, status, num_runs, enqueued, credits_remaining}
+GET    /api/runs/batch/{id}/status   live progress {status, total, queued, running, completed, failed, composite_mean, collision_rate, error_message}
 ```
 
 `GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` with:
@@ -399,16 +401,16 @@ start.bat         # Windows (cmd.exe)
 
 **Priority authority**: `ORION_SAAS_ROADMAP.md`. **Implementation detail**: `AREP_IMPLEMENTATION_ROADMAP.md`. Read both before writing code in these areas.
 
-### Phase 1 — SaaS Platform Foundation (current phase, P1.1 + P1.2 complete)
+### Phase 1 — SaaS Platform Foundation (current phase, P1.1–P1.3 complete)
 
-1. **Job queue & async batch execution (P1.3 SaaS)** — no Celery/Redis. Batch runs block the HTTP thread. No credit deduction logic. `worker/` directory does not exist yet. **Start here.**
-2. **Stripe billing (P1.4 SaaS)** — no payment, no tiers, no credit enforcement. `api/billing.py` scaffold only.
-3. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road. No intersections, merge lanes, roundabouts. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist.
+1. **Stripe billing (P1.4 SaaS)** — no payment, no tiers, no credit top-ups. `api/billing.py` scaffold only. Credits are deducted/refunded by P1.3 but never replenished beyond signup grant. **Start here.**
+2. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road. No intersections, merge lanes, roundabouts. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist.
 
-### Done (P1.1 + P1.2)
+### Done (P1.1 + P1.2 + P1.3)
 
 - **Multi-tenancy (P1.1)** — `organisations`, `api_keys` tables. JWT carries `org_id`+`role`. `OrgAuthMiddleware` resolves both JWT and API keys. `/api/orgs/me`, `/api/orgs/invite`, `/api/keys/` CRUD. All eval/batch/jobs/results/live-run routes scoped by `org_id`.
 - **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
+- **Async batch queue (P1.3)** — Celery + Redis. `arep/worker/celery_app.py` + `arep/worker/tasks.py` (`run_single_simulation`, `run_batch_simulations`). `POST /api/runs/batch` atomically deducts `num_runs` credits via `OrganisationRepository.deduct_credits()` (FOR UPDATE row lock), creates a `BatchJobRecord` (`status=queued`), fans out N tasks on the `simulation` queue, and returns 202 in <300 ms. Workers write `RunRecord` rows + bump `runs_completed`/`runs_failed`; the last task to finish triggers `BatchJobRepository.finalise_if_done()` which aggregates from per-run rows and flips status to `completed`. Failed tasks refund 1 credit via `OrganisationRepository.add_credits()`. `GET /api/runs/batch/{id}/status` exposes live progress. Tests run Celery in `task_always_eager` mode (no broker required) — see `tests/test_batch_queue.py`. Worker container + Flower UI defined in `infrastructure/docker-compose.yml` (`worker`, `flower` services). Broker URL via `ORION_REDIS_URL` env var (default `redis://localhost:6379/0`).
 
 ### Deferred (Phase 2+)
 

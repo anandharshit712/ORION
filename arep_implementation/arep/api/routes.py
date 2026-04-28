@@ -24,11 +24,13 @@ from arep.api.schemas import (
     MetricsResponse, BatchResultResponse, AggregatedResponse,
     ScenarioResponse, BatchJobResponse, RunRecordResponse,
     HealthResponse, ModelListResponse,
+    BatchEnqueueResponse, BatchProgressResponse,
 )
 from arep.config import get_config
 from arep.database.connection import session_scope
 from arep.database.repository import (
     ScenarioRepository, RunRepository, BatchJobRepository,
+    OrganisationRepository,
 )
 from arep.execution.runner import EvaluationRunner
 from arep.models.examples.example_models import (
@@ -387,3 +389,140 @@ async def cancel_live_run(run_id: str, request: Request):
         run.producer_task.cancel()
     await registry.remove(run_id)
     return None
+
+
+# ── Async batch (P1.3) ───────────────────────────────────────────────────
+
+@runs_router.post(
+    "/batch", response_model=BatchEnqueueResponse, status_code=202,
+)
+def enqueue_batch(req: RunBatchRequest, request: Request):
+    """Enqueue a batch of N simulations.
+
+    Atomically deducts ``num_runs`` credits from the org, creates a
+    ``BatchJobRecord`` (status=queued), then fans out N Celery tasks on the
+    ``simulation`` queue. Returns immediately — clients poll
+    ``GET /api/runs/batch/{batch_id}/status`` for progress.
+
+    HTTP 402 if the org has insufficient credits. Credits are refunded
+    per-task on individual run failure.
+    """
+    org_id, _, _ = get_request_principal(request)
+    if not Path(req.scenario_path).exists():
+        raise HTTPException(404, f"Scenario file not found: {req.scenario_path}")
+    if req.model_name not in AVAILABLE_MODELS and not is_uuid(req.model_name):
+        raise HTTPException(
+            400,
+            f"Unknown model: {req.model_name!r}. "
+            f"Built-ins: {list(AVAILABLE_MODELS.keys())} or pass a model UUID.",
+        )
+
+    parser = ScenarioParser()
+    scenario_def, content_hash = parser.parse_file(req.scenario_path)
+
+    # Atomic credit deduct + job creation
+    with session_scope() as db:
+        if org_id is not None:
+            org_repo = OrganisationRepository(db)
+            if not org_repo.deduct_credits(org_id, req.num_runs):
+                raise HTTPException(
+                    402, f"Insufficient run credits (need {req.num_runs})",
+                )
+            credits_remaining = org_repo.get_by_id(org_id).run_credits
+        else:
+            credits_remaining = 0
+
+        scenario_repo = ScenarioRepository(db)
+        scenario_rec = scenario_repo.upsert(
+            name=scenario_def.name,
+            version=scenario_def.version,
+            content_hash=content_hash,
+            yaml_content=Path(req.scenario_path).read_text(encoding="utf-8"),
+            duration=scenario_def.duration,
+            road_type=scenario_def.road.road_type,
+            num_traffic_objects=len(scenario_def.traffic_objects),
+        )
+        scenario_id = scenario_rec.id
+
+        batch_repo = BatchJobRepository(db)
+        job = batch_repo.create(
+            scenario_name=scenario_def.name,
+            model_name=req.model_name,
+            num_runs=req.num_runs,
+            master_seed=req.master_seed,
+            org_id=org_id,
+            scenario_path=req.scenario_path,
+            status="queued",
+        )
+        batch_id = job.id
+
+    # Fan out N tasks. Lazy-import so test environments without celery/redis
+    # can still import this module.
+    try:
+        from arep.worker.tasks import run_single_simulation
+        for i in range(req.num_runs):
+            run_single_simulation.delay(
+                batch_id=batch_id,
+                scenario_id=scenario_id,
+                scenario_path=req.scenario_path,
+                model_name=req.model_name,
+                seed=req.master_seed + i,
+                org_id=org_id,
+            )
+        enqueued = req.num_runs
+    except Exception as e:
+        # Broker unreachable — refund credits, mark batch failed
+        logger.exception("Failed to enqueue batch tasks")
+        with session_scope() as db:
+            if org_id is not None:
+                OrganisationRepository(db).add_credits(org_id, req.num_runs)
+            batch_repo = BatchJobRepository(db)
+            batch_repo.mark_failed(batch_id)
+            batch_repo.set_error(batch_id, f"Enqueue failed: {e}")
+        raise HTTPException(503, f"Task queue unavailable: {e}")
+
+    return BatchEnqueueResponse(
+        batch_id=batch_id,
+        status="queued",
+        num_runs=req.num_runs,
+        enqueued=enqueued,
+        credits_remaining=credits_remaining,
+    )
+
+
+@runs_router.get(
+    "/batch/{batch_id}/status", response_model=BatchProgressResponse,
+)
+def get_batch_status(batch_id: int, request: Request):
+    """Live progress for an async batch job."""
+    org_id, _, _ = get_request_principal(request)
+    with session_scope() as db:
+        repo = BatchJobRepository(db)
+        job = repo.get_by_id(batch_id, org_id=org_id)
+        if job is None:
+            raise HTTPException(404, "Batch not found")
+
+        completed = job.runs_completed or 0
+        failed = job.runs_failed or 0
+        in_flight = max(0, job.num_runs - completed - failed)
+        if job.status == "queued":
+            queued, running = in_flight, 0
+        elif job.status in ("completed", "failed"):
+            queued, running = 0, 0
+        else:
+            queued, running = 0, in_flight
+
+        return BatchProgressResponse(
+            batch_id=job.id,
+            status=job.status,
+            total=job.num_runs,
+            queued=queued,
+            running=running,
+            completed=completed,
+            failed=failed,
+            composite_mean=job.composite_mean,
+            collision_rate=job.collision_rate,
+            error_message=job.error_message,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+        )
