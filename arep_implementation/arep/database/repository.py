@@ -338,6 +338,32 @@ class OrganisationRepository:
     def get_by_slug(self, slug: str) -> Optional[OrganisationRecord]:
         return self.session.query(OrganisationRecord).filter_by(slug=slug).first()
 
+    def list_all(self) -> List[OrganisationRecord]:
+        return (
+            self.session.query(OrganisationRecord)
+            .order_by(OrganisationRecord.created_at.desc())
+            .all()
+        )
+
+    def get_or_create_system_org(self) -> OrganisationRecord:
+        """Get the global 'system' org used for superadmin users.
+
+        Idempotent. Created with unlimited credits + plan='enterprise' + is_system=True.
+        """
+        existing = self.get_by_slug("system")
+        if existing is not None:
+            return existing
+        record = OrganisationRecord(
+            name="ORION System",
+            slug="system",
+            plan="enterprise",
+            run_credits=10**9,
+            is_system=True,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
     def deduct_credits(self, org_id: str, amount: int) -> bool:
         """Atomically deduct credits. Returns False if insufficient."""
         org = (
@@ -490,3 +516,17 @@ class UserRepository:
 
     def list_for_org(self, org_id: str) -> List[UserRecord]:
         return self.session.query(UserRecord).filter_by(org_id=org_id).all()
+
+    def list_all(self) -> List[UserRecord]:
+        return (
+            self.session.query(UserRecord)
+            .order_by(UserRecord.created_at.desc())
+            .all()
+        )
+
+    def set_role(self, user_id: int, role: str) -> Optional[UserRecord]:
+        user = self.get_by_id(user_id)
+        if user is None:
+            return None
+        user.role = role
+        return user

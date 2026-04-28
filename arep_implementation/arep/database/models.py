@@ -45,6 +45,8 @@ class OrganisationRecord(Base):
     slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     plan: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
     run_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )

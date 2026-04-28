@@ -1,4 +1,4 @@
-"""Add organisations, api_keys, and update users for multi-tenancy
+"""Add organisations, api_keys, webhook_deliveries; extend users for multi-tenancy
 
 Revision ID: 002
 Revises: 001
@@ -18,21 +18,23 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "organisations",
-        sa.Column("id", sa.String(36), primary_key=True),   # UUID as string
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("name", sa.String(256), nullable=False),
-        sa.Column("slug", sa.String(128), nullable=False, unique=True),
-        sa.Column("plan", sa.String(32), nullable=False, default="free"),
-        sa.Column("run_credits", sa.Integer, nullable=False, default=50),
+        sa.Column("slug", sa.String(64), nullable=False, unique=True, index=True),
+        sa.Column("plan", sa.String(32), nullable=False, server_default="free"),
+        sa.Column("run_credits", sa.Integer, nullable=False, server_default="50"),
         sa.Column("stripe_customer_id", sa.String(128), nullable=True),
+        sa.Column("is_system", sa.Boolean, nullable=False, server_default=sa.false()),
         sa.Column("created_at", sa.DateTime, nullable=False),
     )
     op.create_table(
         "api_keys",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("org_id", sa.String(36), sa.ForeignKey("organisations.id"), nullable=False),
-        sa.Column("user_id", sa.String(36), nullable=True),
-        sa.Column("key_hash", sa.String(64), nullable=False, unique=True),
-        sa.Column("label", sa.String(128), nullable=False, default=""),
+        sa.Column("org_id", sa.String(36), sa.ForeignKey("organisations.id"), nullable=False, index=True),
+        sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id"), nullable=False),
+        sa.Column("key_hash", sa.String(128), nullable=False, unique=True, index=True),
+        sa.Column("key_prefix", sa.String(16), nullable=False),
+        sa.Column("label", sa.String(128), nullable=False),
         sa.Column("last_used_at", sa.DateTime, nullable=True),
         sa.Column("created_at", sa.DateTime, nullable=False),
         sa.Column("revoked_at", sa.DateTime, nullable=True),
@@ -48,9 +50,9 @@ def upgrade() -> None:
         sa.Column("delivered_at", sa.DateTime, nullable=True),
         sa.Column("created_at", sa.DateTime, nullable=False),
     )
-    # Add org_id and role to existing users table
-    op.add_column("users", sa.Column("org_id", sa.String(36), nullable=True))
-    op.add_column("users", sa.Column("role", sa.String(32), nullable=True, default="member"))
+    # Extend users for multi-tenancy
+    op.add_column("users", sa.Column("org_id", sa.String(36), sa.ForeignKey("organisations.id"), nullable=True, index=True))
+    op.add_column("users", sa.Column("role", sa.String(32), nullable=False, server_default="member"))
 
 
 def downgrade() -> None:

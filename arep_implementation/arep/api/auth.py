@@ -110,6 +110,20 @@ def get_request_principal(request: Request) -> tuple[str, int, str]:
     return org_id, int(user_id), role
 
 
+def get_scope_org_id(request: Request) -> Optional[str]:
+    """
+    Org-id to use when filtering org-scoped queries.
+
+    Superadmin → None (sees all orgs). Regular user → their org_id.
+    Pass the result as `org_id=` to repository list methods that already
+    accept Optional[str] (None == no filter).
+    """
+    org_id, _, role = get_request_principal(request)
+    if role == "superadmin":
+        return None
+    return org_id
+
+
 # ── Slug helper ─────────────────────────────────────────────────────────
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")

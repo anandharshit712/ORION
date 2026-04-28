@@ -181,10 +181,22 @@ def _resolve_api_key(plaintext: str) -> tuple[str, int, str]:
         session.close()
 
 
+SUPERADMIN_ROLE = "superadmin"
+
+
+def is_superadmin(request: Request) -> bool:
+    return getattr(request.state, "role", None) == SUPERADMIN_ROLE
+
+
 def require_role(*allowed_roles: str):
-    """Dependency factory that enforces a minimum role on a route."""
+    """Dependency factory that enforces a minimum role on a route.
+
+    Superadmin always passes regardless of allowed_roles.
+    """
     def _check(request: Request):
         role = getattr(request.state, "role", None)
+        if role == SUPERADMIN_ROLE:
+            return
         if role not in allowed_roles:
             raise HTTPException(
                 status_code=403,
@@ -193,14 +205,29 @@ def require_role(*allowed_roles: str):
     return _check
 
 
+def require_superadmin():
+    """Dependency factory that restricts a route to superadmins only."""
+    def _check(request: Request):
+        role = getattr(request.state, "role", None)
+        if role != SUPERADMIN_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Requires superadmin role",
+            )
+    return _check
+
+
 def require_plan(*allowed_plans: str):
     """Dependency factory that enforces a subscription plan on a route.
 
+    Superadmin bypass: any plan check is waived for superadmin role.
     Usage: `_=Depends(require_plan("pro", "enterprise"))`.
     """
     from arep.database.repository import OrganisationRepository
 
     def _check(request: Request):
+        if is_superadmin(request):
+            return
         org_id = getattr(request.state, "org_id", None)
         if not org_id:
             raise HTTPException(status_code=401, detail="Authentication required")
