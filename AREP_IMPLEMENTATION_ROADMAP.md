@@ -1,9 +1,17 @@
 # AREP / ORION — Full Implementation Roadmap
 
-**Version**: 1.0  
-**Date**: 2026-04-20  
-**Status**: Active — this document is the single source of truth for all future work.  
-**Governing rule**: Nothing is built that is not in this document. Nothing in this document is skipped.
+**Version**: 1.1
+**Date**: 2026-06-12 (originally 2026-04-20)
+**Status**: Active — technical implementation reference.
+**Governing rule**: `ORION_SAAS_ROADMAP.md` v2.0 governs **priority ordering** (including
+the new Phase 0 — Security & Score Integrity, which precedes everything below that is not
+yet built). This document governs **how** things are built: data structures, file names,
+acceptance criteria. When the two conflict on priority, the SaaS roadmap wins.
+
+> **v1.1 note**: A production-readiness review (2026-06-12) found defects in already-built
+> components. The defect register (D-01…D-13) lives in `ORION_SAAS_ROADMAP.md` § Status
+> Snapshot — fixes are specified there (Phase 0), not duplicated here. Items below marked
+> ⚠ are built but carry known defects.
 
 ---
 
@@ -24,29 +32,39 @@
 | ScenarioParameterizer (L2 engine)           | ✅ Complete | `scenario/parameterizer.py`                               |
 | 5 NPC Behavior Tree state machines          | ✅ Complete | `simulation/npc_bt.py`                                    |
 | WorldManager + SimulationEngine             | ✅ Complete | `simulation/world.py`, `engine.py`                        |
-| 4-metric evaluation monitor                 | ✅ Complete | `evaluation/` (safety, compliance, stability, reactivity) |
-| FastAPI backend + auth + routes             | ✅ Complete | `api/app.py`, `auth.py`, `routes.py`                      |
-| React + Three.js + Vite frontend scaffold   | ✅ Complete | `orion-frontend/src/`                                     |
-| SQLAlchemy models + PostgreSQL config       | ✅ Complete | `database/`, `config/`                                    |
-| 18 scenario YAML files (7 upgraded to v2.0) | ✅ Complete | `scenarios/`                                              |
-| Batch runner skeleton                       | ✅ Partial  | `execution/runner.py`                                     |
-| RL model interface scaffold                 | ✅ Partial  | `models/interface.py`, `local_executor.py`                |
-| Dev startup scripts                         | ✅ Complete | `start.sh`, `start.bat`                                   |
+| 4-metric evaluation monitor                 | ⚠ Built     | `evaluation/` — lane compliance is a stub returning 1.0 (D-05); TTC constant-velocity approx (D-11) |
+| FastAPI backend + auth + routes             | ⚠ Built     | `api/` — fallback JWT secret (D-02), CORS `*` + no rate limiting (D-03), unauth `/models/` `/scenarios/` (D-07) |
+| React + Three.js + Vite frontend scaffold   | ⚠ Built     | `orion-frontend/src/` — JWT in localStorage (D-04), no error boundaries, 5 stub pages (D-10) |
+| SQLAlchemy models + PostgreSQL config       | ✅ Complete | `database/`, `config/` — Alembic, 4 migrations                |
+| 18 scenario YAML files (all v2.0)           | ✅ Complete | `scenarios/`                                              |
+| WebSocket telemetry + R3F live viewer (P1.1)| ⚠ Built     | `api/ws.py`, `sim_registry.py`, `SimulationViewer.jsx` — `time.time()` in frame breaks determinism (D-06) |
+| Multi-tenancy: orgs, API keys, org scoping  | ✅ Complete | SaaS P1.1 — `OrgAuthMiddleware`, `/api/orgs/*`, `/api/keys/*` |
+| Model submission (SDK + Docker) (SaaS P1.2) | ⚠ Built     | `api/models_routes.py`, `models/resolver.py`, `orion-sdk/` — cloudpickle path is an RCE vector (D-01) |
+| Async batch queue: Celery + Redis (SaaS P1.3)| ⚠ Built    | `worker/` — `max_retries=0` (D-08); credit deduction atomic via FOR UPDATE |
+| Auth: bcrypt, password reset, superadmin    | ✅ Complete | `api/auth.py`, `api/admin.py`                              |
+| CI: test + lint + docker-build workflows    | ⚠ Built     | `.github/workflows/` — no coverage gate, SQLite not Postgres (D-09, D-13) |
+| Dev startup scripts                         | ✅ Complete | `start.sh`, `start.bat`, `start.ps1`                       |
 
 ### What Is Missing (drives this roadmap)
 
-1. **WebSocket telemetry stream → Three.js 3D visualization** — the frontend renders nothing live
-2. **Road topology engine** — only flat 2-lane straight exists; no intersections, no merge lanes
-3. **Sensor simulation** — no LiDAR, camera, or GPS/IMU output; no real AV stack can plug in
-4. **Adversarial search engine** — the core differentiator vs CARLA; not started
-5. **Batch execution wired to API + DB** — runner exists but endpoints are stubs
-6. **ROS2 bridge** — no industry AV stack can connect
+> Numbering below predates the SaaS roadmap. Cross-references: this doc's P1.1 (WebSocket)
+> = done; P1.4 (batch) = done as SaaS P1.3; P1.2 (roads) = SaaS P1.5, still open.
+
+0. **Phase 0 fixes (SaaS roadmap)** — sandboxing, secrets, CORS/rate-limit, auth flow,
+   lane compliance, determinism leak, retry policy, test gates. **Precedes everything below.**
+1. ~~WebSocket telemetry stream → Three.js 3D visualization~~ — ✅ done (P1.1)
+2. **Road topology engine** — only flat 2-lane straight exists; no intersections, no merge lanes. **Next engine work after Phase 0.**
+3. **Sensor simulation** — no LiDAR, camera, or GPS/IMU output. **Deprioritised to Phase 2+ by SaaS roadmap** — ORION's stated niche is planning/control eval on ground-truth state.
+4. **Adversarial search engine** — the core differentiator vs CARLA; not started (SaaS Phase 2.3)
+5. ~~Batch execution wired to API + DB~~ — ✅ done (SaaS P1.3, Celery + Redis)
+6. **ROS2 bridge** — no industry AV stack can connect (SaaS Phase 4.1)
 7. **RL Gym adapter** — scaffold exists but is incomplete
-8. **OpenDRIVE map parser** — no real-world road geometry
-9. **11 remaining scenario YAMLs** — still on static `scripted` behavior
-10. **OpenSCENARIO 2.0 import/export** — no interoperability with industry format
-11. **CI/CD Docker image** — no automated regression testing
-12. **Reporting dashboard** — DB metrics not visualised
+8. **OpenDRIVE map parser** — no real-world road geometry (SaaS Phase 4.2)
+9. **11 remaining scenario YAMLs** — upgraded; library expansion to 60 is SaaS Phase 4.3
+10. **OpenSCENARIO 2.0 import/export** — no interoperability with industry format (SaaS Phase 4.4)
+11. ~~CI/CD Docker image~~ — workflows exist; hardening (coverage gate, Postgres CI) in Phase 0.6
+12. **Reporting dashboard** — DB metrics partially visualised; distributions/CIs are SaaS Phase 2.1
+13. **Deterministic replay** — promoted to SaaS Phase 2.5; frame-hash groundwork in Phase 0.5
 
 ---
 
