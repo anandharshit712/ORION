@@ -234,7 +234,21 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
         while org_repo.get_by_slug(candidate) is not None:
             candidate = f"{slug}-{suffix}"
             suffix += 1
-        org = org_repo.create(name=org_name, slug=candidate, plan="free", run_credits=50)
+        # Grant beta credits when billing is disabled, otherwise start on free tier.
+        cfg = get_config()
+        if cfg.billing.billing_enabled:
+            initial_plan = "free"
+            initial_credits = 50        # free tier allocation
+        else:
+            initial_plan = "beta"
+            initial_credits = cfg.billing.beta_credits  # 1000 by default
+
+        org = org_repo.create(
+            name=org_name,
+            slug=candidate,
+            plan=initial_plan,
+            run_credits=initial_credits,
+        )
 
         user = UserRecord(
             org_id=org.id,

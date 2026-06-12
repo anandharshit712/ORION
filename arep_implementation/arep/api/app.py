@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from arep.api.admin import admin_router
 from arep.api.auth import auth_router
+from arep.api.billing import billing_router
 from arep.api.middleware import OrgAuthMiddleware
 from arep.api.models_routes import models_api_router
 from arep.api.orgs import keys_router, orgs_router
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     # Mount routers
     app.include_router(auth_router)
     app.include_router(admin_router)
+    app.include_router(billing_router)
     app.include_router(orgs_router)
     app.include_router(keys_router)
     app.include_router(models_api_router)

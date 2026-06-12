@@ -95,6 +95,27 @@ class RLConfig:
     render_mode: str = ""                # "", "human", "rgb_array"
 
 
+
+@dataclass(frozen=True)
+class BillingConfig:
+    """
+    Billing and credit configuration.
+
+    When billing_enabled is False (beta/testing mode):
+      - Stripe routes return a friendly "not active in beta" message
+      - New orgs receive beta_credits instead of the free-tier 50
+      - Credit deduction/refund still work — the system is tested end-to-end
+      - An admin top-up endpoint lets you manually replenish beta testers
+
+    To go live: set billing_enabled: true in config and fill in Stripe credentials.
+    """
+    billing_enabled: bool = False        # flip to True when Stripe is ready
+    beta_credits: int = 1000             # credits granted to new orgs in beta mode
+    stripe_secret_key: str = ""          # STRIPE_SECRET_KEY env var preferred
+    stripe_webhook_secret: str = ""      # STRIPE_WEBHOOK_SECRET env var preferred
+    stripe_publishable_key: str = ""     # sent to frontend
+
+
 @dataclass(frozen=True)
 class Config:
     """Root configuration for the entire AREP platform."""
@@ -107,6 +128,7 @@ class Config:
     api: APIConfig = field(default_factory=APIConfig)
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
     rl: RLConfig = field(default_factory=RLConfig)
+    billing: BillingConfig = field(default_factory=BillingConfig)
     enable_visualization: bool = True
 
 
@@ -147,6 +169,7 @@ def load_config(
     api_kwargs = {}
     phys_kwargs = {}
     rl_kwargs = {}
+    billing_kwargs = {}
     root_kwargs = {"env": env}
 
     # --- Tier 3: default.yaml ---
@@ -154,18 +177,18 @@ def load_config(
         _apply_yaml(Path(config_dir) / "default.yaml",
                      sim_kwargs, exec_kwargs, db_kwargs,
                      path_kwargs, api_kwargs, phys_kwargs,
-                     rl_kwargs, root_kwargs)
+                     rl_kwargs, billing_kwargs, root_kwargs)
 
         # --- Tier 2: env-specific YAML ---
         _apply_yaml(Path(config_dir) / f"{env}.yaml",
                      sim_kwargs, exec_kwargs, db_kwargs,
                      path_kwargs, api_kwargs, phys_kwargs,
-                     rl_kwargs, root_kwargs)
+                     rl_kwargs, billing_kwargs, root_kwargs)
 
     # --- Tier 1: environment variables ---
     _apply_env_vars(sim_kwargs, exec_kwargs, db_kwargs,
                     path_kwargs, api_kwargs, phys_kwargs,
-                    rl_kwargs, root_kwargs)
+                    rl_kwargs, billing_kwargs, root_kwargs)
 
     _config = Config(
         simulation=SimulationConfig(**sim_kwargs),
@@ -175,6 +198,7 @@ def load_config(
         api=APIConfig(**api_kwargs),
         physics=PhysicsConfig(**phys_kwargs),
         rl=RLConfig(**rl_kwargs),
+        billing=BillingConfig(**billing_kwargs),
         **root_kwargs,
     )
     return _config
@@ -206,7 +230,7 @@ def _apply_yaml(
     filepath: Path,
     sim: dict, exe: dict, db: dict,
     paths: dict, api: dict, phys: dict,
-    rl: dict, root: dict,
+    rl: dict, billing: dict, root: dict,
 ) -> None:
     """Merge values from a YAML file into kwargs dicts."""
     if not filepath.exists():
@@ -232,6 +256,8 @@ def _apply_yaml(
         phys.update(data["physics"])
     if "rl" in data and isinstance(data["rl"], dict):
         rl.update(data["rl"])
+    if "billing" in data and isinstance(data["billing"], dict):
+        billing.update(data["billing"])
     for key in ("env", "debug", "enable_visualization"):
         if key in data:
             root[key] = data[key]
@@ -252,18 +278,24 @@ _ENV_MAP = {
     "AREP_PHYSICS_MODE": ("phys", "mode", str),
     "AREP_SURFACE_FRICTION": ("phys", "surface_friction", float),
     "AREP_VEHICLE_MASS": ("phys", "vehicle_mass", float),
+    # Billing — Stripe keys always come from env vars, never YAML
+    "STRIPE_SECRET_KEY": ("billing", "stripe_secret_key", str),
+    "STRIPE_WEBHOOK_SECRET": ("billing", "stripe_webhook_secret", str),
+    "STRIPE_PUBLISHABLE_KEY": ("billing", "stripe_publishable_key", str),
+    "AREP_BILLING_ENABLED": ("billing", "billing_enabled", lambda v: v.lower() in ("1", "true", "yes")),
+    "AREP_BETA_CREDITS": ("billing", "beta_credits", int),
 }
 
 
 def _apply_env_vars(
     sim: dict, exe: dict, db: dict,
     paths: dict, api: dict, phys: dict,
-    rl: dict, root: dict,
+    rl: dict, billing: dict, root: dict,
 ) -> None:
     """Override config values from environment variables."""
     buckets = {"sim": sim, "exe": exe, "db": db,
                "paths": paths, "api": api, "phys": phys,
-               "rl": rl, "root": root}
+               "rl": rl, "billing": billing, "root": root}
 
     for env_var, (bucket, key, converter) in _ENV_MAP.items():
         value = os.environ.get(env_var)
