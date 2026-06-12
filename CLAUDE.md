@@ -21,10 +21,12 @@ Edits targeted — only update what changed, don't rewrite unrelated sections.
 
 Two roadmap documents exist. Know the difference:
 
-- **`ORION_SAAS_ROADMAP.md`** — governs **priority ordering**. What to build next. When two tasks compete, this doc wins. Source of truth for Phase 1–5 scope.
-- **`AREP_IMPLEMENTATION_ROADMAP.md`** — governs **technical implementation detail**. How to build it. Specific data structures, acceptance criteria, file names.
+- **`ORION_SAAS_ROADMAP.md`** (v2.0) — governs **priority ordering**. What to build next. When two tasks compete, this doc wins. Source of truth for Phase 0–5 scope, the known-defect register (D-01…D-13), and honest market positioning.
+- **`AREP_IMPLEMENTATION_ROADMAP.md`** (v1.1) — governs **technical implementation detail**. How to build it. Specific data structures, acceptance criteria, file names.
 
 When they conflict on priority: SaaS roadmap wins. When you need implementation depth: read the technical roadmap.
+
+**Current priority: Phase 0 — Security & Score Integrity** (SaaS roadmap v2.0). No Stripe, no new features until Phase 0 exits. See Section 13.
 
 ---
 
@@ -70,7 +72,6 @@ ORION/
 │   │   ├── statistics/           # StatisticalAggregator
 │   │   ├── api/                  # FastAPI app, routes, auth, schemas
 │   │   ├── database/             # SQLAlchemy models, repository, connection
-│   │   ├── visualization/        # Plotly dashboard (legacy — being replaced by frontend)
 │   │   ├── config/               # SimulationConfig, get_config()
 │   │   └── utils/                # exceptions, logging_config, validators, hashing
 │   ├── config/default.yaml       # Master config (do not hardcode these values in code)
@@ -248,6 +249,12 @@ TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags c
 
 **Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating specification document and all existing baselines.
 
+**Known metric defects (fix in Phase 0.5 — see SaaS roadmap defect register):**
+
+- D-05: lane compliance in `compliance.py:88` is a stub — `lane_frac = 1.0` hardcoded except on `off_road` termination. Lane-keeping score currently fake. Fix = record `lane_offset` in `EgoSnapshot`, compute real in-lane fraction.
+- D-11: TTC (`core/ttc.py`) assumes constant velocity — optimistic under braking. Document everywhere it surfaces; constant-acceleration upgrade in Phase 2.1.
+- D-12: weight transfer (`core/physics.py:312`) uses previous-step acceleration.
+
 ---
 
 ## 8. API
@@ -297,7 +304,8 @@ React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 
 - All HTTP calls through `src/services/api.js` — never use `fetch()` directly in component.
 - Auth token lives in `AuthContext` — use `const { user, token, logout } = useAuth()` everywhere.
-- Never store JWT token in `localStorage` — managed in `AuthContext` already.
+- **Token storage (D-04, being redesigned in Phase 0.4)**: today `AuthContext` persists the JWT in `localStorage` (`orion_token` key) — this is a known security defect, target is httpOnly cookie + `GET /api/auth/me` bootstrap. Don't add NEW `localStorage` token reads/writes outside `AuthContext`; don't build features that depend on reading the raw token in components.
+- `OrgContext.jsx` exists but `OrgProvider` is NOT mounted anywhere — `useOrg()` throws. Mount it or don't call it (Phase 0.6 resolves).
 - Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `settings` — string keys used in `Sidebar`.
 - Charts use Recharts (`LineChart`, `RadarChart`, `BarChart`) — don't add Chart.js or D3.
 - 3D visualization uses `@react-three/fiber` + `@react-three/drei` — don't use raw Three.js imperative API in React components.
@@ -401,17 +409,32 @@ start.bat         # Windows (cmd.exe)
 - **Never call `model.predict()` directly** in runner or API code — always use `ModelWrapper`.
 - **Never use `fetch()` directly in React components** — always use `src/services/api.js`.
 - **Never hardcode seeds, config values, or API URLs** — from `config/default.yaml` and `vite.config.js` proxy.
+- **Never hardcode secrets or credential fallbacks** — no default JWT secrets, no default DB passwords. Fail fast if env var missing (Phase 0.1 pattern).
+- **Never deserialise untrusted pickle/cloudpickle outside the sandboxed model path** — customer artefacts are hostile input (D-01).
+
+**Known violations of these rules in existing code** (tracked in SaaS roadmap defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04); fallback secrets in `api/auth.py:40` + config defaults (D-02). Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
 
 ---
 
 ## 13. What Is Not Built Yet (Active Development Areas)
 
-**Priority authority**: `ORION_SAAS_ROADMAP.md`. **Implementation detail**: `AREP_IMPLEMENTATION_ROADMAP.md`. Read both before writing code in these areas.
+**Priority authority**: `ORION_SAAS_ROADMAP.md` v2.0. **Implementation detail**: `AREP_IMPLEMENTATION_ROADMAP.md` v1.1. Read both before writing code in these areas.
 
-### Phase 1 — SaaS Platform Foundation (current phase, P1.1–P1.3 complete)
+### Phase 0 — Security & Score Integrity (CURRENT PHASE — blocks everything else)
 
-1. **Stripe billing (P1.4 SaaS)** — no payment, no tiers, no credit top-ups. `api/billing.py` scaffold only. Credits are deducted/refunded by P1.3 but never replenished beyond signup grant. **Start here.**
-2. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road. No intersections, merge lanes, roundabouts. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist.
+Full spec + defect register (D-01…D-13): `ORION_SAAS_ROADMAP.md` § Phase 0. Order:
+
+1. **0.1 Secrets hardening (D-02)** — remove fallback JWT secret (`api/auth.py:40`), hardcoded DB creds (`config/__init__.py`, `database/connection.py`), plaintext creds in `infrastructure/docker-compose.yml`. Fail-fast startup validator. **Start here — days, not weeks.**
+2. **0.2 Model sandboxing (D-01)** — cloudpickle path = RCE. Strip subprocess env (no `ORION_*` vars), no network, empty tmpdir FS, hard wall-clock kill, gate cloudpickle path off for self-serve orgs (Docker path = default).
+3. **0.3 API hardening (D-03, D-07)** — CORS whitelist via `ORION_ALLOWED_ORIGINS`, slowapi rate limiting (login 5/min/IP), auth on `/models/` `/scenarios/` `/jobs/` `/results/*`, security headers, webhook signature+idempotency groundwork.
+4. **0.4 Auth flow (D-04)** — email verification (reuse hashed-token machinery), httpOnly cookie for browser JWT, short-lived WS ticket replaces `?token=` query param, superadmin expiry 4h.
+5. **0.5 Score integrity (D-05, D-06, D-11, D-12)** — real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
+6. **0.6 Reliability + test gates (D-08, D-09, D-10, D-13)** — Celery `max_retries=3` + backoff + idempotent tasks; CI coverage gate ≥70% on Postgres (not SQLite); WS integration test; cross-org denial tests; partial-refund test; scenario YAML validation test; frontend ErrorBoundary + 404 + OrgProvider decision; hard-rule CI grep.
+
+### Phase 1 remainder (after Phase 0 exits)
+
+1. **Stripe billing (P1.4 SaaS)** — `api/billing.py` scaffold only. Builds on 0.3's verified+idempotent webhook base. Includes implementing the `BillingPage` frontend stub.
+2. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road exists. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist. Spec: `AREP_IMPLEMENTATION_ROADMAP.md § P1.2`.
 
 ### Done (P1.1 + P1.2 + P1.3)
 
@@ -419,9 +442,12 @@ start.bat         # Windows (cmd.exe)
 - **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
 - **Async batch queue (P1.3)** — Celery + Redis. `arep/worker/celery_app.py` + `arep/worker/tasks.py` (`run_single_simulation`, `run_batch_simulations`). `POST /api/runs/batch` atomically deducts `num_runs` credits via `OrganisationRepository.deduct_credits()` (FOR UPDATE row lock), creates a `BatchJobRecord` (`status=queued`), fans out N tasks on the `simulation` queue, and returns 202 in <300 ms. Workers write `RunRecord` rows + bump `runs_completed`/`runs_failed`; the last task to finish triggers `BatchJobRepository.finalise_if_done()` which aggregates from per-run rows and flips status to `completed`. Failed tasks refund 1 credit via `OrganisationRepository.add_credits()`. `GET /api/runs/batch/{id}/status` exposes live progress. Tests run Celery in `task_always_eager` mode (no broker required) — see `tests/test_batch_queue.py`. Worker container + Flower UI defined in `infrastructure/docker-compose.yml` (`worker`, `flower` services). Broker URL via `ORION_REDIS_URL` env var (default `redis://localhost:6379/0`).
 
-### Deferred (Phase 2+)
+### Deferred (Phase 2+, see SaaS roadmap v2.0)
 
-- **Sensor simulation** — no LiDAR, camera, GPS/IMU; observation = ground-truth state. Explicitly deprioritised from Phase 1 in `ORION_SAAS_ROADMAP.md`.
+- **Statistical CIs surfaced to API/dashboard (2.1)** — aggregator computes Wilson/t-dist CIs internally; batch results API and dashboard show point estimates only.
+- **Failure clustering (2.2)**, **adversarial search (2.3)**, **model comparison + PDF (2.4)**.
+- **Deterministic replay (2.5)** — promoted from Phase 5; depends on Phase 0.5 frame hash. Closes `RunPage` stub.
 - **CompositeEvaluator wired to live runs** — dashboard scores are per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
-- **Statistical confidence intervals (P2.1)** — scores are point estimates, no CI or distribution analysis yet.
-- **3D visualization polish (P3.5)** — current viz = flat bird's-eye box geometry. GLTF assets, Sky/Fog, road textures deferred to Phase 3.
+- **Sensor simulation** — no LiDAR, camera, GPS/IMU; observation = ground-truth state. Explicitly out of niche per SaaS roadmap "Honest Positioning" — ORION = planning/control eval. Don't promise perception testing anywhere.
+- **Standards alignment (4.5)** — no ISO 26262/21448 story today; traceability matrix + ODD declarations planned, certification never claimed.
+- **3D visualization polish + frontend debt (Phase 5)** — GLTF assets, trajectory traces, progressive TypeScript migration, frontend tests (currently zero), `DashboardPage.jsx` decomposition.
