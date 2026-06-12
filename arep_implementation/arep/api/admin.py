@@ -7,6 +7,8 @@ Routes (all under /api/admin, superadmin-only):
   POST   /api/admin/users/{user_id}/demote  — demote superadmin back to "owner"
   GET    /api/admin/users                   — list all users across all orgs
   GET    /api/admin/orgs                    — list all organisations
+  POST   /api/admin/orgs/{org_id}/credits   — manually top up an org's run credits (beta)
+  PUT    /api/admin/orgs/{org_id}/plan       — change an org's plan
 
 Reads (org_id, user_id, role) from request.state populated by OrgAuthMiddleware.
 require_superadmin() gates every route.
@@ -166,3 +168,98 @@ def list_all_orgs():
     with session_scope() as session:
         orgs = OrganisationRepository(session).list_all()
         return [AdminOrgResponse.model_validate(o) for o in orgs]
+
+
+# ── Beta credit management ────────────────────────────────────────────────
+
+class CreditTopUpRequest(BaseModel):
+    amount: int = Field(..., gt=0, description="Number of credits to add")
+    note: Optional[str] = Field(None, description="Internal note for audit trail")
+
+
+class CreditTopUpResponse(BaseModel):
+    org_id: str
+    credits_added: int
+    new_balance: int
+    note: Optional[str]
+
+
+class PlanChangeRequest(BaseModel):
+    plan: str = Field(..., description="beta | free | starter | pro | enterprise")
+    set_credits: Optional[int] = Field(
+        None,
+        description="Optionally override credit balance after plan change",
+    )
+
+
+@admin_router.post(
+    "/orgs/{org_id}/credits",
+    response_model=CreditTopUpResponse,
+    summary="Manually top up an org's run credits",
+    description=(
+        "Add run credits to any org. Intended for beta user management — "
+        "lets you keep testers running without a live Stripe integration. "
+        "All top-ups are logged at INFO level for auditing."
+    ),
+)
+def topup_org_credits(org_id: str, req: CreditTopUpRequest, request: Request):
+    """Add `amount` run credits to the specified org."""
+    caller_id = getattr(request.state, "user_id", None)
+
+    with session_scope() as session:
+        repo = OrganisationRepository(session)
+        org = repo.get_by_id(org_id)
+        if org is None:
+            raise HTTPException(404, f"Organisation {org_id!r} not found")
+
+        repo.add_credits(org_id, req.amount)
+        session.flush()
+        session.refresh(org)
+        new_balance = org.run_credits
+
+    logger.info(
+        "Admin credit top-up: org=%s added=%d new_balance=%d caller=%s note=%r",
+        org_id, req.amount, new_balance, caller_id, req.note,
+    )
+    return CreditTopUpResponse(
+        org_id=org_id,
+        credits_added=req.amount,
+        new_balance=new_balance,
+        note=req.note,
+    )
+
+
+@admin_router.put(
+    "/orgs/{org_id}/plan",
+    response_model=AdminOrgResponse,
+    summary="Change an org's plan",
+    description=(
+        "Update an org's plan and optionally override its credit balance. "
+        "Useful for manually upgrading beta users to a paid tier."
+    ),
+)
+def change_org_plan(org_id: str, req: PlanChangeRequest):
+    """Change the plan for an org, optionally setting a new credit balance."""
+    valid_plans = {"beta", "free", "starter", "pro", "enterprise"}
+    if req.plan not in valid_plans:
+        raise HTTPException(400, f"Invalid plan. Must be one of: {sorted(valid_plans)}")
+
+    with session_scope() as session:
+        repo = OrganisationRepository(session)
+        org = repo.get_by_id(org_id)
+        if org is None:
+            raise HTTPException(404, f"Organisation {org_id!r} not found")
+
+        org.plan = req.plan
+        if req.set_credits is not None:
+            if req.set_credits < -1:
+                raise HTTPException(400, "set_credits must be -1 (unlimited) or >= 0")
+            org.run_credits = req.set_credits
+
+        session.flush()
+        session.refresh(org)
+        logger.info(
+            "Admin plan change: org=%s plan=%s credits=%s",
+            org_id, req.plan, org.run_credits,
+        )
+        return AdminOrgResponse.model_validate(org)
