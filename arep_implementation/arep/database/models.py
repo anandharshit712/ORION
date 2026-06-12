@@ -273,3 +273,25 @@ class UserRecord(Base):
 
     def __repr__(self) -> str:
         return f"<User {self.username} ({self.email}) org={self.org_id} role={self.role}>"
+
+
+class PasswordResetRecord(Base):
+    """Single-use password reset token. Stores SHA256 hash of the raw 64-hex code."""
+    __tablename__ = "password_resets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    requested_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<PasswordReset user={self.user_id} expires={self.expires_at}>"

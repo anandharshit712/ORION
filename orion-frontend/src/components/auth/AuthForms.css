@@ -86,3 +86,40 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+.forgot-link {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-family);
+  transition: color var(--transition-fast);
+}
+.forgot-link:hover {
+  color: var(--accent-secondary);
+}
+
+.forgot-panel {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  animation: fadeInUp 0.25s ease;
+}
+
+.forgot-panel-title {
+  font-size: var(--font-base);
+  font-weight: 700;
+  margin-bottom: var(--space-5);
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.forgot-success {
+  color: var(--success);
+  font-size: var(--font-sm);
+  text-align: center;
+  padding: var(--space-3) 0;
+  line-height: 1.5;
+}

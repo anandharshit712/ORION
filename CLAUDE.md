@@ -85,7 +85,7 @@ ORION/
 │   └── mlt/                      # Multi-agent (MLT-*)
 └── orion-frontend/               # React frontend
     └── src/
-        ├── pages/                # DashboardPage, LandingPage, LoginPage, SignupPage
+        ├── pages/                # DashboardPage, LandingPage, LoginPage, SignupPage, ResetPasswordPage
         ├── components/           # auth/, common/, landing/, simulation/
         ├── hooks/                # useSimulationStream.js
         ├── context/              # AuthContext (JWT token management)
@@ -255,6 +255,8 @@ TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags c
 FastAPI backend. All routes prefixed `/api`. Auth = JWT Bearer token.
 
 ```
+POST   /api/auth/forgot-password    body: {email} — request password reset link (public, no auth)
+POST   /api/auth/reset-password     body: {token, new_password} — consume token, set new password (public, no auth)
 GET    /health
 GET    /models/
 GET    /scenarios/
@@ -315,6 +317,11 @@ Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer wired end-
 - Server closes with `{"event": "stream_end", ...}` — hook handles before deciding reconnect.
 - Latency measured from `frame.emit_ts_ms` against client `Date.now()`; running average and max exposed via `latencyRef.current` for HUD display.
 - Control-plane calls (`POST /api/runs/`, etc.) go through `src/services/api.js` (`api.startRun`, `api.getLiveRun`, `api.cancelLiveRun`) — hook only owns WS.
+
+### Auth pages
+
+- `LoginPage.jsx` — wraps `LoginForm`. `LoginForm` includes an inline forgot-password panel (shown on "Forgot password?" click): email input → calls `api.forgotPassword(email)` → `POST /api/auth/forgot-password`. Always shows success message regardless of outcome (avoids email enumeration). Panel fades in below the form within the same card.
+- `ResetPasswordPage.jsx` — public route at `/reset-password`. Reads `?token=` from URL query string. No token → shows error immediately. Valid token → form with new + confirm password fields (min 6 chars, must match) → calls `api.resetPassword(token, newPassword)` → `POST /api/auth/reset-password`. Success state hides the form and shows a "Go to Login" button.
 
 ### Dashboard live-run display
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
 import './AuthForms.css';
 
 export default function LoginForm() {
@@ -9,8 +10,34 @@ export default function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotLoading(true);
+    try {
+      await api.forgotPassword(forgotEmail);
+    } catch (_) {
+      // always show success to avoid email enumeration
+    } finally {
+      setForgotLoading(false);
+      setForgotSuccess(true);
+    }
+  };
+
+  const openForgot = () => {
+    setShowForgot(true);
+    setForgotEmail('');
+    setForgotError('');
+    setForgotSuccess(false);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -103,6 +130,55 @@ export default function LoginForm() {
         </form>
 
         <p className="auth-footer-text">
+          <button type="button" className="forgot-link" onClick={openForgot}>
+            Forgot password?
+          </button>
+        </p>
+
+        {showForgot && (
+          <div className="forgot-panel">
+            <h3 className="forgot-panel-title">Reset your password</h3>
+            {forgotSuccess ? (
+              <p className="forgot-success">
+                If that email is registered, a reset link has been sent.
+              </p>
+            ) : (
+              <form onSubmit={handleForgot} className="auth-form">
+                {forgotError && <div className="auth-error">{forgotError}</div>}
+                <div className="form-group">
+                  <label className="form-label">Email address</label>
+                  <input
+                    type="email"
+                    className="input-field"
+                    placeholder="you@example.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-lg auth-submit"
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? 'Sending…' : 'Send Reset Link'}
+                </button>
+              </form>
+            )}
+            <p className="auth-footer-text">
+              <button
+                type="button"
+                className="forgot-link"
+                onClick={() => setShowForgot(false)}
+              >
+                Back to login
+              </button>
+            </p>
+          </div>
+        )}
+
+        <p className="auth-footer-text" style={{ marginTop: showForgot ? 0 : undefined }}>
           Don't have an account? <Link to="/signup">Create one</Link>
         </p>
       </div>
