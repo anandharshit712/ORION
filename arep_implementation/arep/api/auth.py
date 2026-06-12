@@ -19,10 +19,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import joinedload
 
+import hashlib
+import os as _os
+import secrets
+import datetime as _dt
+
+from arep.config import get_config
+from arep.config.env import get_settings
 from arep.database.connection import get_session, session_scope
 from arep.database.models import UserRecord, OrganisationRecord
-from arep.database.repository import OrganisationRepository
+from arep.database.repository import OrganisationRepository, PasswordResetRepository
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.auth")
@@ -85,9 +93,18 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserRecord:
 
     session = get_session()
     try:
-        user = session.query(UserRecord).filter(UserRecord.id == user_id).first()
+        user = (
+            session.query(UserRecord)
+            .options(joinedload(UserRecord.organisation))
+            .filter(UserRecord.id == user_id)
+            .first()
+        )
         if user is None:
             raise credentials_exception
+        # Access the relationship now while session is open so it's
+        # available after session.close() — avoids DetachedInstanceError
+        _ = user.organisation
+        session.expunge_all()
         return user
     finally:
         session.close()
@@ -303,3 +320,117 @@ def login(req: LoginRequest):
 def get_me(current_user: UserRecord = Depends(get_current_user)):
     """Get the currently authenticated user's profile (with org details)."""
     return current_user
+
+
+# ── Password reset schemas ────────────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., description="Email address of the account to reset")
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str  # always the same text to avoid email enumeration
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=64, max_length=64,
+                       description="64-hex reset token from the email link")
+    new_password: str = Field(..., min_length=6)
+
+
+# ── Password reset routes ────────────────────────────────────────────────
+
+@auth_router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(req: ForgotPasswordRequest, request: Request):
+    """
+    Request a password reset link.
+
+    Always returns the same message regardless of whether the email exists
+    to prevent account enumeration. The reset link is emailed when SMTP is
+    configured, or logged to the server console in dev/beta mode.
+    """
+    from arep.api.email_sender import send_password_reset_email
+
+    settings = get_settings()
+    ok_msg = ForgotPasswordResponse(
+        message="If that email is registered, a reset link has been sent."
+    )
+
+    with session_scope() as session:
+        user = session.query(UserRecord).filter_by(email=req.email).first()
+        if user is None:
+            return ok_msg  # silent — do not reveal whether email exists
+
+        pr_repo = PasswordResetRepository(session)
+
+        # Rate-limit: max N requests per hour per user
+        since = _dt.datetime.utcnow() - _dt.timedelta(hours=1)
+        recent = pr_repo.count_recent_for_user(user.id, since)
+        if recent >= settings.reset_rate_limit_per_hour:
+            logger.warning("Reset rate limit hit for user=%s", user.id)
+            return ok_msg  # silently swallow — no information leak
+
+        # Generate single-use token: 64 hex chars, store its SHA256 hash
+        raw_token = secrets.token_hex(32)               # 64 hex characters
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        expires_at = (
+            _dt.datetime.utcnow()
+            + _dt.timedelta(minutes=settings.reset_token_ttl_minutes)
+        )
+        client_ip = request.client.host if request.client else None
+        pr_repo.create(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            requested_ip=client_ip,
+        )
+
+    reset_link = f"{settings.public_url}/reset-password?token={raw_token}"
+    try:
+        send_password_reset_email(req.email, reset_link)
+    except Exception:
+        # Email failure should not expose errors to the caller
+        logger.error("Reset email delivery failed for %s", req.email)
+
+    return ok_msg
+
+
+@auth_router.post("/reset-password", response_model=ForgotPasswordResponse)
+def reset_password(req: ResetPasswordRequest):
+    """
+    Consume a reset token and set a new password.
+
+    The token is single-use and expires after reset_token_ttl_minutes (default 15 min).
+    """
+    if len(req.new_password) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password cannot be longer than 72 characters",
+        )
+
+    token_hash = hashlib.sha256(req.token.encode()).hexdigest()
+
+    with session_scope() as session:
+        pr_repo = PasswordResetRepository(session)
+        record = pr_repo.get_active_by_hash(token_hash)
+
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token.",
+            )
+
+        user = session.query(UserRecord).filter_by(id=record.user_id).first()
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token.",
+            )
+
+        # Update password + mark token used + invalidate other tokens
+        user.hashed_password = hash_password(req.new_password)
+        pr_repo.mark_used(record.id)
+        pr_repo.invalidate_all_for_user(user.id)
+        logger.info("Password reset successful for user=%s", user.id)
+
+    return ForgotPasswordResponse(message="Password updated successfully. You can now log in.")

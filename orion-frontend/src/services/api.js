@@ -38,6 +38,18 @@ export const api = {
   getMe: (token) =>
     request('/auth/me', { token }),
 
+  forgotPassword: (email) =>
+    request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token, newPassword) =>
+    request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+
   // Scenarios
   getScenarios: (token) =>
     request('/scenarios/', { token }),

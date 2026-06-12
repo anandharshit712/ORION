@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from arep.database.models import (
     ScenarioRecord, RunRecord, BatchJobRecord,
     OrganisationRecord, ApiKeyRecord, UserRecord, ModelRecord,
+    PasswordResetRecord,
 )
 from arep.evaluation.composite import EvaluationResult
 from arep.statistics.aggregator import AggregatedMetrics
@@ -530,3 +531,71 @@ class UserRepository:
             return None
         user.role = role
         return user
+
+
+class PasswordResetRepository:
+    """CRUD for password reset tokens. Stores SHA256 hash, never raw token."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(
+        self, user_id: int, token_hash: str,
+        expires_at: datetime.datetime, requested_ip: Optional[str] = None,
+    ) -> PasswordResetRecord:
+        record = PasswordResetRecord(
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            requested_ip=requested_ip,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def get_active_by_hash(self, token_hash: str) -> Optional[PasswordResetRecord]:
+        """Return token only if unused AND not expired."""
+        now = datetime.datetime.utcnow()
+        return (
+            self.session.query(PasswordResetRecord)
+            .filter(
+                PasswordResetRecord.token_hash == token_hash,
+                PasswordResetRecord.used_at.is_(None),
+                PasswordResetRecord.expires_at > now,
+            )
+            .first()
+        )
+
+    def mark_used(self, record_id: str) -> None:
+        record = (
+            self.session.query(PasswordResetRecord)
+            .filter_by(id=record_id)
+            .first()
+        )
+        if record is not None:
+            record.used_at = datetime.datetime.utcnow()
+
+    def invalidate_all_for_user(self, user_id: int) -> int:
+        """Mark every outstanding token for this user as used. Returns count."""
+        now = datetime.datetime.utcnow()
+        rows = (
+            self.session.query(PasswordResetRecord)
+            .filter(
+                PasswordResetRecord.user_id == user_id,
+                PasswordResetRecord.used_at.is_(None),
+            )
+            .all()
+        )
+        for r in rows:
+            r.used_at = now
+        return len(rows)
+
+    def count_recent_for_user(self, user_id: int, since: datetime.datetime) -> int:
+        return (
+            self.session.query(PasswordResetRecord)
+            .filter(
+                PasswordResetRecord.user_id == user_id,
+                PasswordResetRecord.created_at >= since,
+            )
+            .count()
+        )
