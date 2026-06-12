@@ -39,3 +39,15 @@ api:
   host: "0.0.0.0"
   port: 8000
   debug: false
+# ── Billing ───────────────────────────────────────────────────────────────
+# Set billing_enabled: true and provide Stripe keys via env vars when ready
+# to go live. Everything else (credit deduction, refund, org isolation) works
+# regardless of this flag — only Stripe replenishment is gated.
+#
+# To go live:
+#   1. Set billing_enabled: true  (or AREP_BILLING_ENABLED=true)
+#   2. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PUBLISHABLE_KEY
+#   3. Replace placeholder price IDs in billing.py with real Stripe IDs
+billing:
+  billing_enabled: false   # flip to true when Stripe is wired
+  beta_credits: 1000       # credits granted to new orgs during beta
