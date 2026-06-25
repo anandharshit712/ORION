@@ -27,6 +27,7 @@ from arep.api.routes import (
     evaluate_router, jobs_router, results_router, runs_router,
 )
 from arep.api.ws import ws_router
+from arep.config.validate import validate_startup
 from arep.database.connection import init_database
 from arep.utils.logging_config import get_logger
 
@@ -35,8 +36,9 @@ logger = get_logger("api.app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
-    """Application lifespan: initialize DB on startup."""
+    """Application lifespan: validate config (fail-fast) then initialize DB."""
     logger.info("ORION API starting up...")
+    validate_startup()  # D-02: refuse to boot on missing/insecure secrets
     init_database()
     yield
     logger.info("ORION API shutting down...")

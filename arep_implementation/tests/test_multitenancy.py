@@ -73,13 +73,27 @@ def _login(client, identifier: str) -> tuple[str, str, str]:
 
 # ── Tests ────────────────────────────────────────────────────────────────
 
+def _expected_new_org_grant() -> tuple[str, int]:
+    """Plan + credits a freshly signed-up org should get, per current billing config.
+
+    Beta mode (billing_enabled=False) → ("beta", beta_credits); live → ("free", 50).
+    Mirrors the logic in api/auth.py signup so this test survives the billing flip.
+    """
+    from arep.config import get_config
+    cfg = get_config()
+    if cfg.billing.billing_enabled:
+        return "free", 50
+    return "beta", cfg.billing.beta_credits
+
+
 def test_signup_creates_org_and_owner(client):
+    plan, credits = _expected_new_org_grant()
     user = _signup(client, "alice@a.com", "alice", "acme")
     assert user["role"] == "owner"
     assert user["org_id"] is not None
     assert user["organisation"]["slug"] == "acme"
-    assert user["organisation"]["plan"] == "free"
-    assert user["organisation"]["run_credits"] == 50
+    assert user["organisation"]["plan"] == plan
+    assert user["organisation"]["run_credits"] == credits
 
 
 def test_login_returns_jwt_with_org(client):
@@ -97,7 +111,8 @@ def test_orgs_me_returns_current_org(client):
     assert r.status_code == 200, r.text
     j = r.json()
     assert j["slug"] == "carol-co"
-    assert j["run_credits"] == 50
+    _, credits = _expected_new_org_grant()
+    assert j["run_credits"] == credits
 
 
 def test_unauthenticated_request_rejected(client):
