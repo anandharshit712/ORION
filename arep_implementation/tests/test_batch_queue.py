@@ -81,6 +81,17 @@ def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+def _initial_credits() -> int:
+    """Credits a new org starts with, per current billing config.
+
+    Beta mode (billing_enabled=False) → beta_credits; live → 50 free-tier.
+    Keeps these tests valid across the eventual billing flip.
+    """
+    from arep.config import get_config
+    cfg = get_config()
+    return 50 if cfg.billing.billing_enabled else cfg.billing.beta_credits
+
+
 def test_enqueue_returns_immediately_and_completes(client):
     """Eager mode → enqueue path returns 202 and batch finalises."""
     token = _signup_login(client, "ada@a.com", "ada", "ada-org")
@@ -100,7 +111,7 @@ def test_enqueue_returns_immediately_and_completes(client):
     assert body["status"] == "queued"
     assert body["num_runs"] == 3
     assert body["enqueued"] == 3
-    assert body["credits_remaining"] == 50 - 3
+    assert body["credits_remaining"] == _initial_credits() - 3
     batch_id = body["batch_id"]
 
     # In eager mode tasks ran inline; status should already reflect completion.
@@ -122,7 +133,7 @@ def test_insufficient_credits_returns_402(client):
         json={
             "scenario_path": SCENARIO_PATH,
             "model_name": "EmergencyBrake",
-            "num_runs": 999,            # > 50 free credits
+            "num_runs": _initial_credits() + 1,   # exceed the org's starting credits
             "master_seed": 1,
         },
     )
@@ -145,7 +156,7 @@ def test_unknown_model_rejected_before_credit_deduct(client):
     assert r.status_code == 400
     # Credits unchanged
     me = client.get("/api/orgs/me", headers=_auth(token)).json()
-    assert me["run_credits"] == 50
+    assert me["run_credits"] == _initial_credits()
 
 
 def test_batch_org_isolation(client):

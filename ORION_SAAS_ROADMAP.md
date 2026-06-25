@@ -2,7 +2,7 @@
 
 **Version**: 2.0
 **Date**: 2026-06-12
-**Authors**: Harshit Anand + Claude
+**Authors**: Harshit Anand
 **Status**: Active — governing product direction document
 
 > This roadmap supersedes `AREP_IMPLEMENTATION_ROADMAP.md` for product prioritisation.

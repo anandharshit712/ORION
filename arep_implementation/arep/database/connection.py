@@ -39,10 +39,8 @@ def init_database(
     global _engine, _SessionFactory
 
     if url is None:
-        url = os.environ.get(
-            "ORION_DATABASE_URL",
-            "postgresql://Harshit:Harshit@localhost:5432/orion",
-        )
+        from arep.config.validate import resolve_database_url
+        url = resolve_database_url()
 
     logger.info("Initializing database: %s", url.split("@")[-1])  # hide credentials
 

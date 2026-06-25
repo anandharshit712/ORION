@@ -10,9 +10,9 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: orion
-      POSTGRES_USER: orion
-      POSTGRES_PASSWORD: orion_dev_password
+      POSTGRES_DB: ${POSTGRES_DB:-orion}
+      POSTGRES_USER: ${POSTGRES_USER:-orion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infrastructure/.env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -41,10 +41,12 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.api
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      ORION_DATABASE_URL: postgresql://orion:orion_dev_password@postgres:5432/orion
+      ORION_ENV: ${ORION_ENV:-dev}
+      ORION_DATABASE_URL: postgresql://${POSTGRES_USER:-orion}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-orion}
       ORION_REDIS_URL: redis://redis:6379/0
-      ORION_JWT_SECRET: dev_secret_change_in_production
       ORION_MODEL_STORE_PATH: /tmp/orion_model_store
     volumes:
       - ../arep_implementation:/arep/arep_implementation   # live reload in dev
@@ -64,8 +66,11 @@ services:
     build:
       context: ..
       dockerfile: infrastructure/docker/Dockerfile.worker
+    env_file:
+      - .env
     environment:
-      ORION_DATABASE_URL: postgresql://orion:orion_dev_password@postgres:5432/orion
+      ORION_ENV: ${ORION_ENV:-dev}
+      ORION_DATABASE_URL: postgresql://${POSTGRES_USER:-orion}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-orion}
       ORION_REDIS_URL: redis://redis:6379/0
       ORION_MODEL_STORE_PATH: /tmp/orion_model_store
     volumes:

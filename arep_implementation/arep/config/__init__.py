@@ -45,7 +45,7 @@ class ExecutionConfig:
 @dataclass(frozen=True)
 class DatabaseConfig:
     """Database connection parameters."""
-    url: str = "postgresql://Harshit:Harshit@localhost:5432/orion"
+    url: str = "sqlite:///arep.db"
     echo: bool = False
     pool_size: int = 5
 

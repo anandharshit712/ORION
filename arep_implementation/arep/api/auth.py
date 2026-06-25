@@ -37,7 +37,9 @@ logger = get_logger("api.auth")
 
 # ── Config ───────────────────────────────────────────────────────────────
 
-SECRET_KEY = os.environ.get("ORION_SECRET_KEY", "orion-dev-secret-change-in-production")
+from arep.config.validate import resolve_secret_key
+
+SECRET_KEY = resolve_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 

@@ -412,7 +412,9 @@ start.bat         # Windows (cmd.exe)
 - **Never hardcode secrets or credential fallbacks** — no default JWT secrets, no default DB passwords. Fail fast if env var missing (Phase 0.1 pattern).
 - **Never deserialise untrusted pickle/cloudpickle outside the sandboxed model path** — customer artefacts are hostile input (D-01).
 
-**Known violations of these rules in existing code** (tracked in SaaS roadmap defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04); fallback secrets in `api/auth.py:40` + config defaults (D-02). Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
+**Secret/config resolution (Phase 0.1 — DONE, D-02 closed)**: never read `ORION_SECRET_KEY` / `ORION_DATABASE_URL` directly with a fallback default. Go through `arep/config/validate.py`: `resolve_secret_key()`, `resolve_database_url()`, `validate_startup()`. Non-dev (`ORION_ENV` not in dev/test/local) refuses to boot on missing/weak/placeholder secret or SQLite URL; dev gets an ephemeral secret + `sqlite:///arep.db`. `validate_startup()` runs in `app.py` lifespan. docker-compose pulls all secrets from git-ignored `infrastructure/.env` (`env_file:` + `${VAR}`); see `infrastructure/.env.example`.
+
+**Known violations of these rules in existing code** (tracked in SaaS roadmap defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
 
 ---
 
@@ -424,8 +426,8 @@ start.bat         # Windows (cmd.exe)
 
 Full spec + defect register (D-01…D-13): `ORION_SAAS_ROADMAP.md` § Phase 0. Order:
 
-1. **0.1 Secrets hardening (D-02)** — remove fallback JWT secret (`api/auth.py:40`), hardcoded DB creds (`config/__init__.py`, `database/connection.py`), plaintext creds in `infrastructure/docker-compose.yml`. Fail-fast startup validator. **Start here — days, not weeks.**
-2. **0.2 Model sandboxing (D-01)** — cloudpickle path = RCE. Strip subprocess env (no `ORION_*` vars), no network, empty tmpdir FS, hard wall-clock kill, gate cloudpickle path off for self-serve orgs (Docker path = default).
+1. ~~**0.1 Secrets hardening (D-02)**~~ — **DONE.** Fallbacks removed; `arep/config/validate.py` is the single resolver (`resolve_secret_key`, `resolve_database_url`, `validate_startup`); fail-fast in non-dev, ephemeral secret + sqlite in dev; `validate_startup()` wired into `app.py` lifespan; docker-compose secrets moved to git-ignored `infrastructure/.env` (`infrastructure/.env.example` documents them). `git grep "Harshit:Harshit\|change-in-production"` in `arep/` → 0 hits. See Section 12.
+2. **0.2 Model sandboxing (D-01) — NEXT.** — cloudpickle path = RCE. Strip subprocess env (no `ORION_*` vars), no network, empty tmpdir FS, hard wall-clock kill, gate cloudpickle path off for self-serve orgs (Docker path = default).
 3. **0.3 API hardening (D-03, D-07)** — CORS whitelist via `ORION_ALLOWED_ORIGINS`, slowapi rate limiting (login 5/min/IP), auth on `/models/` `/scenarios/` `/jobs/` `/results/*`, security headers, webhook signature+idempotency groundwork.
 4. **0.4 Auth flow (D-04)** — email verification (reuse hashed-token machinery), httpOnly cookie for browser JWT, short-lived WS ticket replaces `?token=` query param, superadmin expiry 4h.
 5. **0.5 Score integrity (D-05, D-06, D-11, D-12)** — real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
