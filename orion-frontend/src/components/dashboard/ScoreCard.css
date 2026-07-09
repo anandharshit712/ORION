@@ -1,4 +1,58 @@
-/* ORION — ScoreCard styles  [Phase stub] */
-.ScoreCard {
-  /* TODO: implement styles */
+/* ══ ScoreCard — metric-panel pattern (ORION_UI_DESIGN.md §9.4) ═════════ */
+.score-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
+
+.score-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score-delta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.score-delta.is-up { color: var(--pass); }
+.score-delta.is-down { color: var(--fail); }
+
+.score-val {
+  font-family: var(--ff-mono);
+  font-weight: 700;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.score-val.is-amber { color: var(--amber); }
+.score-val--empty { color: var(--text-mute); }
+
+.score-unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--cyan);
+}
+
+.score-bar {
+  height: 5px;
+  background: var(--bg-inset);
+  position: relative;
+}
+.score-bar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  transition: width 0.6s var(--ease);
+}
+.score-bar i.amber { background: var(--amber); }
+.score-bar i.cyan { background: var(--cyan); }

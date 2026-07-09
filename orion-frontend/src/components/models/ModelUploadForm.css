@@ -1,4 +1,55 @@
-/* ORION — ModelUploadForm styles  [Phase stub] */
-.ModelUploadForm {
-  /* TODO: implement styles */
+/* ══ ModelUploadForm — instrument-frame register card (§11.4) ══════════ */
+.model-upload {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-6);
 }
+
+.model-upload-head { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.model-upload-sub { font-family: var(--ff-mono); font-size: 11px; color: var(--text-mute); }
+
+/* segmented control (§9.13) */
+.model-upload-tabs {
+  display: flex;
+  gap: 0;
+  margin: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+.mu-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+.mu-tab:hover:not(:disabled) { color: var(--text); }
+.mu-tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+.mu-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.model-upload-body { display: flex; flex-direction: column; }
+.model-upload-body .field:last-child { margin-bottom: 0; }
+
+.model-upload-error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  margin: var(--space-2) 0 var(--space-4);
+  background: var(--bg-panel);
+  border: 1px solid var(--fail);
+  border-left-width: 2px;
+  border-radius: var(--radius-sm);
+}
+.model-upload-error .mono-label { color: var(--fail); display: inline-flex; align-items: center; gap: 6px; }
+.model-upload-error span:last-child { font-family: var(--ff-ui); font-size: 13px; color: var(--text-2); }
+
+.model-upload-submit { align-self: flex-start; margin-top: var(--space-4); }

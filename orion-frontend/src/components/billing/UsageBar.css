@@ -1,0 +1,26 @@
+/* ══ UsageBar — credits used vs total (§11.4) ══════════════════════════ */
+.usage-bar { display: flex; flex-direction: column; gap: 8px; }
+
+.usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.usage-readout { font-size: 13px; color: var(--text); font-weight: 600; }
+.usage-sep { color: var(--text-mute); }
+.usage-unit { color: var(--cyan); font-size: 11px; }
+
+.usage-track {
+  position: relative;
+  height: 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.usage-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background: var(--cyan);
+  transition: width var(--t-slow) var(--ease);
+}
+.usage-fill.is-near { background: var(--amber); }
+
+.usage-foot { font-size: 10px; letter-spacing: 0.08em; color: var(--text-mute); }

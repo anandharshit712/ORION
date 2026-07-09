@@ -1,4 +1,44 @@
-/* ORION — SearchPage styles */
-.SearchPage {
-  padding: 24px;
+/* ══ SearchPage (§11.4) ════════════════════════════════════════════════ */
+.search-page {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: reveal-in 0.4s ease;
+}
+
+.search-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+  gap: 16px;
+}
+.search-head h1 { font-family: var(--ff-disp); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; }
+.search-sub { margin-top: 4px; }
+
+/* ── Form ── */
+.search-form { padding: 18px 20px; }
+.search-form-cap { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.search-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.2fr 0.8fr;
+  gap: 12px;
+  align-items: end;
+}
+.search-grid .field { margin-bottom: 0; }
+.search-launch { margin-top: var(--space-4); }
+
+/* ── Results ── */
+.search-results { padding: 0; overflow: hidden; }
+.search-results-cap { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.search-results-wrap { overflow-x: auto; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .search-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .search-grid { grid-template-columns: 1fr; }
 }

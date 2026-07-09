@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import Navbar from '../components/common/Navbar';
+import Icon from '../components/common/Icon';
 import '../components/auth/AuthForms.css';
 import './ResetPasswordPage.css';
 
@@ -19,17 +20,24 @@ export default function ResetPasswordPage() {
     return (
       <>
         <Navbar />
-        <div className="auth-container">
-          <div className="auth-card glass-card">
-            <div className="auth-header">
-              <span className="brand-icon">◆</span>
-              <h2>Invalid Link</h2>
-              <p>This reset link is missing or malformed.</p>
+        <div className="auth-shell">
+          <div className="auth-wrap rp-wrap">
+            <div className="auth-head">
+              <span className="sect-idx">02 /</span>
+              <h1>Authentication · Reset</h1>
+              <span className="meta">password recovery</span>
             </div>
-            <div className="auth-error">Invalid or missing reset link.</div>
-            <p className="auth-footer-text">
-              <Link to="/login">Back to Login</Link>
-            </p>
+            <div className="panel auth-card auth-card--error">
+              <div className="mono-label eyebrow">ORION//AREP · LINK INVALID</div>
+              <h2>Invalid link</h2>
+              <div className="auth-alert auth-alert--fail" role="alert">
+                <Icon name="warning" size={15} />
+                <span>Invalid or missing reset link.</span>
+              </div>
+              <div className="auth-foot">
+                <Link to="/login">← Back to Login</Link>
+              </div>
+            </div>
           </div>
         </div>
       </>
@@ -67,59 +75,68 @@ export default function ResetPasswordPage() {
   return (
     <>
       <Navbar />
-      <div className="auth-container">
-        <div className="auth-card glass-card">
-          <div className="auth-header">
-            <span className="brand-icon">◆</span>
-            <h2>Reset Password</h2>
-            <p>Enter your new password below</p>
+      <div className="auth-shell">
+        <div className="auth-wrap rp-wrap">
+          <div className="auth-head">
+            <span className="sect-idx">02 /</span>
+            <h1>Authentication · Reset</h1>
+            <span className="meta">password recovery</span>
           </div>
 
-          {success ? (
-            <div className="rp-success">
-              <p>Password updated successfully. You can now log in.</p>
-              <Link to="/login" className="btn btn-primary btn-lg rp-go-login">
-                Go to Login
-              </Link>
-            </div>
-          ) : (
-            <>
-              {error && <div className="auth-error">{error}</div>}
-              <form onSubmit={handleSubmit} className="auth-form">
-                <div className="form-group">
-                  <label className="form-label">New Password</label>
-                  <input
-                    type="password"
-                    className="input-field"
-                    placeholder="••••••••"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    autoFocus
-                  />
+          <div className="panel panel--live auth-card">
+            <div className="mono-label eyebrow">ORION//AREP · SECURE</div>
+            <h2>Reset password</h2>
+
+            {success ? (
+              <div className="auth-success">
+                <div className="auth-alert auth-alert--pass" role="status">
+                  <Icon name="check" size={15} />
+                  <span>Password updated successfully. You can now log in.</span>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Confirm Password</label>
-                  <input
-                    type="password"
-                    className="input-field"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
+                <Link to="/login" className="btn btn-primary">
+                  Go to Login <span className="arr">→</span>
+                </Link>
+              </div>
+            ) : (
+              <>
+                {error && (
+                  <div className="auth-alert auth-alert--fail" role="alert">
+                    <Icon name="warning" size={15} />
+                    <span>{error}</span>
+                  </div>
+                )}
+                <form onSubmit={handleSubmit} className="auth-form">
+                  <div className="field">
+                    <label htmlFor="rp-new">New Password</label>
+                    <input
+                      type="password"
+                      id="rp-new"
+                      placeholder="••••••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="rp-confirm">Confirm Password</label>
+                    <input
+                      type="password"
+                      id="rp-confirm"
+                      placeholder="••••••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? 'Updating…' : 'Reset Password'} <span className="arr">→</span>
+                  </button>
+                </form>
+                <div className="auth-foot">
+                  <Link to="/login">← Back to Login</Link>
                 </div>
-                <button
-                  type="submit"
-                  className="btn btn-primary btn-lg auth-submit"
-                  disabled={loading}
-                >
-                  {loading ? 'Updating…' : 'Reset Password'}
-                </button>
-              </form>
-              <p className="auth-footer-text">
-                <Link to="/login">Back to Login</Link>
-              </p>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </>
