@@ -23,8 +23,9 @@ Two roadmap documents exist. Know the difference:
 
 - **`ORION_SAAS_ROADMAP.md`** (v2.0) — governs **priority ordering**. What to build next. When two tasks compete, this doc wins. Source of truth for Phase 0–5 scope, the known-defect register (D-01…D-13), and honest market positioning.
 - **`AREP_IMPLEMENTATION_ROADMAP.md`** (v1.1) — governs **technical implementation detail**. How to build it. Specific data structures, acceptance criteria, file names.
+- **`ORION_UI_DESIGN.md`** (v1.0) — governs **ALL frontend/UI visual work**. The binding design system ("Mission Control"): tokens, typography, components, theming, page-by-page specs. Any change under `orion-frontend/` must conform. Companion `ORION_UI_REDESIGN_PLAN.md` = the migration sequencing; approved sample = `design/sample-mission-control.html`. See Section 9.
 
-When they conflict on priority: SaaS roadmap wins. When you need implementation depth: read the technical roadmap.
+When they conflict on priority: SaaS roadmap wins. When you need implementation depth: read the technical roadmap. For anything visual/frontend: `ORION_UI_DESIGN.md` is authoritative.
 
 **Current priority: Phase 0 — Security & Score Integrity** (SaaS roadmap v2.0). No Stripe, no new features until Phase 0 exits. See Section 13.
 
@@ -300,13 +301,32 @@ All API errors return `{"detail": "..."}` — match this shape in new error hand
 
 React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 
+### Design system — `ORION_UI_DESIGN.md` is BINDING (read before ANY frontend work)
+
+**Every visual change under `orion-frontend/` MUST conform to `ORION_UI_DESIGN.md`** (the "Mission Control" design system, approved 2026-06-25). Read it before writing any page, component, or style. It is the source of truth for colors, typography, spacing, radius, components, theming, and per-page layout — the approved render is `design/sample-mission-control.html`.
+
+- **Use tokens only.** Never hardcode a hex, font size, radius, or one-off color — use the CSS variables defined in `index.css` per the design doc. Old purple/glass tokens (`#6c63ff`, `--accent-primary` gradient, `.glass-card` glow) are retired.
+- **Fonts:** Chakra Petch (display) / Saira (UI) / JetBrains Mono (all numerals, tabular). No Inter/Roboto/system body.
+- **Theme:** dark-default, light available; `data-theme` on `<html>`, persisted to `localStorage` key `orion-theme`. This is the **only** sanctioned localStorage UI-pref key — it does NOT relax the D-04 auth-token rule below.
+- **No emoji as UI icons** — use the inline-SVG set in `src/components/common/Icon.jsx`.
+- **Banned aesthetics (permanent):** glassmorphism-as-primary-surface, purple/violet gradients, glow-pulse/float animations, rounded-2xl, generic AI-startup hero. See design doc §1.
+- **Out of scope = don't.** Don't add visual features, routes, libraries, or styles not described in the design doc unless the user explicitly asks. New pattern needed → add it to `ORION_UI_DESIGN.md` in the same change, then implement.
+- Migration status + phase order live in `ORION_UI_REDESIGN_PLAN.md`.
+
+**Implementation status: DONE** (redesign Phases A–I complete). The code now matches the design doc. Key infrastructure:
+- Tokens + global utilities (`.panel`/`.panel--live`, `.btn*`, `.field`, `.chip*`, `.data-table`, `.mono-label`, `.num`, `.spec-strip`, grid backdrop, `.skeleton`, `.skip-link`) live in `src/index.css`. Legacy purple/`glass-card` aliases were removed — use canonical tokens only.
+- Theme: `src/theme/ThemeContext.jsx` (`useTheme()` → `{theme, toggleTheme, setTheme}`), control = `src/components/common/ThemeToggle.jsx`, no-FOUC inline script in `index.html`, key `orion-theme`. Dark default.
+- Icons: `src/components/common/Icon.jsx` (`<Icon name=.. size=.. />`). No emoji. Add new icons there + list in design doc §7.
+- Shell: `src/components/common/HudBar.jsx` (sticky status strip) + real `src/components/common/Sidebar.jsx` (numbered nav). `src/components/common/ErrorBoundary.jsx` wraps the app in `main.jsx`; `src/pages/NotFoundPage.jsx` is the `*` route.
+- Recharts theming: recompute palette from CSS vars keyed on `useTheme().theme` (see `useChartPalette` in `DashboardPage.jsx`). Never hardcode chart hex.
+
 ### Rules
 
 - All HTTP calls through `src/services/api.js` — never use `fetch()` directly in component.
 - Auth token lives in `AuthContext` — use `const { user, token, logout } = useAuth()` everywhere.
 - **Token storage (D-04, being redesigned in Phase 0.4)**: today `AuthContext` persists the JWT in `localStorage` (`orion_token` key) — this is a known security defect, target is httpOnly cookie + `GET /api/auth/me` bootstrap. Don't add NEW `localStorage` token reads/writes outside `AuthContext`; don't build features that depend on reading the raw token in components.
 - `OrgContext.jsx` exists but `OrgProvider` is NOT mounted anywhere — `useOrg()` throws. Mount it or don't call it (Phase 0.6 resolves).
-- Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `settings` — string keys used in `Sidebar`.
+- Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `batches`, `compare`, `settings` — string keys used in `Sidebar` (numbered nav). Non-`overview` views render styled "coming soon" placeholder panels until wired.
 - Charts use Recharts (`LineChart`, `RadarChart`, `BarChart`) — don't add Chart.js or D3.
 - 3D visualization uses `@react-three/fiber` + `@react-three/drei` — don't use raw Three.js imperative API in React components.
 - CSS co-located: `Component.jsx` + `Component.css` same folder. No CSS modules, no Tailwind.
@@ -320,7 +340,7 @@ Add to `src/services/api.js` following existing pattern, then call `api.myNewMet
 Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer wired end-to-end:
 
 - `src/hooks/useSimulationStream.js` — owns WebSocket. Returns `{ frame, isConnected, status, error, latencyRef }`. Handles exponential-backoff reconnect (max 3 attempts), cleans up on unmount. Don't open sockets from components directly.
-- `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has `← Dashboard` back button (glass style, centered top).
+- `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has `← Dashboard` back button (`.btn-ghost`, top). Scene + overlay restyled to Mission Control palette; HUD = glassless instrument panels.
 - Frame shape frozen in `SimulationEngine.get_tick_frame()`. To extend protocol: add fields there, consume in hook/viewer.
 - Server closes with `{"event": "stream_end", ...}` — hook handles before deciding reconnect.
 - Latency measured from `frame.emit_ts_ms` against client `Date.now()`; running average and max exposed via `latencyRef.current` for HUD display.

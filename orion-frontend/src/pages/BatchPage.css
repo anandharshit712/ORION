@@ -1,4 +1,72 @@
-/* ORION — BatchPage styles */
-.BatchPage {
-  padding: 24px;
+/* ══ BatchPage (§11.4) ═════════════════════════════════════════════════ */
+.batch-page {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: reveal-in 0.4s ease;
+}
+
+.batch-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+  gap: 16px;
+}
+.batch-head h1 { font-family: var(--ff-disp); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; }
+.batch-sub { font-size: 11px; color: var(--text-mute); letter-spacing: 0.08em; margin-top: 4px; }
+.batch-actions { display: flex; align-items: center; gap: 10px; }
+
+/* ── Progress panel ── */
+.batch-progress { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.batch-progress-head { display: flex; align-items: baseline; justify-content: space-between; }
+.batch-progress-pct { font-size: 16px; color: var(--amber); font-weight: 700; }
+
+.batch-track {
+  position: relative;
+  height: 6px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.batch-track i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background: var(--amber);
+  transition: width var(--t-slow) var(--ease);
+}
+
+.batch-counts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.batch-count { display: flex; flex-direction: column; gap: 4px; }
+.batch-count-v { font-size: 26px; font-weight: 700; line-height: 1; color: var(--text); }
+.batch-count-v.is-amber { color: var(--amber); }
+.batch-count-v.is-pass { color: var(--pass); }
+.batch-count-v.is-fail { color: var(--fail); }
+
+/* ── States ── */
+.batch-empty, .batch-error {
+  padding: var(--space-10);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.batch-empty p, .batch-error p { color: var(--text-mute); font-family: var(--ff-ui); max-width: 440px; }
+.batch-error { border-left: 2px solid var(--fail); }
+.batch-error .mono-label { color: var(--fail); display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Responsive ── */
+@media (max-width: 760px) {
+  .batch-counts { grid-template-columns: repeat(2, 1fr); }
+  .batch-readouts { flex-wrap: wrap; }
 }

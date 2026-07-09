@@ -1,4 +1,42 @@
-/* ORION — RegressionChart styles  [Phase stub] */
-.RegressionChart {
-  /* TODO: implement styles */
+/* ══ RegressionChart — line on grid (ORION_UI_DESIGN.md §9.8) ═══════════ */
+.regression-chart { padding: 16px; }
+.regression-chart h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 14px;
+}
+.regression-chart .legend { display: flex; gap: 14px; }
+.regression-chart .legend b {
+  font-weight: 400;
+  color: var(--text-mute);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+.regression-chart .legend b::before {
+  content: "";
+  width: 9px;
+  height: 2px;
+  display: inline-block;
+}
+.regression-chart .legend b.a::before { background: var(--amber); }
+.regression-chart .legend b.f::before { background: var(--fail); }
+
+.regression-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+}
+.regression-empty p {
+  color: var(--text-mute);
+  font-family: var(--ff-ui);
+  font-size: 13px;
+  max-width: 340px;
 }

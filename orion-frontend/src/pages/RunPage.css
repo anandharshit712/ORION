@@ -1,4 +1,27 @@
-/* ORION — RunPage styles */
-.RunPage {
-  padding: 24px;
+/* ORION — RunPage (placeholder) */
+.runpage {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
 }
+.runpage-card {
+  max-width: 520px;
+  padding: var(--space-10);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.runpage-card h1 {
+  font-family: var(--ff-disp);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 0.02em;
+}
+.runpage-card p {
+  color: var(--text-mute);
+  max-width: 420px;
+}
+.runpage-card .flip { transform: rotate(180deg); }

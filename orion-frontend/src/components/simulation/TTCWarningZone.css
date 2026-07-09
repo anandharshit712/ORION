@@ -1,0 +1,8 @@
+/* ORION — TTCWarningZone · Mission Control · tokens only */
+.sim-overlay-stub {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-mute);
+  font-family: var(--ff-mono);
+}

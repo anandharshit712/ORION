@@ -1,4 +1,70 @@
-/* ORION — SettingsPage styles */
-.SettingsPage {
-  padding: 24px;
+/* ══ SettingsPage (§11.4) ══════════════════════════════════════════════ */
+.settings-page {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 880px;
+  animation: reveal-in 0.4s ease;
+}
+
+.settings-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+.settings-head h1 { font-family: var(--ff-disp); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; }
+.settings-sub { margin-top: 4px; }
+
+.settings-section { padding: var(--space-5) var(--space-6); }
+.settings-section-cap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--amber);
+  margin-bottom: var(--space-4);
+}
+
+/* ── Key/value rows ── */
+.settings-rows { display: flex; flex-direction: column; }
+.settings-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: var(--space-4);
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row dt { color: var(--text-2); }
+.settings-row dd { font-size: 13px; color: var(--text); }
+.settings-row dd.is-credits { color: var(--cyan); font-weight: 700; }
+
+/* ── API keys ── */
+.settings-keys { padding-bottom: 0; }
+.settings-keys .settings-section-cap { padding: 0 0 var(--space-4); }
+.settings-keys-wrap { overflow-x: auto; margin: 0 calc(var(--space-6) * -1); }
+.settings-keys-wrap .data-table thead th:first-child,
+.settings-keys-wrap .data-table tbody td:first-child { padding-left: var(--space-6); }
+.settings-keys-wrap .data-table thead th:last-child,
+.settings-keys-wrap .data-table tbody td:last-child { padding-right: var(--space-6); }
+
+.key-cell { color: var(--cyan); }
+.key-prefix { margin-right: 8px; }
+.key-copy {
+  background: transparent; border: none; color: var(--text-mute);
+  cursor: pointer; padding: 2px; vertical-align: middle;
+  transition: color var(--t-fast) ease;
+}
+.key-copy:hover { color: var(--cyan); }
+.key-actions { text-align: right; }
+
+/* ── Theme ── */
+.settings-theme { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); }
+.settings-theme-copy { display: flex; flex-direction: column; gap: 6px; }
+.settings-theme-copy p { font-family: var(--ff-ui); font-size: 13px; color: var(--text-mute); max-width: 480px; }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .settings-row { grid-template-columns: 1fr; gap: 4px; }
+  .settings-theme { flex-direction: column; align-items: flex-start; }
 }

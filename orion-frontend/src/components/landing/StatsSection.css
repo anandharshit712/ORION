@@ -1,33 +1,61 @@
+/* ORION — Stats. Big mono numerals on the global grid backdrop, spec-strip style.
+   ORION_UI_DESIGN.md §11.1 / §6.10. Tokens only. */
+
 .stats-section {
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--space-6) var(--space-20);
+}
+.stats-inner {
+  max-width: 1280px;
+  margin: 0 auto;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-8);
-  text-align: center;
+.stats-head {
+  margin-bottom: var(--space-8);
 }
+.stats-idx {
+  display: block;
+  color: var(--amber);
+  margin-bottom: var(--space-3);
+}
+.stats-title {
+  font-family: var(--ff-disp);
+  font-weight: 700;
+  font-size: var(--font-2xl);
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.stats-title .em { color: var(--amber); }
 
-.stat-value {
+/* spec-strip handles borders/dividers; we enlarge the numerals here */
+.stats-grid .stat-item {
+  flex: 1;
+  padding: var(--space-8) var(--space-6);
+}
+.stats-grid .v {
+  font-family: var(--ff-mono);
   font-size: var(--font-4xl);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
-  margin-bottom: var(--space-2);
+  color: var(--text);
 }
-
-.stat-label {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-  font-weight: 500;
+.stats-grid .v small {
+  font-size: var(--font-lg);
+  color: var(--cyan);
+  margin-left: 2px;
+}
+.stats-grid .k {
+  font-family: var(--ff-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  color: var(--text-mute);
+  margin-top: var(--space-3);
 }
 
-@media (max-width: 768px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 720px) {
+  .stats-grid { flex-wrap: wrap; }
+  .stats-grid .stat-item {
+    flex: 1 1 50%;
+    border-bottom: 1px solid var(--border);
   }
 }

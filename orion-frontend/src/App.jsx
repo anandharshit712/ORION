@@ -6,10 +6,11 @@ import SignupPage from './pages/SignupPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import SimulationViewer from './components/simulation/SimulationViewer';
+import NotFoundPage from './pages/NotFoundPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="loading-screen">Loading…</div>;
+  if (loading) return <div className="loading-screen">Authenticating…</div>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
@@ -37,7 +38,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
