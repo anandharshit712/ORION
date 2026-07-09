@@ -1,4 +1,41 @@
-/* ORION — PlaybackControls styles  [Phase stub] */
-.PlaybackControls {
-  /* TODO: implement styles */
+/* ORION — PlaybackControls (transport bar) · Mission Control · tokens only */
+.playback-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 10px var(--space-5);
+  background: var(--bg-panel);
 }
+
+.playback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+.playback-btn:hover:not(:disabled) { color: var(--cyan); border-color: var(--cyan); }
+.playback-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.playback-btn--primary { color: var(--amber); border-color: var(--amber-line); }
+
+.playback-scrub { flex: 1; min-width: 120px; }
+.playback-scrub-track {
+  height: 4px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.playback-scrub-fill { height: 100%; background: var(--amber); }
+
+.playback-time { font-size: 13px; color: var(--text); }
+
+.playback-speed { display: inline-flex; align-items: center; gap: var(--space-2); }
+.playback-speed-v { font-size: 13px; color: var(--cyan); }
+
+.playback-note { color: var(--text-mute); }

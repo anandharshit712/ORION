@@ -1,0 +1,19 @@
+/* ══ ScoreDistribution — histogram panel (ORION_UI_DESIGN.md §9.8) ══════ */
+.score-dist { padding: 16px; }
+.score-dist h3 { margin-bottom: 12px; }
+
+.score-dist-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+}
+.score-dist-empty p {
+  color: var(--text-mute);
+  font-family: var(--ff-ui);
+  font-size: 13px;
+  max-width: 320px;
+}

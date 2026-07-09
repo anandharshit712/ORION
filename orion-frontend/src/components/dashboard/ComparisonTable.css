@@ -1,4 +1,26 @@
-/* ORION — ComparisonTable styles  [Phase stub] */
-.ComparisonTable {
-  /* TODO: implement styles */
+/* ══ ComparisonTable — side-by-side model columns (§9.7) ════════════════ */
+.comparison-table { padding: 0; overflow: hidden; }
+.comparison-cap {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
 }
+.comparison-wrap { overflow-x: auto; }
+
+.data-table th.cmp-col { color: var(--text); }
+.data-table td.cmp-metric { color: var(--text-2); }
+
+.cmp-cell {
+  white-space: nowrap;
+}
+.cmp-val {
+  color: var(--text);
+  font-weight: 600;
+}
+.cmp-delta {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+.cmp-delta.is-up { color: var(--pass); }
+.cmp-delta.is-down { color: var(--fail); }

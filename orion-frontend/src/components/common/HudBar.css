@@ -1,0 +1,50 @@
+.hud {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--hud-h);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  background: var(--scrim);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.hud-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ff-disp);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  font-size: 13px;
+  color: var(--text);
+}
+.hud-brand b { color: var(--amber); }
+.hud-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--amber);
+  box-shadow: 0 0 10px var(--amber);
+  transform: rotate(45deg);
+}
+.hud-sep { flex: 1; }
+.hud-stat { color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.hud-cyan { color: var(--cyan); }
+.hud-mute { color: var(--text-2); }
+.hud-kbd {
+  border: 1px solid var(--border-strong);
+  padding: 1px 7px;
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 720px) {
+  .hud-hide-sm { display: none; }
+  .hud { gap: 12px; }
+}

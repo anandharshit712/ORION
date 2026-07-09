@@ -22,7 +22,8 @@
       "Bash(python -m pytest tests/test_ws_smoke.py -q --tb=short)",
       "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
       "Bash(taskkill //F //PID 21928 //PID 11840)",
-      "Bash(python -c \"import uvicorn; print\\(uvicorn.__version__, uvicorn.__file__\\)\")"
+      "Bash(python -c \"import uvicorn; print\\(uvicorn.__version__, uvicorn.__file__\\)\")",
+      "PowerShell(Start-Process \"C:\\\\Users\\\\anand\\\\Downloads\\\\ORION\\\\design\\\\sample-mission-control.html\")"
     ]
   }
 }

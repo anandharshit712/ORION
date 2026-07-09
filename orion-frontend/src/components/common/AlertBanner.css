@@ -1,4 +1,46 @@
-/* ORION — AlertBanner styles  [Phase stub] */
-.AlertBanner {
-  /* TODO: implement styles */
+/* ══ AlertBanner — inline alert / toast (§9.11) ════════════════════════ */
+.alert-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--text-mute);
+  border-radius: var(--radius-sm);
 }
+
+/* severity left-border + lead-icon color */
+.alert-info    { border-left-color: var(--cyan); }
+.alert-warn    { border-left-color: var(--amber); }
+.alert-error   { border-left-color: var(--fail); }
+.alert-success { border-left-color: var(--pass); }
+
+.alert-lead { flex-shrink: 0; display: grid; place-items: center; margin-top: 1px; }
+.alert-info    .alert-lead { color: var(--cyan); }
+.alert-warn    .alert-lead { color: var(--amber); }
+.alert-error   .alert-lead { color: var(--fail); }
+.alert-success .alert-lead { color: var(--pass); }
+
+.alert-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.alert-title { color: var(--text-2); }
+.alert-info    .alert-title { color: var(--cyan); }
+.alert-warn    .alert-title { color: var(--amber); }
+.alert-error   .alert-title { color: var(--fail); }
+.alert-success .alert-title { color: var(--pass); }
+
+.alert-text { font-family: var(--ff-ui); font-size: 13px; color: var(--text-2); line-height: 1.5; }
+
+.alert-dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-mute);
+  cursor: pointer;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  transition: color var(--t-fast) ease;
+}
+.alert-dismiss:hover { color: var(--text); }

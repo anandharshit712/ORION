@@ -1,19 +1,20 @@
 // ORION — NPCIntentOverlay  [P5]
-// HTML overlay arrows showing NPC behavior tree state
-// TODO [P5]: Implement this component.
+// HTML overlay markers showing NPC behavior-tree state (frame.npcs[].bt_state).
+// TODO [P5]: Implement intent markers anchored to NPC screen positions.
+// Restyled to the "Mission Control" palette (tokens only — this is an HTML
+// overlay, not a 3D material): neutral grey markers, cyan accents.
 
 import React from 'react';
 import './NPCIntentOverlay.css';
 
 /**
  * NPCIntentOverlay
- * HTML overlay arrows showing NPC behavior tree state
+ * HTML overlay markers showing NPC behavior-tree state.
  */
 export default function NPCIntentOverlay(/* props */) {
   return (
-    <div className="NPCIntentOverlay">
-      {/* TODO [P5]: Implement NPCIntentOverlay */}
-      <p style={{ color: '#888', fontSize: '12px' }}>NPCIntentOverlay — not yet implemented [P5]</p>
+    <div className="sim-overlay-stub">
+      <span className="mono-label">NPCIntentOverlay — not yet implemented [P5]</span>
     </div>
   );
 }

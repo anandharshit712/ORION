@@ -1,97 +1,172 @@
+/* ORION — Landing hero. Two-column: pitch + live instrument cluster.
+   ORION_UI_DESIGN.md §11.1 / §6.6. Tokens only — no glow, no float, no 3D. */
+
 .hero {
   position: relative;
-  min-height: 100vh;
-  display: flex;
+  padding: 132px var(--space-6) 80px;
+}
+.hero-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 40px;
   align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  min-height: 540px;
 }
 
-.hero-canvas {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-
-.hero-content {
-  position: relative;
-  z-index: 10;
-  text-align: center;
-  max-width: 720px;
-  padding: var(--space-8);
-}
-
+/* ── Left column ────────────────────────────────────────────────────────── */
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  color: var(--accent-secondary);
-  background: rgba(108, 99, 255, 0.1);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-full);
-  margin-bottom: var(--space-8);
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  gap: 10px;
+  margin-bottom: 26px;
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.2em;
+}
+.hero-badge::before {
+  content: "\25C6"; /* ◆ */
+  font-size: 8px;
 }
 
 .hero-title {
-  font-size: var(--font-5xl);
-  font-weight: 900;
-  line-height: 1.1;
-  margin-bottom: var(--space-6);
-  letter-spacing: -1px;
+  font-family: var(--ff-disp);
+  font-weight: 700;
+  font-size: clamp(40px, 5.2vw, 68px);
+  line-height: 0.98;
+  letter-spacing: -0.01em;
+  margin-bottom: 22px;
+  color: var(--text);
+}
+.hero-title .em { color: var(--amber); }
+.hero-title .stroke {
+  -webkit-text-stroke: 1.5px var(--text);
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
-.hero-description {
-  font-size: var(--font-lg);
-  color: var(--text-secondary);
-  line-height: 1.7;
-  margin-bottom: var(--space-10);
-  max-width: 560px;
-  margin-left: auto;
-  margin-right: auto;
+.hero-lead {
+  font-family: var(--ff-ui);
+  color: var(--text-2);
+  font-size: 17px;
+  font-weight: 300;
+  max-width: 520px;
+  margin-bottom: 30px;
 }
 
-.hero-actions {
+.hero-cta {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
+  gap: 14px;
+  margin-bottom: 34px;
   flex-wrap: wrap;
 }
 
-/* Decorative orbs */
-.hero-gradient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.4;
-  pointer-events: none;
+.hero-specs { width: 100%; }
+
+/* ── Right column — instrument cluster ─────────────────────────────────── */
+.instrument {
+  padding: 26px;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
 }
-.hero-orb-1 {
-  width: 500px;
-  height: 500px;
-  background: var(--accent-primary);
-  top: -150px;
-  right: -100px;
+.instr-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-.hero-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: #c084fc;
-  bottom: -200px;
-  left: -200px;
-  opacity: 0.2;
+.instr-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cyan);
 }
 
-@media (max-width: 768px) {
-  .hero-title {
-    font-size: var(--font-3xl);
-  }
-  .hero-description {
-    font-size: var(--font-base);
-  }
+/* reticle gauge */
+.reticle {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 6px auto;
+}
+.reticle svg { position: absolute; inset: 0; }
+.reticle-read {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.reticle-big {
+  font-family: var(--ff-mono);
+  font-weight: 700;
+  font-size: 46px;
+  color: var(--amber);
+  line-height: 1;
+}
+.reticle-lbl {
+  font-family: var(--ff-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  color: var(--text-mute);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+/* sparkline */
+.spark-wrap {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.spark {
+  width: 100%;
+  height: 56px;
+  display: block;
+}
+
+/* telemetry readout grid */
+.instr-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+.instr-rows > div {
+  background: var(--bg-panel);
+  padding: 10px 12px;
+}
+.instr-rows .k {
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+}
+.instr-rows .v {
+  font-family: var(--ff-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+.instr-rows .v.c { color: var(--cyan); }
+.instr-rows .v.a { color: var(--amber); }
+.instr-rows .v.verdict-pass { color: var(--pass); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero { padding-top: 108px; }
+  .hero-inner { grid-template-columns: 1fr; gap: 32px; }
+  .instrument { min-height: 0; }
+}
+@media (max-width: 560px) {
+  .hero-specs { flex-wrap: wrap; }
+  .hero-specs > div { flex: 1 1 50%; }
 }

@@ -93,3 +93,8 @@ export const DASHBOARD_SECTIONS = [
 // In production this should come from an environment variable.
 
 export const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+// ── Build identifier (HUD chrome) ──────────────────────────────────────────
+// Short build/commit tag shown in the HUD status bar. Override via env in CI.
+
+export const BUILD_HASH = import.meta.env.VITE_BUILD_HASH || 'dev';

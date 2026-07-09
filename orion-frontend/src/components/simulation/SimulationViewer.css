@@ -1,137 +1,244 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   ORION — Simulation Viewer  (Mission Control HUD overlay)
+   Tokens-only. The 3D scene materials are coloured in the JSX (three.js cannot
+   read CSS vars); everything here is the HTML overlay and uses tokens only.
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .sim-viewer {
   position: relative;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  color: #f3f4f6;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text);
+  font-family: var(--ff-ui);
+  background: var(--bg-base);
 }
 
-.sim-hud {
-  position: absolute;
-  padding: 10px 14px;
-  background: rgba(14, 16, 26, 0.75);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.55;
+/* ── Overlay panels share a glassless instrument frame ─────────────────── */
+.sim-viewer .panel {
+  background: var(--bg-panel);
   z-index: 5;
   pointer-events: none;
-  min-width: 180px;
 }
 
-.sim-hud-tl { top: 16px; left: 16px; }
-.sim-hud-tr { top: 16px; right: 16px; min-width: 240px; }
-.sim-hud-bl { bottom: 16px; left: 16px; max-width: 340px; }
+/* ── Top status strip ──────────────────────────────────────────────────── */
+.sim-statusbar {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 9px 16px;
+}
+.sim-statusbar b { color: var(--text); font-weight: 700; }
+.sim-status-id b { color: var(--cyan); }
+.sim-status-scn { color: var(--text-2); }
+.sim-status-spacer { flex: 1; }
+.sim-status-cell { color: var(--text-mute); }
+.sim-status-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--amber);
+}
 
-.sim-hud span { color: #a5b4fc; margin-right: 6px; }
-.sim-hud-muted { color: #888; font-size: 11px; margin-top: 4px; }
-.sim-hud-empty { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+/* ── Right telemetry cluster ───────────────────────────────────────────── */
+.sim-cluster {
+  position: absolute;
+  top: calc(var(--space-4) + 56px);
+  right: var(--space-4);
+  width: 260px;
+  padding: var(--space-5);
+}
+.sim-cluster-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+.sim-latency { font-size: 10.5px; color: var(--cyan); }
 
+/* reticle gauge */
+.sim-reticle {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 4px auto var(--space-4);
+}
+.sim-reticle svg { position: absolute; inset: 0; }
+.sim-reticle-read {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.sim-reticle-big {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--amber);
+  line-height: 1;
+}
+.sim-reticle-read .mono-label { margin-top: 6px; }
+
+/* readout grid */
+.sim-readouts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+.sim-readout {
+  padding: 10px 12px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.sim-readout-v {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 3px;
+}
+.sim-readout-v--cyan { color: var(--cyan); }
+.sim-readout-v--amber { color: var(--amber); }
+.sim-readout-v--fail { color: var(--fail); }
+.sim-readout-unit {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-mute);
+  margin-left: 4px;
+}
+
+/* ── Bottom metric bars + verdict ──────────────────────────────────────── */
+.sim-bottombar {
+  position: absolute;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+}
+.sim-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 280px;
+}
 .sim-metric {
   display: grid;
-  grid-template-columns: 72px 1fr 32px;
-  gap: 8px;
+  grid-template-columns: 84px 1fr 28px;
+  gap: var(--space-3);
   align-items: center;
-  margin: 4px 0;
 }
-
-.sim-metric-label {
-  color: #a5b4fc;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
+.sim-metric-label { color: var(--text-2); }
 .sim-metric-track {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
+  height: 4px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
-
 .sim-metric-fill {
   height: 100%;
-  transition: width 120ms linear;
+  transition: width var(--t-fast) linear;
 }
-
+.sim-metric-fill--pass { background: var(--pass); }
+.sim-metric-fill--warn { background: var(--amber); }
+.sim-metric-fill--fail { background: var(--fail); }
 .sim-metric-value {
   font-size: 11px;
   text-align: right;
-  color: #e5e7eb;
+  color: var(--text);
 }
 
-.sim-verdict {
+.sim-verdict-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: var(--space-6);
+  border-left: 1px solid var(--border);
+}
+.sim-verdict-chip {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  padding: 6px 14px;
+}
+
+/* ── Events log ────────────────────────────────────────────────────────── */
+.sim-events {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  padding: 14px 22px;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  border-radius: 10px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  z-index: 6;
-  pointer-events: none;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  max-width: 320px;
+  padding: var(--space-4);
 }
-
-.verdict-pass {
-  background: linear-gradient(180deg, rgba(74, 222, 128, 0.22), rgba(74, 222, 128, 0.1));
-  color: #6ee7a6;
-  border: 1px solid rgba(74, 222, 128, 0.5);
-}
-.verdict-fail {
-  background: linear-gradient(180deg, rgba(248, 113, 113, 0.25), rgba(248, 113, 113, 0.1));
-  color: #fca5a5;
-  border: 1px solid rgba(248, 113, 113, 0.55);
-}
-.verdict-inconclusive {
-  background: linear-gradient(180deg, rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.08));
-  color: #fde68a;
-  border: 1px solid rgba(250, 204, 21, 0.5);
-}
-
+.sim-events-head { margin-bottom: var(--space-2); }
 .sim-event {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  font-family: var(--ff-mono);
   font-size: 11.5px;
-  padding: 2px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
 }
-.sim-event span { color: #a5b4fc; margin-right: 6px; }
+.sim-event:last-child { border-bottom: none; }
+.sim-event-t { color: var(--cyan); }
+.sim-event-type { color: var(--text); }
+.sim-event-detail { color: var(--text-2); }
 
+/* ── Empty state (no frame yet) ────────────────────────────────────────── */
+.sim-hud-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-8);
+}
+.sim-hud-status { color: var(--text-2); font-size: 12px; }
+
+/* ── Back button ───────────────────────────────────────────────────────── */
 .sim-back-btn {
   position: absolute;
-  top: 16px;
+  top: var(--space-4);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
-  background: rgba(14, 16, 26, 0.75);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  color: #a5b4fc;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 12px;
-  padding: 6px 14px;
-  cursor: pointer;
   pointer-events: all;
-  transition: background 120ms, color 120ms;
+  background: var(--scrim);
 }
-.sim-back-btn:hover {
-  background: rgba(108, 99, 255, 0.25);
-  color: #e0e7ff;
-}
+.sim-back-icon { transform: rotate(180deg); }
 
+/* ── Error banner ──────────────────────────────────────────────────────── */
 .sim-error {
   position: absolute;
-  top: 16px;
+  top: calc(var(--space-4) + 56px);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(239, 68, 68, 0.16);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.45);
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-size: 13px;
   z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 14px;
+  border-left: 2px solid var(--fail);
+}
+.sim-error-icon { color: var(--fail); }
+.sim-error-msg { color: var(--fail); }
+
+/* ── Responsive: stack telemetry below on narrow viewports ─────────────── */
+@media (max-width: 900px) {
+  .sim-statusbar { flex-wrap: wrap; gap: var(--space-3); }
+  .sim-status-spacer { display: none; }
+  .sim-cluster { width: 220px; }
+  .sim-bottombar { flex-direction: column; align-items: stretch; gap: var(--space-4); }
+  .sim-verdict-wrap { border-left: none; padding-left: 0; flex-direction: row; }
+  .sim-events { display: none; }
 }

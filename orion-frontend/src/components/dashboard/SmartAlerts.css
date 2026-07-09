@@ -1,0 +1,83 @@
+/* ══ SmartAlerts — inline alert-banner stack (ORION_UI_DESIGN.md §9.11) ══ */
+.smart-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.smart-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-left-width: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* severity accents — left border + icon/title color */
+.alert--info { border-left-color: var(--cyan); }
+.alert--warn { border-left-color: var(--amber); }
+.alert--error { border-left-color: var(--fail); }
+.alert--success { border-left-color: var(--pass); }
+
+.smart-alert-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.alert--warn .smart-alert-icon { color: var(--amber); }
+.alert--error .smart-alert-icon { color: var(--fail); }
+
+.smart-alert-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.smart-alert-title { color: var(--text-2); }
+.alert--info .smart-alert-title { color: var(--cyan); }
+.alert--warn .smart-alert-title { color: var(--amber); }
+.alert--error .smart-alert-title { color: var(--fail); }
+.alert--success .smart-alert-title { color: var(--pass); }
+
+.smart-alert-body p {
+  font-family: var(--ff-ui);
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.smart-alert-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-mute);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  transition: color var(--t-fast) ease;
+}
+.smart-alert-close:hover { color: var(--text); }
+
+/* empty state */
+.smart-alerts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+}
+.smart-alerts-empty p {
+  color: var(--text-mute);
+  font-family: var(--ff-ui);
+  font-size: 13px;
+  max-width: 340px;
+}

@@ -1,28 +1,90 @@
+/* ORION — Feature cards. Instrument panels; border-strong on hover (no lift/glow).
+   ORION_UI_DESIGN.md §11.1 / §9.3. Tokens only. */
+
+.features-head {
+  max-width: 1280px;
+  margin: 0 auto var(--space-12);
+}
+.features-idx {
+  display: block;
+  color: var(--amber);
+  margin-bottom: var(--space-3);
+}
+.features-title {
+  font-family: var(--ff-disp);
+  font-weight: 700;
+  font-size: var(--font-3xl);
+  letter-spacing: 0.01em;
+  color: var(--text);
+  margin-bottom: var(--space-3);
+}
+.features-title .em { color: var(--amber); }
+.features-sub {
+  font-family: var(--ff-ui);
+  font-weight: 300;
+  font-size: var(--font-lg);
+  color: var(--text-2);
+  max-width: 560px;
+}
+
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+  gap: 14px;
 }
 
 .feature-card {
-  text-align: center;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--t-base) var(--ease);
 }
+.feature-card:hover { border-color: var(--border-strong); }
 
-.feature-icon {
-  font-size: 2.5rem;
-  margin-bottom: var(--space-4);
-  filter: drop-shadow(0 0 12px var(--accent-glow));
+.feature-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
 }
+.feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--amber);
+}
+.feature-no { color: var(--text-mute); }
 
 .feature-title {
-  font-size: var(--font-xl);
-  font-weight: 700;
-  margin-bottom: var(--space-3);
+  font-family: var(--ff-disp);
+  font-weight: 600;
+  font-size: var(--font-lg);
+  letter-spacing: 0.02em;
+  color: var(--text);
+  margin-bottom: var(--space-2);
+}
+.feature-desc {
+  font-family: var(--ff-ui);
+  font-size: var(--font-sm);
+  color: var(--text-2);
+  line-height: 1.65;
+  flex: 1;
 }
 
-.feature-desc {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-  line-height: 1.7;
+.feature-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.feature-weight {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cyan);
 }

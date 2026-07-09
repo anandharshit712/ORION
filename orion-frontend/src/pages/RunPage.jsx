@@ -1,23 +1,26 @@
-// ORION — RunPage  [P1]
-// Route: /dashboard/runs/:id
-// Single run detail — scores, event log, link to SimulationViewer
-// TODO [P1]: Implement this page.
+// ORION — RunPage  [stub, deferred Phase 2.5 deterministic replay]
+// Route: /dashboard/runs/:id — single run detail (scores, event log, replay link).
+// Visual placeholder in the Mission Control language; data wiring out of scope.
 
-import React from 'react';
-import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
+import Icon from '../components/common/Icon';
 import './RunPage.css';
 
-/**
- * RunPage — Single run detail — scores, event log, link to SimulationViewer
- */
 export default function RunPage() {
-  const { user } = useAuth();
-
   return (
-    <div className="RunPage">
-      <h1>RunPage</h1>
-      {/* TODO [P1]: Implement RunPage */}
-      <p style={{ color: '#888' }}>RunPage — not yet implemented [P1]</p>
+    <div className="runpage" id="run-page">
+      <div className="panel runpage-card">
+        <span className="mono-label">Run Detail · deferred</span>
+        <h1>Deterministic Replay</h1>
+        <p>
+          Per-run scores, event log, and frame-accurate replay surface here once the
+          replay engine (frame-hash determinism, Phase 2.5) lands. The visual language
+          is ready; data wiring is tracked separately.
+        </p>
+        <Link to="/dashboard" className="btn btn-ghost btn-sm">
+          <Icon name="chevron-right" size={14} className="flip" /> Back to Dashboard
+        </Link>
+      </div>
     </div>
   );
 }

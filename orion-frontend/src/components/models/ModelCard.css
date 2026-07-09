@@ -1,4 +1,46 @@
-/* ORION — ModelCard styles  [Phase stub] */
-.ModelCard {
-  /* TODO: implement styles */
+/* ══ ModelCard — model panel (§11.4) ═══════════════════════════════════ */
+.model-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
 }
+.model-card.is-clickable { cursor: pointer; transition: border-color var(--t-base) ease; }
+.model-card.is-clickable:hover { border-color: var(--border-strong); }
+
+.model-card-head { display: flex; align-items: center; justify-content: space-between; }
+.model-mark {
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+.model-name {
+  font-family: var(--ff-disp);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  margin-top: var(--space-1);
+}
+.model-id {
+  font-size: 11px;
+  color: var(--cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-meta {
+  display: flex;
+  gap: var(--space-6);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.model-meta-cell { display: flex; flex-direction: column; gap: 3px; }
+.model-meta-cell .num { font-size: 13px; color: var(--text); }
+.model-score { color: var(--amber); font-weight: 700; }
