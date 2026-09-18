@@ -1,5 +1,5 @@
 // ORION — ModelCard
-// Model panel (ORION_UI_DESIGN.md §11.4): name, type chip (built-in/uploaded/docker),
+// Model panel (docs/UI_DESIGN.md §11.4): name, type chip (built-in/uploaded/docker),
 // mono id, created date in .num. Presentational only — no data wiring.
 
 import Icon from '../common/Icon';

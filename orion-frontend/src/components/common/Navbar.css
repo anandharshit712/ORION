@@ -1,5 +1,5 @@
 /* ORION — Navbar (landing). Transparent over hero → scrim+blur on scroll.
-   ORION_UI_DESIGN.md §11.1. Tokens only. */
+   docs/UI_DESIGN.md §11.1. Tokens only. */
 
 .navbar {
   position: fixed;

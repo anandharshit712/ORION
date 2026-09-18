@@ -2,7 +2,7 @@
 // Route: /dashboard/batches/:id
 // Batch detail — live progress counts, thin progress bar, status chip,
 // composite-mean / collision-rate readouts. Visual restyle to "Mission
-// Control" (ORION_UI_DESIGN.md §11.4). useBatchStatus usage unchanged.
+// Control" (docs/UI_DESIGN.md §11.4). useBatchStatus usage unchanged.
 
 import React from 'react';
 import { useParams } from 'react-router-dom';

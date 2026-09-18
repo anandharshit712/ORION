@@ -1,5 +1,5 @@
 // ORION — AlertBanner
-// Inline alert / toast (ORION_UI_DESIGN.md §9.11): 2px left accent border colored
+// Inline alert / toast (docs/UI_DESIGN.md §9.11): 2px left accent border colored
 // by severity, --bg-panel surface, mono micro-label title + Saira body.
 // Presentational only — no data wiring.
 

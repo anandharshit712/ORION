@@ -1,6 +1,6 @@
 // ORION — Icon set
 // Single inline-SVG icon source. Stroke-based, 1.5px, currentColor, sharp joints.
-// No emoji as UI icons (ORION_UI_DESIGN.md §7). Add new icons here + list in the doc.
+// No emoji as UI icons (docs/UI_DESIGN.md §7). Add new icons here + list in the doc.
 
 const ICONS = {
   overview: (

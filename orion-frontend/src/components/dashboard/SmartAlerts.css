@@ -1,4 +1,4 @@
-/* ══ SmartAlerts — inline alert-banner stack (ORION_UI_DESIGN.md §9.11) ══ */
+/* ══ SmartAlerts — inline alert-banner stack (docs/UI_DESIGN.md §9.11) ══ */
 .smart-alerts {
   display: flex;
   flex-direction: column;

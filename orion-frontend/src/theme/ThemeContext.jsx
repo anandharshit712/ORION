@@ -1,6 +1,6 @@
 // ORION — ThemeContext
 // data-theme on <html> ∈ {dark, light}. Dark default. Persisted to localStorage
-// key `orion-theme` (UI preference only — never auth/PII). See ORION_UI_DESIGN.md §8.
+// key `orion-theme` (UI preference only — never auth/PII). See docs/UI_DESIGN.md §8.
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 

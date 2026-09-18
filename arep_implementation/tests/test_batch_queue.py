@@ -4,7 +4,7 @@ Async batch queue tests (P1.3 SaaS).
 Runs Celery in ``task_always_eager`` mode so tasks execute inline inside the
 TestClient request — no external Redis broker required.
 
-Covers the acceptance criteria from ``ORION_SAAS_ROADMAP.md`` § 1.3:
+Covers the acceptance criteria from ``docs/ROADMAP.md`` (async batch queue, shipped):
   - POST /api/runs/batch returns immediately with 202 + batch_id
   - Closing the connection does not stop execution (eager == complete on return)
   - Credits are deducted before execution; refunded on individual failure

@@ -1,244 +1,134 @@
-# AREP - Autonomous Robustness Evaluation Platform
+# ORION — Autonomous Robustness Evaluation Platform
 
-Complete implementation of deterministic, statistically rigorous evaluation framework for autonomous driving systems.
+Deterministic, statistically rigorous, CPU-only evaluation platform for autonomous-driving
+**planning and control** models. Submit a model, pick a scenario suite, get back a safety
+report: composite score, four sub-scores, pass/fail verdict — reproducible from a seed.
 
-## Project Structure
+**CARLA is a simulator. ORION is a testing laboratory.** No GPU, no rendering, no install —
+ORION answers "did my new model version regress on safety?" with confidence intervals.
+Today it is **not** a perception testbed (no LiDAR/camera/radar — a structured sensor layer
+is Phase 6, after the platform is complete) and **not** a certification tool. See
+`docs/ROADMAP.md` § Honest Positioning.
 
-This project is separated into two main parts:
+Platform name = **ORION**. Python package = **`arep`** — imports are always `from arep.*`.
 
-### 1. Implementation Specification Document
-**File**: `AREP_IMPLEMENTATION_SPECIFICATION.md`
+---
 
-This document provides complete specifications for what to build:
-- Architecture and design decisions
-- Algorithms and mathematical models
-- Data structures and schemas
-- Requirements and constraints
-- **Does NOT contain code implementations**
+## Documentation
 
-### 2. Code Implementation
-**Directory**: `arep_implementation/`
+| Document | What it governs |
+| --- | --- |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **What to build next and how.** Phases 0–6, defect register (D-01…D-13), per-phase implementation specs, risks, timeline. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **Scenario taxonomy + 4-layer execution architecture** and the integration contract between them. |
+| [docs/UI_DESIGN.md](docs/UI_DESIGN.md) | **All frontend visual work.** The "Mission Control" design system — tokens, type, components, theming, page specs. |
+| [docs/PROJECT_IDEA.pdf](docs/PROJECT_IDEA.pdf) | The detailed product idea: exec summary, market, status, business model. Start here for context. |
+| [docs/MARKET.md](docs/MARKET.md) | 19-competitor analysis, ratings, the four moats. |
+| [docs/reference/](docs/reference/) | External research. Background only — constrains nothing. |
+| [docs/archive/](docs/archive/) | Superseded originals. Historical; never cite as authority. |
+| [CLAUDE.md](CLAUDE.md) | Conventions and hard rules enforced while writing code in this repo. |
 
-Python implementation of all modules:
+---
+
+## Repository Layout
 
 ```
-arep_implementation/
-├── arep/                       # Main package
-│   ├── core/                  # Core simulation components
-│   │   ├── state.py          ✓ Complete implementation
-│   │   ├── physics.py        ✓ Complete implementation
-│   │   ├── action.py         ✓ Complete implementation
-│   │   ├── collision.py      # To be implemented
-│   │   ├── observation.py    # To be implemented
-│   │   └── ttc.py           # To be implemented
-│   │
-│   ├── simulation/           # Simulation engine
-│   │   ├── engine.py        # To be implemented
-│   │   ├── world.py         # To be implemented
-│   │   └── termination.py   # To be implemented
-│   │
-│   ├── scenario/            # Scenario system
-│   │   ├── schema.py       # To be implemented
-│   │   ├── parser.py       # To be implemented
-│   │   └── validator.py    # To be implemented
-│   │
-│   ├── models/             # Model interface
-│   │   ├── interface.py   ✓ Complete implementation (with example)
-│   │   └── local_executor.py  # To be implemented
-│   │
-│   └── evaluation/         # Metrics and scoring
-│       ├── collector.py    # To be implemented
-│       └── safety.py       # To be implemented
-│
-├── tests/                  # Test suite
-│   ├── unit/              # Unit tests
-│   └── integration/       # Integration tests
-│
-└── scenarios/             # Example scenario definitions
-    └── basic/            # Basic scenarios (YAML)
+ORION/
+├── arep_implementation/     # Python backend (the `arep` package)
+│   ├── arep/
+│   │   ├── core/            # physics, state, collision, observation, action, TTC
+│   │   ├── simulation/      # SimulationEngine, WorldManager, NPC behavior trees
+│   │   ├── scenario/        # YAML parser, schema, parameterizer, validator
+│   │   ├── models/          # ModelInterface + resolver, sandbox, HTTP/Docker adapters
+│   │   ├── evaluation/      # safety, compliance, stability, reactivity, composite
+│   │   ├── execution/       # EvaluationRunner (batch pipeline)
+│   │   ├── statistics/      # StatisticalAggregator (Wilson / t-dist CIs)
+│   │   ├── worker/          # Celery tasks + app (async batch queue)
+│   │   ├── api/             # FastAPI app, routes, auth, WS, admin, billing
+│   │   ├── database/        # SQLAlchemy models, repositories, connection
+│   │   └── config/          # config loading + fail-fast secret/DB validation
+│   ├── config/default.yaml  # master config — don't hardcode these values in code
+│   └── tests/               # pytest suite
+├── scenarios/               # 18-scenario library, v2 format: lon/ lat/ int/ vru/ emg/ mlt/
+├── orion-frontend/          # React 18 + Vite 5 + R3F dashboard and live viewer
+├── orion-sdk/               # `orion` CLI + OrionClient (model upload, runs, keys)
+├── infrastructure/          # docker-compose, .env.example
+├── design/                  # approved UI sample render
+└── docs/                    # all project documentation
 ```
 
-## Completed Implementations
+---
 
-### ✓ core/state.py
-Complete state representation system:
-- `Vector2D`: 2D vector with deterministic operations
-- `VehicleState`: Complete vehicle state with physics properties
-- `WorldState`: Full simulation world state
-- Enums: `ObjectType`, `TrafficLightState`, `TerminationReason`
+## Quickstart
 
-**Key Features**:
-- Bounding box computation for collision detection
-- Serialization to/from dictionaries and JSON
-- Deep copying for immutability
-- Velocity vector computations
-
-### ✓ core/physics.py
-Deterministic bicycle model physics engine:
-- Fixed timestep integration (dt = 0.02s)
-- Bicycle model kinematics
-- Constraint enforcement
-- Stopping distance/time calculations
-
-**Key Features**:
-- Explicit Euler integration
-- Angle wrapping to [-π, π]
-- Numerical stability with epsilon tolerance
-- Action validation
-
-### ✓ core/action.py
-Control action representation:
-- Normalized control inputs (steering, throttle, brake)
-- Validation and clamping
-- Conversion to physical values
-- Serialization support
-
-**Key Features**:
-- Range validation in __post_init__
-- Utility constructors (zero, emergency_brake)
-- Array conversion for ML models
-
-### ✓ models/interface.py
-Abstract model interface with example:
-- `ModelInterface`: Abstract base class defining contract
-- `PIDController`: Complete example implementation
-
-**Key Features**:
-- Clear interface contract
-- State save/restore for replay
-- Metadata for documentation
-- Working PID controller example
-
-## How to Use
-
-### 1. Read the Specification
-Start with `AREP_IMPLEMENTATION_SPECIFICATION.md` to understand:
-- System architecture
-- Design decisions
-- Requirements and constraints
-
-### 2. Implement Remaining Modules
-Follow the specification to implement:
-- Collision detection (core/collision.py)
-- Observation generation (core/observation.py)
-- Simulation engine (simulation/engine.py)
-- Scenario system (scenario/*.py)
-- Metrics (evaluation/*.py)
-
-### 3. Follow the Patterns
-Use completed modules as reference:
-- Dataclasses for data structures
-- Type hints throughout
-- Docstrings with Args/Returns
-- Deterministic operations
-- Comprehensive validation
-
-## Development Workflow
-
-### Setup
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# Backend (from arep_implementation/)
+python3 -m venv venv && source venv/bin/activate
+pip install -e ".[dev,api]"
+python -m uvicorn arep.api.app:app --reload --port 8000
 
-# Install dependencies
-pip install numpy>=1.26.0
+# Frontend (from orion-frontend/)
+npm install && npm run dev
 
-# Install package in development mode
-cd arep_implementation
-pip install -e .
+# Everything at once (from repo root)
+./start.sh          # Linux/Mac
+start.bat           # Windows cmd
+./start.ps1         # Windows PowerShell (-NoReload to disable uvicorn reload)
 ```
 
-### Testing
-```bash
-# Run unit tests
-pytest tests/unit/
-
-# Run determinism tests
-pytest tests/determinism/
-
-# Run specific test
-pytest tests/unit/test_physics.py -v
-```
-
-### Adding a New Module
-
-1. **Read specification** for that module in the spec document
-2. **Create file** in appropriate directory
-3. **Implement** following patterns from completed modules
-4. **Add tests** in tests/ directory
-5. **Validate** determinism and correctness
-
-## Key Design Principles
-
-### Determinism First
-- Fixed timestep only
-- No wall clock dependency
-- Seeded randomness only
-- Stable iteration orders
-- Version-locked dependencies
-
-### Clean Architecture
-- Pure functions where possible
-- Immutable data structures (copy for mutation)
-- Clear separation of concerns
-- No circular dependencies
-
-### Complete Documentation
-- Every public function has docstring
-- Complex algorithms explained
-- Type hints throughout
-- Examples in docstrings
-
-## Next Steps
-
-Priority order for implementation:
-
-1. **core/collision.py** - OBB + SAT collision detection
-2. **core/observation.py** - Observation generation from WorldState
-3. **simulation/engine.py** - Main simulation loop
-4. **scenario/parser.py** - YAML scenario parsing
-5. **evaluation/safety.py** - Safety metrics computation
-6. **execution/batch.py** - Batch execution for statistics
-
-Each module specification is in the Implementation Specification Document.
-
-## Example Usage (Future)
+### Run an evaluation
 
 ```python
-from arep.simulation.engine import SimulationEngine
-from arep.models.interface import PIDController
-from arep.scenario.parser import ScenarioParser
+from arep.execution.runner import EvaluationRunner
 
-# Load scenario
-parser = ScenarioParser()
-scenario = parser.parse_file("scenarios/basic/highway_merge.yaml")
-
-# Create model
-model = PIDController(kp=1.0, ki=0.1, kd=0.5)
-
-# Run simulation
-engine = SimulationEngine()
-world = engine.initialize(scenario, seed=42)
-world = engine.run_simulation(world, model, max_steps=3000)
-
-# Check results
-print(f"Collision: {world.has_collision}")
-print(f"Final time: {world.sim_time}s")
+runner = EvaluationRunner()
+result = runner.run_batch(
+    scenario_path="scenarios/lon/LON-003_emergency_stop.yaml",
+    model=MyModel(),
+    num_runs=100,
+    master_seed=42,
+)
+print(result.aggregated.to_dict())
 ```
 
-## Contributing
+Custom models subclass `ModelInterface` (`predict(observation) -> Action`, `reset()`) and are
+always invoked through `ModelWrapper`. Built-in models: `EmergencyBrake`, `ConstantAction`,
+`SimpleLaneKeep`, `Random`.
 
-1. Follow PEP 8 style guide
-2. Add type hints to all functions
-3. Write docstrings for public APIs
-4. Include unit tests
-5. Verify determinism tests pass
+### Tests and linting
 
-## License
+```bash
+pytest                                      # full suite
+pytest tests/test_integration.py -v         # one file
+pytest --cov=arep --cov-report=term-missing
+black arep/ tests/ && ruff check arep/ tests/ && mypy arep/
+```
 
-[To be determined]
+---
 
-## Contact
+## Status
 
-[To be determined]
+Working: deterministic simulation core (bicycle + Pacejka physics, SAT collision, PCG64
+seeding), four evaluation metrics with Wilson/t-distribution CIs, 18 scenarios across all six
+categories, live WebSocket streaming to a 3D viewer, multi-tenancy with org-scoped API keys,
+model submission (SDK + Docker), async batch queue on Celery + Redis, and a full React
+dashboard.
+
+**Current phase: 0 — Security & Score Integrity.** A production-readiness review found 13
+defects, four of them critical; all revenue work is blocked until they are closed. 0.1
+(secrets hardening) is done, 0.2 (model sandboxing) is next. Full register and ordering:
+[docs/ROADMAP.md](docs/ROADMAP.md).
+
+---
+
+## Conventions That Bite
+
+- **Determinism is non-negotiable**: `dt = 0.02` fixed, no `time.time()` / `datetime.now()` /
+  `random` inside simulation code, all randomness through `RandomManager`.
+- **Never mutate `WorldState` or `VehicleState` in place** — `.copy()` first.
+- **Never reorder the simulation step**: validate → physics → NPCs → lights → collision →
+  termination → time.
+- **Never hardcode secrets or fall back to defaults** — go through `arep/config/validate.py`.
+- **Frontend**: all HTTP through `src/services/api.js`, tokens only via `AuthContext`,
+  tokens-only styling per `docs/UI_DESIGN.md`.
+
+The complete list lives in [CLAUDE.md](CLAUDE.md) § 12.

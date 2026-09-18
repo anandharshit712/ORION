@@ -1,6 +1,6 @@
 // ORION — Sidebar
 // Dashboard sidebar: numbered nav (Mission Control), credits gauge, user chip.
-// See ORION_UI_DESIGN.md §9.6. Preserves ids: dashboard-sidebar, sidebar-<key>, sidebar-logout.
+// See docs/UI_DESIGN.md §9.6. Preserves ids: dashboard-sidebar, sidebar-<key>, sidebar-logout.
 
 import { useAuth } from '../../context/AuthContext';
 import Icon from './Icon';

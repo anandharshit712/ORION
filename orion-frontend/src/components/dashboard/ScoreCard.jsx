@@ -1,5 +1,5 @@
 // ORION — ScoreCard  [P1]
-// Single metric score card: metric-panel pattern (ORION_UI_DESIGN.md §9.4, §11.4).
+// Single metric score card: metric-panel pattern (docs/UI_DESIGN.md §9.4, §11.4).
 // Big mono value (amber for composite, else --text), optional ▲/▼ delta, thin progress bar.
 // Visual styling per Mission Control; data wiring tracked separately.
 

@@ -1,5 +1,5 @@
 // ORION — PlanCard
-// Plan panel (ORION_UI_DESIGN.md §11.4): mono .num price, feature list, CTA .btn.
+// Plan panel (docs/UI_DESIGN.md §11.4): mono .num price, feature list, CTA .btn.
 // .panel--live marks the current/featured plan. Presentational only.
 
 import Icon from '../common/Icon';

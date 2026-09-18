@@ -1,6 +1,6 @@
 // ORION — SettingsPage  [P1]
 // Route: /dashboard/settings
-// Grouped instrument panels (ORION_UI_DESIGN.md §11.4): Profile, Organization,
+// Grouped instrument panels (docs/UI_DESIGN.md §11.4): Profile, Organization,
 // API Keys, Theme. Visual restyle only — profile/org read existing `user`
 // fields; API-key data wiring is out of scope (renders §9.12 empty state).
 

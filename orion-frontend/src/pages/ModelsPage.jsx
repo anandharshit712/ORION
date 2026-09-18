@@ -1,7 +1,7 @@
 // ORION — ModelsPage  [P1]
 // Route: /dashboard/models
 // List org models and upload new model via SDK or Docker.
-// Visual restyle to "Mission Control" (ORION_UI_DESIGN.md §11.4). Data wiring
+// Visual restyle to "Mission Control" (docs/UI_DESIGN.md §11.4). Data wiring
 // is out of scope — the model list renders the §9.12 empty state until wired.
 
 import React from 'react';

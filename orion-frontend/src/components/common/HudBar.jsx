@@ -1,5 +1,5 @@
 // ORION — HudBar
-// Sticky top status strip for authed surfaces. See ORION_UI_DESIGN.md §6.1.
+// Sticky top status strip for authed surfaces. See docs/UI_DESIGN.md §6.1.
 
 import { useState, useEffect } from 'react';
 import { BUILD_HASH } from '../../utils/constants';

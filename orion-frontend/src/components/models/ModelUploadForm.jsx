@@ -1,5 +1,5 @@
 // ORION — ModelUploadForm
-// Instrument-frame card (ORION_UI_DESIGN.md §11.4): multipart upload + Docker
+// Instrument-frame card (docs/UI_DESIGN.md §11.4): multipart upload + Docker
 // register, segmented control to switch modes, .field inputs. Visual-only:
 // optional onSubmit prop receives the assembled payload; no api.js wiring here.
 

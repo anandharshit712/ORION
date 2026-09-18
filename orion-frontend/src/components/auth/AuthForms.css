@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
    ORION — Auth surface ("Mission Control" instrument frame)
-   Spec: ORION_UI_DESIGN.md §11.2 · Sample: design/sample-mission-control.html §02
+   Spec: docs/UI_DESIGN.md §11.2 · Sample: design/sample-mission-control.html §02
    Two-column frame: left .panel aside (telemetry) + right .panel--live form card.
    Tokens only. Reuses global panel, panel--live, btn, field, chip, mono-label.
    ══════════════════════════════════════════════════════════════════════════ */

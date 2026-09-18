@@ -1,6 +1,6 @@
 // ORION — BillingPage  [P1]
 // Route: /dashboard/billing
-// Plans + usage, gated behind beta `billing_enabled` (ORION_UI_DESIGN.md §11.4).
+// Plans + usage, gated behind beta `billing_enabled` (docs/UI_DESIGN.md §11.4).
 // Visual restyle only. The beta gate reads `billing_enabled` defensively off the
 // authed user (off until the backend flag is wired); plan data is presentational
 // scaffold (no api.js wiring invented).

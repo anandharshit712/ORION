@@ -1,7 +1,7 @@
 // ORION — SearchPage  [P2]
 // Route: /dashboard/search
 // Adversarial search — instrument form + results table (§9.7).
-// Visual restyle to "Mission Control" (ORION_UI_DESIGN.md §11.4). Data wiring
+// Visual restyle to "Mission Control" (docs/UI_DESIGN.md §11.4). Data wiring
 // out of scope — results render the §9.12 empty state until wired.
 
 import React, { useState } from 'react';

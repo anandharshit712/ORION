@@ -1,5 +1,5 @@
 /* ORION — Landing hero. Two-column: pitch + live instrument cluster.
-   ORION_UI_DESIGN.md §11.1 / §6.6. Tokens only — no glow, no float, no 3D. */
+   docs/UI_DESIGN.md §11.1 / §6.6. Tokens only — no glow, no float, no 3D. */
 
 .hero {
   position: relative;

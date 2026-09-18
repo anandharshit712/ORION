@@ -1,11 +1,11 @@
 # ORION UI Design System — "Mission Control"
 
 > **Status:** v1.0 · Approved 2026-06-25 · **Governing document for ALL frontend work.**
-> **Reference artifact:** `design/sample-mission-control.html` (the approved visual sample — open in a browser).
+> **Reference artifact:** `../design/sample-mission-control.html` (the approved visual sample — open in a browser).
 >
 > **Authority:** Every change to `orion-frontend/` MUST conform to this document. Nothing visual ships outside the rules here unless the user explicitly authorizes a deviation. If a request and this doc conflict, stop and ask. When implementation detail is ambiguous, this doc + the sample file win.
 >
-> Companion: `ORION_UI_REDESIGN_PLAN.md` (how the migration is sequenced). CLAUDE.md §9 points here.
+> **Migration: COMPLETE** (Phases A–I, 2026-06-26). The codebase conforms: tokens, theming, icon set, app shell, and every page. Production build green; grep guards clean (no purple, no `glass-card`, no Inter, `fetch` only in `api.js`, `localStorage` only `orion_token`/`orion-theme`); legacy token aliases removed. The sequencing plan that got us here is archived at `docs/archive/ORION_UI_REDESIGN_PLAN.md` — historical, not binding. CLAUDE.md §9 points here.
 
 ---
 
@@ -13,7 +13,7 @@
 
 - Building a new screen/component → read §1–§10 (the system) then find the closest spec in §11.
 - Touching colors, type, spacing, radius → use the tokens in §3–§5 **only**. Never hardcode a hex, px font size, or one-off radius.
-- Unsure what something looks like → open `design/sample-mission-control.html`; it is the canonical render of this spec.
+- Unsure what something looks like → open `../design/sample-mission-control.html`; it is the canonical render of this spec.
 - Adding a token / component pattern not covered here → add it to this doc in the same edit (CLAUDE.md §0 standing instruction).
 
 ---
@@ -407,13 +407,13 @@ const palette = { amber: readVar('--amber'), cyan: readVar('--cyan'),
 - **Tokens** live in `index.css` under `[data-theme="dark"]` / `[data-theme="light"]` + `:root` (font/space/radius/motion). One source of truth.
 - Global utilities in `index.css`: `.btn*`, `.field`, `.panel`/`.panel--live`, `.data-table`, `.chip*`, `.mono-label`, `.num`, `.spec-strip`, grid-backdrop, animations.
 - Per-component styling co-located (`Component.css`), referencing tokens only. **No hardcoded colors/sizes** — token or scale variable always.
-- During migration only, a clearly-commented legacy-alias block may map old token names (`--accent-primary`→`--amber`, `--bg-primary`→`--bg-base`, `--text-primary`→`--text`, `.glass-card`→panel styles) so un-migrated files keep rendering. The alias block is deleted in the final migration phase (`ORION_UI_REDESIGN_PLAN.md` Phase I). New code must use canonical names only.
+- The legacy token-alias block used during migration (`--accent-primary`→`--amber`, `--bg-primary`→`--bg-base`, `--text-primary`→`--text`, `.glass-card`→panel styles) has been deleted. Canonical names only — do not reintroduce aliases.
 
 ---
 
 ## 14. Governance — the rules of this doc
 
-1. **This doc + `design/sample-mission-control.html` are the source of truth** for all `orion-frontend/` visual work.
+1. **This doc + `../design/sample-mission-control.html` are the source of truth** for all `orion-frontend/` visual work.
 2. Frontend changes that introduce colors, fonts, radii, components, or page layouts **must** use the tokens/components/specs here. No ad-hoc styling.
 3. **Out of scope = don't do it.** Don't add features, routes, libraries, or aesthetics not described here unless the user explicitly asks. (Reaffirms CLAUDE.md §9.)
 4. New pattern needed → add it to this doc in the same change (with tokens + spec), then implement.

@@ -1,5 +1,5 @@
 // ORION — UsageBar
-// Credits-used-vs-total horizontal bar (ORION_UI_DESIGN.md §11.4): track --bg-inset,
+// Credits-used-vs-total horizontal bar (docs/UI_DESIGN.md §11.4): track --bg-inset,
 // fill --cyan, mono .num labels. Presentational only — no data wiring.
 
 import './UsageBar.css';

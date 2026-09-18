@@ -1,5 +1,5 @@
 /* ORION — Stats. Big mono numerals on the global grid backdrop, spec-strip style.
-   ORION_UI_DESIGN.md §11.1 / §6.10. Tokens only. */
+   docs/UI_DESIGN.md §11.1 / §6.10. Tokens only. */
 
 .stats-section {
   padding: 0 var(--space-6) var(--space-20);

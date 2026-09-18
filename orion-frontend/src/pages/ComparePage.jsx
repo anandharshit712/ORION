@@ -1,7 +1,7 @@
 // ORION — ComparePage  [P2]
 // Route: /dashboard/compare
 // Side-by-side model comparison via the shared ComparisonTable (§9.7).
-// Visual restyle to "Mission Control" (ORION_UI_DESIGN.md §11.4). Data wiring
+// Visual restyle to "Mission Control" (docs/UI_DESIGN.md §11.4). Data wiring
 // out of scope — the selector is a styled instrument; ComparisonTable owns its
 // own empty state until models are wired in.
 

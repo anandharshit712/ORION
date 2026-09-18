@@ -19,15 +19,15 @@ Edits targeted — only update what changed, don't rewrite unrelated sections.
 
 ### Governing Documents
 
-Two roadmap documents exist. Know the difference:
+All project documentation lives in `docs/`. Three documents govern; each owns one domain, and they do not overlap:
 
-- **`ORION_SAAS_ROADMAP.md`** (v2.0) — governs **priority ordering**. What to build next. When two tasks compete, this doc wins. Source of truth for Phase 0–5 scope, the known-defect register (D-01…D-13), and honest market positioning.
-- **`AREP_IMPLEMENTATION_ROADMAP.md`** (v1.1) — governs **technical implementation detail**. How to build it. Specific data structures, acceptance criteria, file names.
-- **`ORION_UI_DESIGN.md`** (v1.0) — governs **ALL frontend/UI visual work**. The binding design system ("Mission Control"): tokens, typography, components, theming, page-by-page specs. Any change under `orion-frontend/` must conform. Companion `ORION_UI_REDESIGN_PLAN.md` = the migration sequencing; approved sample = `design/sample-mission-control.html`. See Section 9.
+- **`docs/ROADMAP.md`** (v3.0) — governs **what to build next and how**. Phase 0–6 scope, the known-defect register (D-01…D-13), per-phase implementation specs (data structures, file names, acceptance criteria), honest positioning, risks, timeline. When two tasks compete, this doc decides. It replaces the old `ORION_SAAS_ROADMAP.md` + `AREP_IMPLEMENTATION_ROADMAP.md` pair.
+- **`docs/ARCHITECTURE.md`** — governs **the scenario taxonomy and the 4-layer execution architecture**: the "one scenario = one behavioral requirement" rule, the six categories, the strict scenario schema, L1–L4 layer contracts, the integration contract. Read before touching `scenario/`, `simulation/`, or adding scenarios.
+- **`docs/UI_DESIGN.md`** (v1.0) — governs **ALL frontend/UI visual work**. The binding design system ("Mission Control"): tokens, typography, components, theming, page-by-page specs. Any change under `orion-frontend/` must conform. Approved sample = `design/sample-mission-control.html`. See Section 9.
 
-When they conflict on priority: SaaS roadmap wins. When you need implementation depth: read the technical roadmap. For anything visual/frontend: `ORION_UI_DESIGN.md` is authoritative.
+Supporting, non-governing: `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Current priority: Phase 0 — Security & Score Integrity** (SaaS roadmap v2.0). No Stripe, no new features until Phase 0 exits. See Section 13.
+**Current priority: Phase 0 — Security & Score Integrity** (`docs/ROADMAP.md`). No Stripe, no new features until Phase 0 exits. See Section 13.
 
 ---
 
@@ -250,7 +250,7 @@ TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags c
 
 **Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating specification document and all existing baselines.
 
-**Known metric defects (fix in Phase 0.5 — see SaaS roadmap defect register):**
+**Known metric defects (fix in Phase 0.5 — see `docs/ROADMAP.md` defect register):**
 
 - D-05: lane compliance in `compliance.py:88` is a stub — `lane_frac = 1.0` hardcoded except on `off_road` termination. Lane-keeping score currently fake. Fix = record `lane_offset` in `EgoSnapshot`, compute real in-lane fraction.
 - D-11: TTC (`core/ttc.py`) assumes constant velocity — optimistic under braking. Document everywhere it surfaces; constant-acceleration upgrade in Phase 2.1.
@@ -301,17 +301,17 @@ All API errors return `{"detail": "..."}` — match this shape in new error hand
 
 React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 
-### Design system — `ORION_UI_DESIGN.md` is BINDING (read before ANY frontend work)
+### Design system — `docs/UI_DESIGN.md` is BINDING (read before ANY frontend work)
 
-**Every visual change under `orion-frontend/` MUST conform to `ORION_UI_DESIGN.md`** (the "Mission Control" design system, approved 2026-06-25). Read it before writing any page, component, or style. It is the source of truth for colors, typography, spacing, radius, components, theming, and per-page layout — the approved render is `design/sample-mission-control.html`.
+**Every visual change under `orion-frontend/` MUST conform to `docs/UI_DESIGN.md`** (the "Mission Control" design system, approved 2026-06-25). Read it before writing any page, component, or style. It is the source of truth for colors, typography, spacing, radius, components, theming, and per-page layout — the approved render is `design/sample-mission-control.html`.
 
 - **Use tokens only.** Never hardcode a hex, font size, radius, or one-off color — use the CSS variables defined in `index.css` per the design doc. Old purple/glass tokens (`#6c63ff`, `--accent-primary` gradient, `.glass-card` glow) are retired.
 - **Fonts:** Chakra Petch (display) / Saira (UI) / JetBrains Mono (all numerals, tabular). No Inter/Roboto/system body.
 - **Theme:** dark-default, light available; `data-theme` on `<html>`, persisted to `localStorage` key `orion-theme`. This is the **only** sanctioned localStorage UI-pref key — it does NOT relax the D-04 auth-token rule below.
 - **No emoji as UI icons** — use the inline-SVG set in `src/components/common/Icon.jsx`.
 - **Banned aesthetics (permanent):** glassmorphism-as-primary-surface, purple/violet gradients, glow-pulse/float animations, rounded-2xl, generic AI-startup hero. See design doc §1.
-- **Out of scope = don't.** Don't add visual features, routes, libraries, or styles not described in the design doc unless the user explicitly asks. New pattern needed → add it to `ORION_UI_DESIGN.md` in the same change, then implement.
-- Migration status + phase order live in `ORION_UI_REDESIGN_PLAN.md`.
+- **Out of scope = don't.** Don't add visual features, routes, libraries, or styles not described in the design doc unless the user explicitly asks. New pattern needed → add it to `docs/UI_DESIGN.md` in the same change, then implement.
+- The redesign migration is complete; its sequencing plan is archived at `docs/archive/ORION_UI_REDESIGN_PLAN.md` (historical, not binding).
 
 **Implementation status: DONE** (redesign Phases A–I complete). The code now matches the design doc. Key infrastructure:
 - Tokens + global utilities (`.panel`/`.panel--live`, `.btn*`, `.field`, `.chip*`, `.data-table`, `.mono-label`, `.num`, `.spec-strip`, grid backdrop, `.skeleton`, `.skip-link`) live in `src/index.css`. Legacy purple/`glass-card` aliases were removed — use canonical tokens only.
@@ -434,17 +434,17 @@ start.bat         # Windows (cmd.exe)
 
 **Secret/config resolution (Phase 0.1 — DONE, D-02 closed)**: never read `ORION_SECRET_KEY` / `ORION_DATABASE_URL` directly with a fallback default. Go through `arep/config/validate.py`: `resolve_secret_key()`, `resolve_database_url()`, `validate_startup()`. Non-dev (`ORION_ENV` not in dev/test/local) refuses to boot on missing/weak/placeholder secret or SQLite URL; dev gets an ephemeral secret + `sqlite:///arep.db`. `validate_startup()` runs in `app.py` lifespan. docker-compose pulls all secrets from git-ignored `infrastructure/.env` (`env_file:` + `${VAR}`); see `infrastructure/.env.example`.
 
-**Known violations of these rules in existing code** (tracked in SaaS roadmap defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
+**Known violations of these rules in existing code** (tracked in the `docs/ROADMAP.md` defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
 
 ---
 
 ## 13. What Is Not Built Yet (Active Development Areas)
 
-**Priority authority**: `ORION_SAAS_ROADMAP.md` v2.0. **Implementation detail**: `AREP_IMPLEMENTATION_ROADMAP.md` v1.1. Read both before writing code in these areas.
+**Authority**: `docs/ROADMAP.md` v3.0 — priority *and* implementation detail. Read the relevant phase section before writing code in these areas.
 
 ### Phase 0 — Security & Score Integrity (CURRENT PHASE — blocks everything else)
 
-Full spec + defect register (D-01…D-13): `ORION_SAAS_ROADMAP.md` § Phase 0. Order:
+Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 
 1. ~~**0.1 Secrets hardening (D-02)**~~ — **DONE.** Fallbacks removed; `arep/config/validate.py` is the single resolver (`resolve_secret_key`, `resolve_database_url`, `validate_startup`); fail-fast in non-dev, ephemeral secret + sqlite in dev; `validate_startup()` wired into `app.py` lifespan; docker-compose secrets moved to git-ignored `infrastructure/.env` (`infrastructure/.env.example` documents them). `git grep "Harshit:Harshit\|change-in-production"` in `arep/` → 0 hits. See Section 12.
 2. **0.2 Model sandboxing (D-01) — NEXT.** — cloudpickle path = RCE. Strip subprocess env (no `ORION_*` vars), no network, empty tmpdir FS, hard wall-clock kill, gate cloudpickle path off for self-serve orgs (Docker path = default).
@@ -455,8 +455,8 @@ Full spec + defect register (D-01…D-13): `ORION_SAAS_ROADMAP.md` § Phase 0. O
 
 ### Phase 1 remainder (after Phase 0 exits)
 
-1. **Stripe billing (P1.4 SaaS)** — `api/billing.py` scaffold only. Builds on 0.3's verified+idempotent webhook base. Includes implementing the `BillingPage` frontend stub.
-2. **Road topology engine (P1.5 SaaS)** — only flat 2-lane straight road exists. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist. Spec: `AREP_IMPLEMENTATION_ROADMAP.md § P1.2`.
+1. **Stripe billing (Phase 1.4)** — `api/billing.py` scaffold only. Builds on 0.3's verified+idempotent webhook base. Includes implementing the `BillingPage` frontend stub.
+2. **Road topology engine (Phase 1.5)** — only flat 2-lane straight road exists. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist. Spec: `docs/ROADMAP.md` § 1.5.
 
 ### Done (P1.1 + P1.2 + P1.3)
 
@@ -464,12 +464,12 @@ Full spec + defect register (D-01…D-13): `ORION_SAAS_ROADMAP.md` § Phase 0. O
 - **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
 - **Async batch queue (P1.3)** — Celery + Redis. `arep/worker/celery_app.py` + `arep/worker/tasks.py` (`run_single_simulation`, `run_batch_simulations`). `POST /api/runs/batch` atomically deducts `num_runs` credits via `OrganisationRepository.deduct_credits()` (FOR UPDATE row lock), creates a `BatchJobRecord` (`status=queued`), fans out N tasks on the `simulation` queue, and returns 202 in <300 ms. Workers write `RunRecord` rows + bump `runs_completed`/`runs_failed`; the last task to finish triggers `BatchJobRepository.finalise_if_done()` which aggregates from per-run rows and flips status to `completed`. Failed tasks refund 1 credit via `OrganisationRepository.add_credits()`. `GET /api/runs/batch/{id}/status` exposes live progress. Tests run Celery in `task_always_eager` mode (no broker required) — see `tests/test_batch_queue.py`. Worker container + Flower UI defined in `infrastructure/docker-compose.yml` (`worker`, `flower` services). Broker URL via `ORION_REDIS_URL` env var (default `redis://localhost:6379/0`).
 
-### Deferred (Phase 2+, see SaaS roadmap v2.0)
+### Deferred (Phase 2+, see `docs/ROADMAP.md`)
 
 - **Statistical CIs surfaced to API/dashboard (2.1)** — aggregator computes Wilson/t-dist CIs internally; batch results API and dashboard show point estimates only.
 - **Failure clustering (2.2)**, **adversarial search (2.3)**, **model comparison + PDF (2.4)**.
 - **Deterministic replay (2.5)** — promoted from Phase 5; depends on Phase 0.5 frame hash. Closes `RunPage` stub.
 - **CompositeEvaluator wired to live runs** — dashboard scores are per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
-- **Sensor simulation** — no LiDAR, camera, GPS/IMU; observation = ground-truth state. Explicitly out of niche per SaaS roadmap "Honest Positioning" — ORION = planning/control eval. Don't promise perception testing anywhere.
-- **Standards alignment (4.5)** — no ISO 26262/21448 story today; traceability matrix + ODD declarations planned, certification never claimed.
+- **Sensor simulation** — no LiDAR, camera, GPS/IMU today; observation = ground-truth state. Scheduled as **Phase 6** (`docs/ROADMAP.md`), which starts only after Phase 5 exits — structured sensor output (object lists, ranges), never rendered pixels. Until it ships, ORION = planning/control eval: don't promise perception testing anywhere, and don't build sensor code early.
+- **Standards alignment (Phase 4.5)** — no ISO 26262/21448 story today; traceability matrix + ODD declarations planned, certification never claimed.
 - **3D visualization polish + frontend debt (Phase 5)** — GLTF assets, trajectory traces, progressive TypeScript migration, frontend tests (currently zero), `DashboardPage.jsx` decomposition.

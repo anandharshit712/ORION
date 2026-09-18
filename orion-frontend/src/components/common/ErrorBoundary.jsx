@@ -1,6 +1,6 @@
 // ORION — ErrorBoundary
 // App-level guard: render faults show a themed instrument panel, never a white screen.
-// See ORION_UI_DESIGN.md §9.12 / §11.6.
+// See docs/UI_DESIGN.md §9.12 / §11.6.
 
 import { Component } from 'react';
 import Icon from './Icon';
