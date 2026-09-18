@@ -127,7 +127,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 
 | ID | Defect | Severity | Fixed in |
 | --- | --- | --- | --- |
-| D-01 | Cloudpickle model upload = arbitrary code execution in worker; subprocess inherits `ORION_DATABASE_URL` (`api/models_routes.py`, `models/sandbox.py`) | CRITICAL | 0.2 — **next** |
+| D-01 | ~~Cloudpickle model upload = arbitrary code execution in worker; subprocess inherits `ORION_DATABASE_URL`~~ | CRITICAL | 0.2 Step 1 — **done**; Step 2 (gVisor/Firecracker) before open signup |
 | D-02 | ~~JWT secret falls back to a hardcoded string; hardcoded DB creds; plaintext creds in docker-compose~~ | CRITICAL | 0.1 — **done** |
 | D-03 | CORS `allow_origins=["*"]` + zero rate limiting on login/signup (`api/app.py`) | CRITICAL | 0.3 |
 | D-04 | JWT stored in `localStorage` (`AuthContext.jsx`); signup auto-activates with no email verification | CRITICAL | 0.4 |
@@ -141,7 +141,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-12 | Weight transfer uses previous-step acceleration (`core/physics.py`) — off-by-one | LOW | 0.5 |
 | D-13 | SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev | MED | 0.6 |
 
-**Current position**: Phase 0. 0.1 is done; 0.2 (model sandboxing) is the active task.
+**Current position**: Phase 0. 0.1 and 0.2 Step 1 are done; 0.3 (API surface hardening) is the active task.
 
 ---
 
@@ -198,7 +198,7 @@ no billing.
 
 ---
 
-## 0.2 — Customer Model Sandboxing (D-01) — NEXT
+## 0.2 — Customer Model Sandboxing (D-01) — ✅ STEP 1 DONE
 
 **The single most dangerous defect in the codebase.** A customer-uploaded cloudpickle
 deserialises with full Python in a worker subprocess that inherits DB credentials. One
@@ -222,17 +222,52 @@ malicious upload = every org's data.
   signups. The Docker path (already process-isolated by the container boundary) is the
   default public path; enable cloudpickle per-org manually for trusted design partners.
 
-**Step 2 — before open/self-serve launch (tracked, may land in Phase 1):**
+**Step 2 — before open/self-serve launch (still open, may land in Phase 1):**
 
 - gVisor (`runsc`) or a Firecracker microVM for the model process: container-per-run, no
   network, read-only rootfs, seccomp default profile.
 
+### What Step 1 shipped (2026-09-18)
+
+`arep/models/sandbox.py` rewritten. Limits live in `config/default.yaml` under `sandbox:`
+(`SandboxConfig`, `ORION_SANDBOX_*` env overrides) — they are security limits, not perf
+tuning.
+
+- **Env stripped** to an explicit whitelist (`PATH`, `SYSTEMROOT`, `COMSPEC`, `WINDIR`,
+  `LANG`, `LC_ALL`, `TZ`) plus a computed `PYTHONPATH`; `_build_env()` asserts nothing
+  matching `ORION_/AREP_/STRIPE_/AWS_/POSTGRES_/REDIS_` survives.
+- **Network**: `unshare --net --map-root-user` when the host supports it (probed once at
+  runtime, not assumed), plus a Python-level socket block installed *before* the artefact
+  is unpickled. The in-process block is defence in depth, not a boundary.
+- **Filesystem**: fresh temp dir as cwd, `TMPDIR`, `TEMP`, `TMP`, `HOME` and `USERPROFILE`;
+  the artefact file is deleted as soon as the child reports READY.
+- **rlimits actually applied** via `preexec_fn` + `os.setsid()` — CPU, address space, file
+  size, open files, core dumps. They were previously declared as constants and never used.
+- **Hard wall-clock kill**: per-call deadline *and* a run-level budget, enforced by a reader
+  thread and `killpg(SIGKILL)` on the child's session. Raises `ModelSandboxError`, which
+  `ModelWrapper` and `EvaluationRunner` deliberately do **not** swallow, so the worker
+  fails the run and refunds the credit instead of publishing a truncated score.
+- **Per-org gate**: `organisations.allow_pickle_models` (migration `005`), default FALSE,
+  enforced at upload *and* at resolve (keyed on the artefact's owning org, so an unscoped
+  caller cannot bypass it). Flipped by `PUT /api/admin/orgs/{id}/pickle-models`.
+- **Lifecycle**: `EvaluationRunner` now tears down out-of-process models in a `finally`.
+  Nothing did before — every customer-model run leaked a child process.
+
+Two defects found while doing the work: `Observation` had no `from_dict`, so the sandboxed
+path could never have decoded an observation (added, round-trip tested); and the declared
+CPU/memory limits were dead constants.
+
+Platform note: rlimits and namespaces are POSIX-only. On Windows only the env strip, the
+tmpdir jail and the wall-clock kill apply, and the sandbox logs a warning — Windows is a
+dev-only target for this path.
+
 ### Acceptance Criteria
 
-- [ ] Model subprocess env contains no `ORION_*` variables (test asserts this)
-- [ ] A model that calls `socket.connect()` fails; run marked failed, credit refunded
-- [ ] A model that sleeps forever is killed at the wall-clock limit; credit refunded
-- [ ] A self-serve org cannot use the cloudpickle path without manual enablement
+- [x] Model subprocess env contains no `ORION_*` variables (test asserts this)
+- [x] A model that calls `socket.connect()` fails; run marked failed, credit refunded
+- [x] A model that sleeps forever is killed at the wall-clock limit; credit refunded
+- [x] A self-serve org cannot use the cloudpickle path without manual enablement
+- [ ] Step 2: model process runs under gVisor/Firecracker (before open signup)
 
 ---
 

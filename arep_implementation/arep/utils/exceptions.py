@@ -41,6 +41,18 @@ class ModelExecutionError(AREPError):
     pass
 
 
+class ModelSandboxError(AREPError):
+    """
+    The customer-model sandbox failed or had to be torn down.
+
+    Resource-limit violation, hang, crash or protocol violation — the model
+    could not be evaluated at all, so the run is void and its credit is
+    refunded. Deliberately NOT a subclass of ModelExecutionError: a model that
+    merely raises inside predict() is a bad model (emergency brake, run
+    continues), while this is an infrastructure failure (run aborted).
+    """
+
+
 # ── Simulation ───────────────────────────────────────────────────────────
 
 class SimulationError(AREPError):

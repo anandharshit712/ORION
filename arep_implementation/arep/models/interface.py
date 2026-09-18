@@ -13,7 +13,11 @@ from typing import Optional
 
 from arep.core.observation import Observation
 from arep.core.action import Action
-from arep.utils.exceptions import ModelTimeoutError, ModelExecutionError
+from arep.utils.exceptions import (
+    ModelExecutionError,
+    ModelSandboxError,
+    ModelTimeoutError,
+)
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("models.interface")
@@ -102,6 +106,12 @@ class ModelWrapper:
         start = time.perf_counter()
         try:
             action = self.model.predict(observation)
+        except ModelSandboxError:
+            # Infrastructure failure (hang killed, resource limit, child crash):
+            # the run is void. Propagate untouched so the caller aborts and
+            # refunds, rather than scoring a truncated run.
+            self.error_count += 1
+            raise
         except Exception as e:
             self.error_count += 1
             raise ModelExecutionError(

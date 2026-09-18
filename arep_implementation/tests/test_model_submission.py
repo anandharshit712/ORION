@@ -54,12 +54,38 @@ def env(tmp_path_factory):
         pass
 
 
-def _signup(client, email, username, slug):
+def _set_pickle_gate(slug: str, enabled: bool) -> str:
+    """Flip organisations.allow_pickle_models for one org. Returns its id.
+
+    Stands in for the superadmin route PUT /api/admin/orgs/{id}/pickle-models,
+    which needs a superadmin token these tests do not mint.
+    """
+    from arep.database.connection import session_scope
+    from arep.database.repository import OrganisationRepository
+
+    with session_scope() as session:
+        repo = OrganisationRepository(session)
+        org = repo.get_by_slug(slug)
+        assert org is not None, f"org {slug!r} not found"
+        repo.set_allow_pickle_models(org.id, enabled)
+        return org.id
+
+
+def _signup(client, email, username, slug, allow_pickle=True):
+    """Create a user + org.
+
+    Phase 0.2 gates the cloudpickle upload path per org (default OFF), so the
+    tests that exercise SDK upload mechanics enable it explicitly — as a
+    superadmin would for a design partner. Pass allow_pickle=False to test the
+    default-denied behaviour itself.
+    """
     r = client.post("/api/auth/signup", json={
         "email": email, "username": username,
         "password": "password123", "org_slug": slug,
     })
     assert r.status_code == 201, r.text
+    if allow_pickle:
+        _set_pickle_gate(slug, True)
     return r.json()
 
 
@@ -281,3 +307,73 @@ def test_resolver_uuid_org_mismatch_blocked(env):
 
     with pytest.raises(KeyError):
         resolve_model(model_id, AVAILABLE_MODELS, org_id=yael_org_id)
+
+
+# ── Phase 0.2 — per-org cloudpickle gate (D-01) ──────────────────────────
+
+def test_upload_blocked_when_org_not_cleared_for_pickle_models(env):
+    """Default-deny: a self-serve org cannot upload a cloudpickle artefact."""
+    _signup(env, "zoe@a.com", "zoe", "zoe-co", allow_pickle=False)
+    token = _login(env, "zoe")
+
+    r = env.post(
+        "/api/models/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"name": "sneaky", "version": "v1.0"},
+        files={"artefact": ("s.pkl", io.BytesIO(_make_pickle_blob()),
+                            "application/octet-stream")},
+    )
+    assert r.status_code == 403, r.text
+    assert "disabled for this organisation" in r.json()["detail"]
+
+
+def test_upload_succeeds_once_an_admin_enables_the_path(env):
+    _signup(env, "abe@a.com", "abe", "abe-co", allow_pickle=False)
+    token = _login(env, "abe")
+    files = {"artefact": ("a.pkl", io.BytesIO(_make_pickle_blob()),
+                          "application/octet-stream")}
+
+    blocked = env.post(
+        "/api/models/upload", headers={"Authorization": f"Bearer {token}"},
+        data={"name": "abe-model", "version": "v1.0"}, files=files,
+    )
+    assert blocked.status_code == 403
+
+    _set_pickle_gate("abe-co", True)
+    allowed = env.post(
+        "/api/models/upload", headers={"Authorization": f"Bearer {token}"},
+        data={"name": "abe-model", "version": "v1.0"},
+        files={"artefact": ("a.pkl", io.BytesIO(_make_pickle_blob()),
+                            "application/octet-stream")},
+    )
+    assert allowed.status_code == 201, allowed.text
+
+
+def test_resolver_refuses_pickle_model_after_the_gate_is_revoked(env):
+    """
+    Artefacts uploaded while the gate was open must stop being runnable when it
+    closes — otherwise revoking access to a compromised tenant does nothing.
+    """
+    _signup(env, "bea@a.com", "bea", "bea-co")
+    token = _login(env, "bea")
+    r = env.post(
+        "/api/models/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"name": "bea-model", "version": "v1.0"},
+        files={"artefact": ("b.pkl", io.BytesIO(_make_pickle_blob()),
+                            "application/octet-stream")},
+    )
+    assert r.status_code == 201, r.text
+    model_id = r.json()["id"]
+
+    org_id = _set_pickle_gate("bea-co", False)
+
+    from arep.api.routes import AVAILABLE_MODELS
+    from arep.models.resolver import resolve_model
+
+    with pytest.raises(PermissionError):
+        resolve_model(model_id, AVAILABLE_MODELS, org_id=org_id)
+
+    # ...and an unscoped caller cannot slip past it either
+    with pytest.raises(PermissionError):
+        resolve_model(model_id, AVAILABLE_MODELS, org_id=None)

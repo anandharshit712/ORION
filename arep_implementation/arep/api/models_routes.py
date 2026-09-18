@@ -28,7 +28,7 @@ from arep.api.auth import get_request_principal
 from arep.api.middleware import require_role
 from arep.api.model_store import SubmissionType, get_model_store
 from arep.database.connection import session_scope
-from arep.database.repository import ModelRepository
+from arep.database.repository import ModelRepository, OrganisationRepository
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.models")
@@ -80,6 +80,18 @@ async def upload_python_model(
 ):
     """Upload a cloudpickle-serialised model artefact (Path A — Python SDK)."""
     org_id, user_id, _ = get_request_principal(request)
+
+    # Phase 0.2 / D-01: unpickling runs arbitrary customer code, so the SDK
+    # path is opt-in per org. Checked before the bytes are stored, not just
+    # before they are run.
+    with session_scope() as session:
+        if not OrganisationRepository(session).allows_pickle_models(org_id):
+            raise HTTPException(
+                403,
+                "The Python SDK (cloudpickle) upload path is disabled for this "
+                "organisation. Use POST /api/models/register with a Docker image, "
+                "or contact support to have it enabled.",
+            )
 
     pickle_bytes = await artefact.read()
     if not pickle_bytes:

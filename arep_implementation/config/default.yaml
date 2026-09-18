@@ -24,6 +24,18 @@ execution:
   default_num_runs: 100
   default_master_seed: 42
 
+# Customer-model sandbox limits (Phase 0.2 / defect D-01).
+# Security limits, not perf tuning — raising them widens the blast radius of a
+# hostile model artefact. Env overrides: ORION_SANDBOX_*.
+sandbox:
+  predict_timeout_s: 5.0        # hard wall-clock kill per predict()/reset() call
+  total_wallclock_s: 300.0      # hard wall-clock budget for one run
+  cpu_seconds: 60               # RLIMIT_CPU (POSIX only)
+  memory_bytes: 536870912       # RLIMIT_AS — 512 MB
+  max_file_bytes: 67108864      # RLIMIT_FSIZE — 64 MB, tmpdir only
+  max_open_files: 64            # RLIMIT_NOFILE
+  require_network_namespace: false  # true = refuse to run without kernel net isolation
+
 database:
   url: "sqlite:///arep.db"
   echo: false

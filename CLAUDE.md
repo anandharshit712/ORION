@@ -144,6 +144,26 @@ class MyModel(ModelInterface):
 
 Never call `model.predict()` directly in production code — always wrap with `ModelWrapper` for timing and error logging.
 
+### Running a customer model (sandbox)
+
+Customer artefacts are hostile input. `SubprocessModelRunner` (`models/sandbox.py`) runs them
+in a locked-down child: env whitelist (no `ORION_*`), network namespace when the host allows
+it plus an in-process socket block, fresh tmpdir as cwd/`TMPDIR`/`HOME`, POSIX rlimits, and a
+hard wall-clock kill per call and per run.
+
+- Limits come from `get_config().sandbox` (`config/default.yaml` → `sandbox:`, env
+  `ORION_SANDBOX_*`). Never hardcode them at a call site.
+- `ModelSandboxError` (in `utils/exceptions.py`) means the run is **void** — resource
+  violation, hang, or crash. `ModelWrapper` and `EvaluationRunner` re-raise it on purpose so
+  the worker fails the run and refunds the credit. Never catch it to "keep the run going": a
+  truncated run scored as safe is worse than no score.
+- A model that merely raises inside `predict()` is different — that yields
+  `Action.emergency_brake()` for the tick and the run continues.
+- Always `close()` an out-of-process model. `EvaluationRunner._release_model()` does this in
+  a `finally`; if you add a new execution path, do the same or you leak a child process.
+- `Observation.to_dict()`/`from_dict()` is the wire format for out-of-process models. Extend
+  both sides together, or the sandbox and HTTP adapters silently drop fields.
+
 ### Action values
 
 `Action` has three normalized fields, all in `[-1.0, 1.0]`:
@@ -263,6 +283,7 @@ TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags c
 FastAPI backend. All routes prefixed `/api`. Auth = JWT Bearer token.
 
 ```
+PUT    /api/admin/orgs/{org_id}/pickle-models  body: {enabled, note?} — superadmin: allow/deny this org the cloudpickle model path (D-01 gate, default deny)
 POST   /api/auth/forgot-password    body: {email} — request password reset link (public, no auth)
 POST   /api/auth/reset-password     body: {token, new_password} — consume token, set new password (public, no auth)
 GET    /health
@@ -375,6 +396,10 @@ with session_scope() as db:
 
 Never use raw `Session` — always go through repository classes in `database/repository.py`.
 
+Migrations live in `arep/database/migrations/versions/` (latest: `005_org_allow_pickle_models`).
+`OrganisationRepository.allows_pickle_models(org_id)` is the single read of the D-01 gate —
+check it there, never by reading the column directly.
+
 ---
 
 ## 11. Common Commands
@@ -447,8 +472,9 @@ start.bat         # Windows (cmd.exe)
 Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 
 1. ~~**0.1 Secrets hardening (D-02)**~~ — **DONE.** Fallbacks removed; `arep/config/validate.py` is the single resolver (`resolve_secret_key`, `resolve_database_url`, `validate_startup`); fail-fast in non-dev, ephemeral secret + sqlite in dev; `validate_startup()` wired into `app.py` lifespan; docker-compose secrets moved to git-ignored `infrastructure/.env` (`infrastructure/.env.example` documents them). `git grep "Harshit:Harshit\|change-in-production"` in `arep/` → 0 hits. See Section 12.
-2. **0.2 Model sandboxing (D-01) — NEXT.** — cloudpickle path = RCE. Strip subprocess env (no `ORION_*` vars), no network, empty tmpdir FS, hard wall-clock kill, gate cloudpickle path off for self-serve orgs (Docker path = default).
-3. **0.3 API hardening (D-03, D-07)** — CORS whitelist via `ORION_ALLOWED_ORIGINS`, slowapi rate limiting (login 5/min/IP), auth on `/models/` `/scenarios/` `/jobs/` `/results/*`, security headers, webhook signature+idempotency groundwork.
+2. ~~**0.2 Model sandboxing (D-01)**~~ — **STEP 1 DONE.** `arep/models/sandbox.py` rewritten: env whitelist (no `ORION_*` reaches the child), `unshare --net` when available + in-process socket block installed before unpickling, fresh tmpdir as cwd/`TMPDIR`/`HOME`, rlimits actually applied via `preexec_fn` + `os.setsid()`, hard per-call and per-run wall-clock kill via `killpg(SIGKILL)`. Limits in `config/default.yaml` `sandbox:` (`SandboxConfig`, `ORION_SANDBOX_*`). Cloudpickle path gated per-org: `organisations.allow_pickle_models` (migration `005`, default FALSE), enforced at upload and at resolve, toggled by `PUT /api/admin/orgs/{id}/pickle-models`. `ModelSandboxError` aborts the run (never scored) so the worker refunds. **Step 2 still open**: gVisor/Firecracker before open self-serve signup.
+3. **0.3 API hardening (D-03, D-07) — NEXT.**
+   CORS whitelist via `ORION_ALLOWED_ORIGINS`, slowapi rate limiting (login 5/min/IP), auth on `/models/` `/scenarios/` `/jobs/` `/results/*`, security headers, webhook signature+idempotency groundwork.
 4. **0.4 Auth flow (D-04)** — email verification (reuse hashed-token machinery), httpOnly cookie for browser JWT, short-lived WS ticket replaces `?token=` query param, superadmin expiry 4h.
 5. **0.5 Score integrity (D-05, D-06, D-11, D-12)** — real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
 6. **0.6 Reliability + test gates (D-08, D-09, D-10, D-13)** — Celery `max_retries=3` + backoff + idempotent tasks; CI coverage gate ≥70% on Postgres (not SQLite); WS integration test; cross-org denial tests; partial-refund test; scenario YAML validation test; frontend ErrorBoundary + 404 + OrgProvider decision; hard-rule CI grep.
@@ -461,7 +487,7 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 ### Done (P1.1 + P1.2 + P1.3)
 
 - **Multi-tenancy (P1.1)** — `organisations`, `api_keys` tables. JWT carries `org_id`+`role`. `OrgAuthMiddleware` resolves both JWT and API keys. `/api/orgs/me`, `/api/orgs/invite`, `/api/keys/` CRUD. All eval/batch/jobs/results/live-run routes scoped by `org_id`.
-- **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
+- **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. **Cloudpickle path is gated per-org** — `organisations.allow_pickle_models` defaults FALSE; upload returns 403 and `resolve_model()` raises `PermissionError` until a superadmin enables it. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
 - **Async batch queue (P1.3)** — Celery + Redis. `arep/worker/celery_app.py` + `arep/worker/tasks.py` (`run_single_simulation`, `run_batch_simulations`). `POST /api/runs/batch` atomically deducts `num_runs` credits via `OrganisationRepository.deduct_credits()` (FOR UPDATE row lock), creates a `BatchJobRecord` (`status=queued`), fans out N tasks on the `simulation` queue, and returns 202 in <300 ms. Workers write `RunRecord` rows + bump `runs_completed`/`runs_failed`; the last task to finish triggers `BatchJobRepository.finalise_if_done()` which aggregates from per-run rows and flips status to `completed`. Failed tasks refund 1 credit via `OrganisationRepository.add_credits()`. `GET /api/runs/batch/{id}/status` exposes live progress. Tests run Celery in `task_always_eager` mode (no broker required) — see `tests/test_batch_queue.py`. Worker container + Flower UI defined in `infrastructure/docker-compose.yml` (`worker`, `flower` services). Broker URL via `ORION_REDIS_URL` env var (default `redis://localhost:6379/0`).
 
 ### Deferred (Phase 2+, see `docs/ROADMAP.md`)

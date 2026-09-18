@@ -71,6 +71,7 @@ class AdminOrgResponse(BaseModel):
     plan: str
     run_credits: int
     is_system: bool
+    allow_pickle_models: bool
     stripe_customer_id: Optional[str]
     created_at: datetime.datetime
 
@@ -227,6 +228,37 @@ def topup_org_credits(org_id: str, req: CreditTopUpRequest, request: Request):
         new_balance=new_balance,
         note=req.note,
     )
+
+
+class PickleModelsRequest(BaseModel):
+    enabled: bool = Field(..., description="Allow this org to upload/run cloudpickle models")
+    note: Optional[str] = Field(None, max_length=256, description="Why — recorded in the audit log")
+
+
+@admin_router.put(
+    "/orgs/{org_id}/pickle-models",
+    response_model=AdminOrgResponse,
+    summary="Enable or disable the cloudpickle model path for an org",
+    description=(
+        "The Python SDK upload path deserialises a customer artefact, which "
+        "executes arbitrary Python inside the model sandbox. It is disabled by "
+        "default (defect D-01) and should only be enabled for design partners "
+        "you trust. The Docker submission path needs no such grant."
+    ),
+)
+def set_org_pickle_models(org_id: str, req: PickleModelsRequest, request: Request):
+    """Flip the per-org cloudpickle gate. Superadmin only (router-level dependency)."""
+    with session_scope() as session:
+        repo = OrganisationRepository(session)
+        org = repo.set_allow_pickle_models(org_id, req.enabled)
+        if org is None:
+            raise HTTPException(404, f"Organisation {org_id!r} not found")
+        session.refresh(org)
+        logger.warning(
+            "Admin changed cloudpickle gate: org=%s enabled=%s note=%s",
+            org_id, req.enabled, req.note or "-",
+        )
+        return AdminOrgResponse.model_validate(org)
 
 
 @admin_router.put(

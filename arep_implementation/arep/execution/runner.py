@@ -23,6 +23,7 @@ from arep.core.random_manager import RandomManager
 from arep.evaluation.collector import DataCollector
 from arep.evaluation.composite import CompositeEvaluator, EvaluationResult
 from arep.models.interface import ModelInterface, ModelWrapper
+from arep.utils.exceptions import ModelSandboxError
 from arep.scenario.executor import ScenarioExecutor
 from arep.scenario.parser import ScenarioParser
 from arep.simulation.engine import SimulationEngine
@@ -103,31 +104,61 @@ class EvaluationRunner:
         # Run simulation with data collection
         world = initial_world.copy()
         previous_world = None
-        wrapper.reset()
 
         max_steps = int(scenario.duration / self.sim_config.timestep)
 
-        for step in range(max_steps):
-            observation = Observation.from_world_state(world, previous_world)
+        try:
+            # Inside the try: reset() also crosses the sandbox boundary and can
+            # fail, and the child still needs tearing down when it does.
+            wrapper.reset()
 
-            try:
-                action = wrapper.predict(observation)
-            except Exception as e:
-                logger.error("Model error at step %d: %s", step, e)
-                break
+            for step in range(max_steps):
+                observation = Observation.from_world_state(world, previous_world)
 
-            collector.record_step(world, action, previous_world)
+                try:
+                    action = wrapper.predict(observation)
+                except ModelSandboxError:
+                    # The sandbox was torn down (hang killed, resource limit,
+                    # child crash). Scoring a run that stopped for an
+                    # infrastructure reason would publish a fabricated score,
+                    # so abort: the caller fails the run and refunds the credit.
+                    logger.error("Model sandbox failed at step %d - aborting run", step)
+                    raise
+                except Exception as e:
+                    logger.error("Model error at step %d: %s", step, e)
+                    break
 
-            previous_world = world
-            world = self.engine.step(world, action, rng)
+                collector.record_step(world, action, previous_world)
 
-            if world.is_terminated:
-                break
+                previous_world = world
+                world = self.engine.step(world, action, rng)
+
+                if world.is_terminated:
+                    break
+        finally:
+            self._release_model(model)
 
         record = collector.finalize(world)
         record.master_seed = master_seed
 
         return self.evaluator.evaluate(record)
+
+    @staticmethod
+    def _release_model(model: ModelInterface) -> None:
+        """
+        Tear down an out-of-process model after a run.
+
+        Sandboxed (cloudpickle) and Docker-backed models hold a child process or
+        an HTTP session; nothing else did this, so every customer-model run used
+        to leak one. A fresh process per run is also the safer default: no state
+        survives a run boundary that reset() did not clear.
+        """
+        closer = getattr(model, "close", None)
+        if callable(closer):
+            try:
+                closer()
+            except Exception as exc:   # teardown must never mask a run result
+                logger.warning("Model close() failed: %s", exc)
 
     def run_batch(
         self,

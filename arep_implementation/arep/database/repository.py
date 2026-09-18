@@ -378,6 +378,25 @@ class OrganisationRepository:
         org.run_credits -= amount
         return True
 
+    def allows_pickle_models(self, org_id: str) -> bool:
+        """
+        Whether this org may run cloudpickle (Python SDK) model artefacts.
+
+        Phase 0.2 / D-01: the pickle path executes arbitrary customer code, so
+        it is off unless a superadmin enables it. An unknown org is denied.
+        """
+        org = self.get_by_id(org_id)
+        return bool(org is not None and org.allow_pickle_models)
+
+    def set_allow_pickle_models(self, org_id: str, enabled: bool) -> Optional[OrganisationRecord]:
+        """Enable/disable the cloudpickle path for one org. Returns None if unknown."""
+        org = self.get_by_id(org_id)
+        if org is None:
+            return None
+        org.allow_pickle_models = bool(enabled)
+        self.session.flush()
+        return org
+
     def add_credits(self, org_id: str, amount: int) -> None:
         org = (
             self.session.query(OrganisationRecord)

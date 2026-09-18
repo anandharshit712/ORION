@@ -117,6 +117,23 @@ class BillingConfig:
 
 
 @dataclass(frozen=True)
+class SandboxConfig:
+    """
+    Customer-model subprocess sandbox limits (Phase 0.2, defect D-01).
+
+    These are security limits, not performance tuning. Raising them widens the
+    blast radius of a hostile model artefact. See docs/ROADMAP.md section 0.2.
+    """
+    predict_timeout_s: float = 5.0        # hard wall-clock per predict()/reset() call
+    total_wallclock_s: float = 300.0      # hard wall-clock budget for a whole run
+    cpu_seconds: int = 60                 # RLIMIT_CPU for the model process (POSIX)
+    memory_bytes: int = 512 * 1024 * 1024  # RLIMIT_AS
+    max_file_bytes: int = 64 * 1024 * 1024  # RLIMIT_FSIZE - model may write to its tmpdir only
+    max_open_files: int = 64              # RLIMIT_NOFILE
+    require_network_namespace: bool = False  # True = refuse to run without kernel net isolation
+
+
+@dataclass(frozen=True)
 class Config:
     """Root configuration for the entire AREP platform."""
     env: str = "development"
@@ -129,6 +146,7 @@ class Config:
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
     rl: RLConfig = field(default_factory=RLConfig)
     billing: BillingConfig = field(default_factory=BillingConfig)
+    sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     enable_visualization: bool = True
 
 
@@ -170,6 +188,7 @@ def load_config(
     phys_kwargs = {}
     rl_kwargs = {}
     billing_kwargs = {}
+    sandbox_kwargs = {}
     root_kwargs = {"env": env}
 
     # --- Tier 3: default.yaml ---
@@ -177,18 +196,18 @@ def load_config(
         _apply_yaml(Path(config_dir) / "default.yaml",
                      sim_kwargs, exec_kwargs, db_kwargs,
                      path_kwargs, api_kwargs, phys_kwargs,
-                     rl_kwargs, billing_kwargs, root_kwargs)
+                     rl_kwargs, billing_kwargs, sandbox_kwargs, root_kwargs)
 
         # --- Tier 2: env-specific YAML ---
         _apply_yaml(Path(config_dir) / f"{env}.yaml",
                      sim_kwargs, exec_kwargs, db_kwargs,
                      path_kwargs, api_kwargs, phys_kwargs,
-                     rl_kwargs, billing_kwargs, root_kwargs)
+                     rl_kwargs, billing_kwargs, sandbox_kwargs, root_kwargs)
 
     # --- Tier 1: environment variables ---
     _apply_env_vars(sim_kwargs, exec_kwargs, db_kwargs,
                     path_kwargs, api_kwargs, phys_kwargs,
-                    rl_kwargs, billing_kwargs, root_kwargs)
+                    rl_kwargs, billing_kwargs, sandbox_kwargs, root_kwargs)
 
     _config = Config(
         simulation=SimulationConfig(**sim_kwargs),
@@ -199,6 +218,7 @@ def load_config(
         physics=PhysicsConfig(**phys_kwargs),
         rl=RLConfig(**rl_kwargs),
         billing=BillingConfig(**billing_kwargs),
+        sandbox=SandboxConfig(**sandbox_kwargs),
         **root_kwargs,
     )
     return _config
@@ -230,7 +250,7 @@ def _apply_yaml(
     filepath: Path,
     sim: dict, exe: dict, db: dict,
     paths: dict, api: dict, phys: dict,
-    rl: dict, billing: dict, root: dict,
+    rl: dict, billing: dict, sandbox: dict, root: dict,
 ) -> None:
     """Merge values from a YAML file into kwargs dicts."""
     if not filepath.exists():
@@ -258,6 +278,8 @@ def _apply_yaml(
         rl.update(data["rl"])
     if "billing" in data and isinstance(data["billing"], dict):
         billing.update(data["billing"])
+    if "sandbox" in data and isinstance(data["sandbox"], dict):
+        sandbox.update(data["sandbox"])
     for key in ("env", "debug", "enable_visualization"):
         if key in data:
             root[key] = data[key]
@@ -284,18 +306,27 @@ _ENV_MAP = {
     "STRIPE_PUBLISHABLE_KEY": ("billing", "stripe_publishable_key", str),
     "AREP_BILLING_ENABLED": ("billing", "billing_enabled", lambda v: v.lower() in ("1", "true", "yes")),
     "AREP_BETA_CREDITS": ("billing", "beta_credits", int),
+    # Sandbox limits (Phase 0.2) — ops tunables, never secrets
+    "ORION_SANDBOX_PREDICT_TIMEOUT_S": ("sandbox", "predict_timeout_s", float),
+    "ORION_SANDBOX_TOTAL_WALLCLOCK_S": ("sandbox", "total_wallclock_s", float),
+    "ORION_SANDBOX_CPU_SECONDS": ("sandbox", "cpu_seconds", int),
+    "ORION_SANDBOX_MEMORY_BYTES": ("sandbox", "memory_bytes", int),
+    "ORION_SANDBOX_REQUIRE_NETNS": (
+        "sandbox", "require_network_namespace",
+        lambda v: v.lower() in ("1", "true", "yes"),
+    ),
 }
 
 
 def _apply_env_vars(
     sim: dict, exe: dict, db: dict,
     paths: dict, api: dict, phys: dict,
-    rl: dict, billing: dict, root: dict,
+    rl: dict, billing: dict, sandbox: dict, root: dict,
 ) -> None:
     """Override config values from environment variables."""
     buckets = {"sim": sim, "exe": exe, "db": db,
                "paths": paths, "api": api, "phys": phys,
-               "rl": rl, "billing": billing, "root": root}
+               "rl": rl, "billing": billing, "sandbox": sandbox, "root": root}
 
     for env_var, (bucket, key, converter) in _ENV_MAP.items():
         value = os.environ.get(env_var)

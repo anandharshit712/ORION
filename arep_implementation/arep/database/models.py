@@ -16,6 +16,7 @@ import datetime
 import uuid
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     Column, Integer, Float, String, Boolean, Text, DateTime,
     ForeignKey, JSON, Index, create_engine,
@@ -47,6 +48,12 @@ class OrganisationRecord(Base):
     run_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Phase 0.2 / D-01: the cloudpickle SDK path executes arbitrary customer
+    # Python, so it is opt-in per org and enabled by hand for trusted partners.
+    # Self-serve orgs use the Docker path, which has a container boundary.
+    allow_pickle_models: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa.false()
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )

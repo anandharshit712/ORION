@@ -21,7 +21,7 @@ from typing import Optional
 
 from arep.api.model_store import get_model_store, SubmissionType
 from arep.database.connection import session_scope
-from arep.database.repository import ModelRepository
+from arep.database.repository import ModelRepository, OrganisationRepository
 from arep.models.http_adapter import HttpModelAdapter
 from arep.models.interface import ModelInterface
 from arep.models.sandbox import SubprocessModelRunner
@@ -51,6 +51,7 @@ def resolve_model(
     Raises:
         ValueError: name not in registry and not a UUID.
         KeyError: UUID not found (or belongs to another org).
+        PermissionError: cloudpickle artefact whose org is not cleared for it.
         RuntimeError: artefact unavailable or unsupported submission type.
     """
     if name_or_id in builtin_registry:
@@ -71,12 +72,25 @@ def resolve_model(
         artefact_uri = record.artefact_uri
         submission_type = record.submission_type
         status = record.status
+        # Gate on the ORG THAT OWNS THE ARTEFACT, not on the caller's org_id:
+        # org_id is optional here, and a None caller must not skip the check.
+        pickle_allowed = OrganisationRepository(session).allows_pickle_models(
+            record.org_id
+        )
 
     if status != "ready":
         raise RuntimeError(f"Model {name_or_id} not ready (status={status})")
 
     store = get_model_store()
     if submission_type == SubmissionType.PYTHON_SDK.value:
+        if not pickle_allowed:
+            # Defence in depth: upload is gated too, but artefacts uploaded
+            # before the gate existed must not become runnable.
+            raise PermissionError(
+                f"Model {name_or_id} uses the cloudpickle path, which is "
+                f"disabled for its organisation. Use the Docker submission "
+                f"path, or ask an administrator to enable it."
+            )
         pickle_bytes = store.fetch_python_sdk(artefact_uri)
         return SubprocessModelRunner(pickle_bytes=pickle_bytes)
 

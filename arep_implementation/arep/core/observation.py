@@ -67,6 +67,21 @@ class ObjectObservation:
             self.width,
         ], dtype=np.float64)
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ObjectObservation":
+        """Inverse of to_dict(). Missing keys fall back to field defaults."""
+        return cls(
+            object_id=str(d.get("object_id", "")),
+            relative_x=float(d.get("relative_x", 0.0)),
+            relative_y=float(d.get("relative_y", 0.0)),
+            relative_vx=float(d.get("relative_vx", 0.0)),
+            relative_vy=float(d.get("relative_vy", 0.0)),
+            heading=float(d.get("heading", 0.0)),
+            speed=float(d.get("speed", 0.0)),
+            length=float(d.get("length", 0.0)),
+            width=float(d.get("width", 0.0)),
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "object_id": self.object_id,
@@ -260,6 +275,45 @@ class Observation:
             "objects": [o.to_dict() for o in self.objects],
             "sim_time": self.sim_time,
         }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "Observation":
+        """
+        Inverse of to_dict().
+
+        This is the wire format for out-of-process models: the sandbox and the
+        HTTP adapter both ship to_dict() across a boundary and rebuild here, so
+        the two must stay in step. Round-trip is covered by
+        tests/test_model_sandbox.py.
+        """
+        ego = d.get("ego", {})
+        lane = d.get("lane", {})
+        light = d.get("traffic_light", {})
+
+        raw_state = light.get("state", TrafficLightState.OFF.value)
+        try:
+            light_state = TrafficLightState(raw_state)
+        except ValueError:
+            light_state = TrafficLightState.OFF
+
+        return cls(
+            ego_x=float(ego.get("x", 0.0)),
+            ego_y=float(ego.get("y", 0.0)),
+            ego_heading=float(ego.get("heading", 0.0)),
+            ego_velocity=float(ego.get("velocity", 0.0)),
+            ego_acceleration=float(ego.get("acceleration", 0.0)),
+            ego_heading_rate=float(ego.get("heading_rate", 0.0)),
+            speed_limit=float(d.get("speed_limit", 0.0)),
+            lane_offset=float(lane.get("offset", 0.0)),
+            lane_heading_error=float(lane.get("heading_error", 0.0)),
+            lane_width=float(lane.get("width", 3.5)),
+            lane_curvature=float(lane.get("curvature", 0.0)),
+            lane_valid=bool(lane.get("valid", False)),
+            traffic_light_state=light_state,
+            traffic_light_distance=float(light.get("distance", 1000.0)),
+            objects=[ObjectObservation.from_dict(o) for o in d.get("objects", [])],
+            sim_time=float(d.get("sim_time", 0.0)),
+        )
 
 
 # ── Private helpers ──────────────────────────────────────────────────────
