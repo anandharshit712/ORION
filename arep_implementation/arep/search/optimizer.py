@@ -18,9 +18,8 @@ Requires: cma>=3.3.0 (install with: pip install arep[search])
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import numpy as np
 
 from arep.search.space import SearchSpace
 from arep.search.objective import ObjectiveFunction, EvaluationRecord

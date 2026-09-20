@@ -187,7 +187,6 @@ def four_way_intersection(
                 south_arm  (ego)
     """
     jct_pos = Vector2D(0.0, 0.0)
-    half = arm_length / 2
 
     arm_defs = {
         "south_arm": (Vector2D(0.0, -arm_length), math.pi / 2,  math.pi / 2),

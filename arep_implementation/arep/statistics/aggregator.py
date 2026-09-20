@@ -10,8 +10,8 @@ Aggregates evaluation results across multiple simulation runs:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List
+from dataclasses import dataclass
+from typing import List
 
 import numpy as np
 from scipy import stats

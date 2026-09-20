@@ -10,9 +10,8 @@ Both support validation, clamping, and bidirectional conversion.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Dict
 
 import numpy as np
 

@@ -13,9 +13,9 @@ Tracks:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
-from arep.core.state import WorldState, TerminationReason
+from arep.core.state import WorldState
 from arep.core.action import Action
 from arep.core.ttc import TTCCalculator
 

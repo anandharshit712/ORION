@@ -37,7 +37,7 @@ from __future__ import annotations
 import math
 from typing import List, Optional
 
-from arep.core.state import VehicleState, Vector2D
+from arep.core.state import VehicleState
 
 
 class TTCCalculator:

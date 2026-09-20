@@ -70,7 +70,7 @@ class ScenarioParser:
         errors = self.validator.validate(scenario)
         if errors:
             raise ScenarioValidationError(
-                f"Validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+                "Validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
             )
 
         return scenario, hash_string(yaml_content)
@@ -97,7 +97,7 @@ class ScenarioParser:
         errors = self.validator.validate(scenario)
         if errors:
             raise ScenarioValidationError(
-                f"Validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+                "Validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
             )
 
         return scenario, hash_string(yaml_string)

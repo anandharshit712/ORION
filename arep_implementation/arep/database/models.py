@@ -18,8 +18,8 @@ from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import (
-    Column, Integer, Float, String, Boolean, Text, DateTime,
-    ForeignKey, JSON, Index, create_engine,
+    Integer, Float, String, Boolean, Text, DateTime,
+    ForeignKey, Index,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, relationship, Mapped, mapped_column,

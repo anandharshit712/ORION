@@ -27,8 +27,8 @@ from arep.api.schemas import (
     HealthResponse, ModelListResponse,
     BatchEnqueueResponse, BatchProgressResponse,
 )
-from arep.config import get_config
 from arep.database.connection import session_scope
+from arep.database.models import ScenarioRecord
 from arep.database.repository import (
     ScenarioRepository, RunRepository, BatchJobRepository,
     OrganisationRepository,
@@ -133,10 +133,11 @@ def list_scenarios():
 @scenarios_router.get("/{scenario_id}", response_model=ScenarioResponse)
 def get_scenario(scenario_id: int):
     with session_scope() as session:
-        repo = ScenarioRepository(session)
-        scenario = session.query(
-            __import__('arep.database.models', fromlist=['ScenarioRecord']).ScenarioRecord
-        ).get(scenario_id)
+        # Plain import and Session.get(): the previous __import__() trick and
+        # Query.get() both worked, but Query.get() is deprecated in SQLAlchemy 2.0
+        # and the dynamic import hid the dependency from every tool that reads
+        # this file.
+        scenario = session.get(ScenarioRecord, scenario_id)
         if not scenario:
             raise HTTPException(404, "Scenario not found")
         return ScenarioResponse.model_validate(scenario)

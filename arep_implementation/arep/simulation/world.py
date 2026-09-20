@@ -8,9 +8,8 @@ Does NOT handle physics updates to the ego vehicle (that's the engine's job).
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-import numpy as np
 
 from arep.config import SimulationConfig
 from arep.core.state import (
@@ -64,7 +63,7 @@ class WorldManager:
             ego_vehicle=ego_initial.copy(),
             dynamic_objects=[o.copy() for o in (dynamic_objects or [])],
             traffic_lights=[t.copy() for t in (traffic_lights or [])],
-            lanes=[l.copy() for l in (lanes or [])],
+            lanes=[lane.copy() for lane in (lanes or [])],
             weather_condition=weather_condition,
             visibility=visibility,
             is_terminated=False,

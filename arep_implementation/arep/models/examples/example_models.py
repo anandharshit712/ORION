@@ -10,8 +10,6 @@ Provides simple models for testing and CI:
 
 from __future__ import annotations
 
-import math
-from typing import Optional
 
 import numpy as np
 

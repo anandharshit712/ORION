@@ -43,8 +43,10 @@ def test_frame_order_changes_the_hash():
     """A run that emits the same frames in a different order is a different run."""
     a, b = FrameHasher(), FrameHasher()
     f1, f2 = {"tick": 1}, {"tick": 2}
-    a.update(f1); a.update(f2)
-    b.update(f2); b.update(f1)
+    a.update(f1)
+    a.update(f2)
+    b.update(f2)
+    b.update(f1)
     assert a.hexdigest() != b.hexdigest()
 
 

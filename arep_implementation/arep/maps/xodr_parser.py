@@ -20,11 +20,10 @@ from __future__ import annotations
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List
 
 from arep.core.state import Vector2D
-from arep.core.physics import SurfaceType
-from arep.core.road import RoadGraph, RoadSegment, Junction
+from arep.core.road import RoadGraph
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("maps.xodr_parser")
@@ -70,9 +69,8 @@ class OpenDRIVEParser:
             raise FileNotFoundError(f"OpenDRIVE file not found: {xodr_path}")
 
         logger.info(f"Parsing OpenDRIVE file: {path.name}")
-        tree = ET.parse(path)
-        root = tree.getroot()
-
+        # No parse until there is something to do with the result — reading the
+        # file only to discard it made this stub look half-built.
         raise NotImplementedError("OpenDRIVEParser.parse not yet implemented [P4]")
 
     # ── Geometry discretisation helpers ──────────────────────────────

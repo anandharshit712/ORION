@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from arep.core.observation import Observation
 from arep.core.action import Action
 from arep.utils.exceptions import (
     ModelExecutionError,
     ModelSandboxError,
-    ModelTimeoutError,
 )
 from arep.utils.logging_config import get_logger
 

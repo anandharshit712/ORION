@@ -18,9 +18,8 @@ Design rules:
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional
 
 from arep.core.state import Vector2D
 from arep.core.physics import SurfaceType

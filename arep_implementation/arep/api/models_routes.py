@@ -20,7 +20,7 @@ from typing import List, Optional
 
 from fastapi import (
     APIRouter, Depends, File, Form, HTTPException, Request,
-    UploadFile, status,
+    UploadFile,
 )
 from pydantic import BaseModel, Field
 

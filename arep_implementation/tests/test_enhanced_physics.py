@@ -21,8 +21,6 @@ from arep.core.physics import (
     PhysicsMode,
     SurfaceType,
     PacejkaParams,
-    DynamicVehicleParams,
-    GRAVITY,
 )
 from arep.core.state import VehicleState, Vector2D
 from arep.core.action import Action
@@ -195,9 +193,7 @@ class TestDynamicMode(unittest.TestCase):
 
     def test_braking_on_ice_longer_distance(self):
         """Braking on ice should take longer than on dry asphalt."""
-        state_dry = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=20.)
-        state_ice = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=20.)
-
+        # No VehicleState needed: compute_stopping_distance takes a speed.
         phys_dry = VehiclePhysics(
             self.config, mode=PhysicsMode.DYNAMIC
         )

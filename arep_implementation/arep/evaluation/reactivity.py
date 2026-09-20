@@ -11,7 +11,6 @@ Measures how quickly the model responds to critical situations:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from arep.evaluation.collector import SimulationRecord
 

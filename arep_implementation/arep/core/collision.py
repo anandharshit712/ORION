@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 from arep.config import SimulationConfig
 from arep.core.state import VehicleState, WorldState, Vector2D

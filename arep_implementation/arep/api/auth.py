@@ -10,7 +10,6 @@ JWT-based authentication with multi-tenancy:
 
 from __future__ import annotations
 
-import os
 import re
 import datetime
 from typing import Optional
@@ -22,23 +21,23 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import joinedload
 
 import hashlib
-import os as _os
 import secrets
 import datetime as _dt
 
 from arep.api.ratelimit import limiter, login_limit, signup_limit
+import bcrypt
+
 from arep.config import get_config
 from arep.config.env import get_settings
+from arep.config.validate import resolve_secret_key
 from arep.database.connection import get_session, session_scope
-from arep.database.models import UserRecord, OrganisationRecord
+from arep.database.models import UserRecord
 from arep.database.repository import OrganisationRepository, PasswordResetRepository
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.auth")
 
 # ── Config ───────────────────────────────────────────────────────────────
-
-from arep.config.validate import resolve_secret_key
 
 SECRET_KEY = resolve_secret_key()
 ALGORITHM = "HS256"
@@ -58,8 +57,6 @@ CSRF_COOKIE = "orion_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 
 # ── Password hashing ────────────────────────────────────────────────────
-
-import bcrypt
 
 def hash_password(password: str) -> str:
     pwd_bytes = password.encode('utf-8')[:72]

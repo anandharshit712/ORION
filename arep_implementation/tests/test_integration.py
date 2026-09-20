@@ -19,18 +19,16 @@ Tests the full pipeline:
 """
 
 import math
-import json
 import sys
 import os
 
 # Add parent dir to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.config import Config, SimulationConfig, load_config, reload_config
+from arep.config import SimulationConfig, reload_config
 from arep.core.state import (
     Vector2D, VehicleState, WorldState,
-    ObjectType, TerminationReason, TrafficLightState,
-    LaneInfo, TrafficLightInfo,
+    LaneInfo,
 )
 from arep.core.action import Action, ActionAlternative
 from arep.core.physics import VehiclePhysics
@@ -39,7 +37,6 @@ from arep.core.collision import CollisionDetector
 from arep.core.ttc import TTCCalculator
 from arep.core.observation import Observation
 from arep.simulation.engine import SimulationEngine
-from arep.simulation.time_manager import TimeManager
 from arep.evaluation.collector import DataCollector
 from arep.evaluation.composite import CompositeEvaluator
 from arep.models.examples.example_models import (
@@ -229,9 +226,15 @@ def test_random_manager():
     val2 = float(rng2.get("noise").normal(0, 1))
     assert val1 == val2
 
-    # Different subsystems are independent
-    scenario_val = float(rng1.get("scenario").uniform(0, 100))
-    noise_val = float(rng1.get("noise").normal(0, 1))  # next noise value
+    # Different subsystems are independent: drawing from "scenario" must not
+    # disturb the "noise" stream, or a scenario with more randomised parameters
+    # would silently change the noise every model sees.
+    probe = RandomManager(master_seed=42)
+    expected_noise = float(probe.get("noise").normal(0, 1))
+
+    interleaved = RandomManager(master_seed=42)
+    interleaved.get("scenario").uniform(0, 100)          # perturb another stream
+    assert float(interleaved.get("noise").normal(0, 1)) == expected_noise
 
     # Save/restore
     state = rng1.save_state()
@@ -264,14 +267,14 @@ def test_collision_detection():
         position=Vector2D(0.0, 0.0), heading=0.0,
         length=4.5, width=2.0, object_id="b",
     )
-    assert detector.check_collision(v1, v2) == True
+    assert detector.check_collision(v1, v2)
 
     # Two separated vehicles
     v3 = VehicleState(
         position=Vector2D(100.0, 0.0), heading=0.0,
         length=4.5, width=2.0, object_id="c",
     )
-    assert detector.check_collision(v1, v3) == False
+    assert not detector.check_collision(v1, v3)
 
     # Edge case: barely NOT touching (4.5m center-to-center = length apart)
     v4 = VehicleState(
@@ -279,21 +282,21 @@ def test_collision_detection():
         length=4.5, width=2.0, object_id="d",
     )
     # Centers 4.51m apart, half lengths 2.25+2.25 = 4.5 → gap of 0.01
-    assert detector.check_collision(v1, v4) == False
+    assert not detector.check_collision(v1, v4)
 
     # Overlapping case: 3m apart (overlap = 4.5 - 3 = 1.5)
     v4b = VehicleState(
         position=Vector2D(3.0, 0.0), heading=0.0,
         length=4.5, width=2.0, object_id="d2",
     )
-    assert detector.check_collision(v1, v4b) == True
+    assert detector.check_collision(v1, v4b)
 
     # Clear separation
     v5 = VehicleState(
         position=Vector2D(10.0, 0.0), heading=0.0,
         length=4.5, width=2.0, object_id="e",
     )
-    assert detector.check_collision(v1, v5) == False
+    assert not detector.check_collision(v1, v5)
 
     # detect_all_collisions
     world = WorldState(

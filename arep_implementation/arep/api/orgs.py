@@ -16,12 +16,11 @@ from __future__ import annotations
 import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from arep.api.auth import (
-    OrgSummary, hash_password, get_request_principal, normalise_slug,
-    require_verified_email,
+    hash_password, get_request_principal, require_verified_email,
 )
 from arep.api.middleware import generate_api_key, require_role
 from arep.database.connection import session_scope

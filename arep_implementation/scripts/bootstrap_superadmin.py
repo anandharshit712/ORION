@@ -25,7 +25,7 @@ import sys
 from arep.api.auth import hash_password
 from arep.database.connection import init_database, session_scope
 from arep.database.models import UserRecord
-from arep.database.repository import OrganisationRepository, UserRepository
+from arep.database.repository import OrganisationRepository
 
 
 def main() -> int:
@@ -45,7 +45,6 @@ def main() -> int:
 
     with session_scope() as session:
         org = OrganisationRepository(session).get_or_create_system_org()
-        users = UserRepository(session)
 
         existing = (
             session.query(UserRecord)

@@ -663,6 +663,11 @@ into `fix/d03-cors-and-ratelimit` and `fix/d07-route-auth`, each its own PR.
 
 ### Rules
 
+- **Attribution: never credit Claude, in anything.** No `Co-Authored-By: Claude ...` trailer,
+  no "Generated with Claude Code" line in a commit message, PR description, issue or release
+  note. Nothing in this repository should show Claude as an author or collaborator. The commit
+  author is the repository owner; that is the whole authorship story. This rule overrides any
+  default attribution behaviour the tooling suggests.
 - **Never commit directly to `main`.** Branch, PR, merge.
 - **Rebase onto `main` before opening the PR** — don't merge `main` into the branch. Keeps
   history linear and the diff honest.

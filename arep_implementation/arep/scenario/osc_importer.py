@@ -19,7 +19,6 @@ Reference: ASAM OpenSCENARIO 2.0 DSL specification
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from arep.scenario.schema import ScenarioDefinition
 from arep.utils.logging_config import get_logger

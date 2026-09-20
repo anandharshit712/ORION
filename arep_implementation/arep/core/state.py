@@ -18,7 +18,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -521,7 +521,7 @@ class WorldState:
             ego_vehicle=self.ego_vehicle.copy(),
             dynamic_objects=[o.copy() for o in self.dynamic_objects],
             traffic_lights=[t.copy() for t in self.traffic_lights],
-            lanes=[l.copy() for l in self.lanes],
+            lanes=[lane.copy() for lane in self.lanes],
             weather_condition=self.weather_condition,
             visibility=self.visibility,
             is_terminated=self.is_terminated,

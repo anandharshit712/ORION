@@ -25,7 +25,6 @@ import numpy as np
 from arep.core.state import (
     WorldState,
     VehicleState,
-    Vector2D,
     TrafficLightState,
 )
 

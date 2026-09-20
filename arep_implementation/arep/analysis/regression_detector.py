@@ -16,7 +16,7 @@ preferable to missed regressions in a safety-critical system.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 from arep.utils.logging_config import get_logger
 

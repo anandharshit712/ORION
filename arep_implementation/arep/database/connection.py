@@ -7,7 +7,6 @@ Supports SQLite (default) and PostgreSQL.
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from typing import Generator, Optional
 

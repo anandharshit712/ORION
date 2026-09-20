@@ -4,7 +4,7 @@ Reusable validation helpers for ORION.
 Provides common validation patterns used across modules.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 def validate_range(
