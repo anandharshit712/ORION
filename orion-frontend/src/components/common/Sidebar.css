@@ -98,3 +98,23 @@
   transition: all var(--t-fast) ease;
 }
 .side-logout:hover { color: var(--fail); border-color: var(--fail); }
+
+/* Sections that still render the ComingSoon panel (D-10). Visible so the
+   product's shape is legible, not navigable so nobody lands on an empty page
+   and reads it as a fault. */
+.side-item--soon {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.side-item--soon:hover {
+  color: inherit;
+  background: transparent;
+}
+.side-item--soon:hover svg { color: var(--text-2); }
+
+.side-soon {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+}

@@ -339,7 +339,7 @@ there is nothing to forge). The header wins when both are present. `get_current_
 `GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` with:
 `composite_score`, `safety_score`, `compliance_score`, `stability_score`, `reactivity_score`, `collision_occurred` — populated once `status == "completed"`.
 
-Note: only auth router (`/api/auth/*`) and live-run router (`/api/runs/*`) mounted under `/api`. Other routers mounted without prefix — keep in mind when wiring frontend proxy.
+**Path split — read before adding a frontend call.** Only the auth router (`/api/auth/*`) and the live-run router (`/api/runs/*`) are mounted under `/api`. `/scenarios/`, `/jobs/`, `/results/*`, `/evaluate/*`, `/models/` and `/health` are mounted at the **root**. `src/services/api.js` therefore spells out each full path rather than prefixing everything, and `vite.config.js` proxies every one of those root prefixes. Getting this wrong is quiet: the dev server answers with `index.html` and the call fails as a JSON parse error rather than a 404. Four methods shipped broken this way and went unnoticed because the sections that would call them are not wired up yet.
 
 Built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
 `"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`
@@ -417,8 +417,8 @@ React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
   `orion_csrf` cookie in an `X-CSRF-Token` header on POST/PUT/PATCH/DELETE. Every call must go
   through `request()` in that file or it will 403. API methods take **no token argument** —
   `api.getRuns(50)`, not `api.getRuns(token, 50)`.
-- `OrgContext.jsx` exists but `OrgProvider` is NOT mounted anywhere — `useOrg()` throws. Mount it or don't call it (Phase 0.6 resolves).
-- Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `batches`, `compare`, `settings` — string keys used in `Sidebar` (numbered nav). Non-`overview` views render styled "coming soon" placeholder panels until wired.
+- `OrgContext.jsx` was **deleted** in Phase 0.6. It was never mounted, never consumed, its body was two TODOs, and it imported `api` as a default export that does not exist — it would have thrown on first use. When the billing UI needs org state, `GET /api/orgs/me` through `api.js` is a few lines.
+- Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `batches`, `compare`, `settings` — string keys used in `Sidebar` (numbered nav). Only `overview` renders real data; the rest show the `ComingSoon` panel. `NAV_ITEMS` in `Sidebar.jsx` carries a `ready` flag: unready entries stay visible with a `soon` marker but are **disabled**, so nobody lands on an empty page and reads it as a fault. **Flip `ready: true` in the same change that wires a section up.**
 - Charts use Recharts (`LineChart`, `RadarChart`, `BarChart`) — don't add Chart.js or D3.
 - 3D visualization uses `@react-three/fiber` + `@react-three/drei` — don't use raw Three.js imperative API in React components.
 - CSS co-located: `Component.jsx` + `Component.css` same folder. No CSS modules, no Tailwind.

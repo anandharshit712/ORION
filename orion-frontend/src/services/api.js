@@ -1,4 +1,10 @@
-const BASE = '/api';
+// Only the auth and live-run routers are mounted under /api. The scenario,
+// job, result, evaluate and health routers are mounted at the root — see
+// CLAUDE.md section 8. Prefixing everything with /api pointed getScenarios,
+// getBatchJobs, getHealth and evaluateSingle at 404s; they went unnoticed
+// because those dashboard sections are not wired up yet, so nothing called
+// them. Each method below names its own full path.
+const API = '/api';
 
 // Methods that change state and therefore need the CSRF token (RFC 9110).
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -16,7 +22,7 @@ function csrfToken() {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-async function request(endpoint, options = {}) {
+async function request(path, options = {}) {
   const { ...fetchOpts } = options;
   const method = (fetchOpts.method || 'GET').toUpperCase();
 
@@ -26,7 +32,7 @@ async function request(endpoint, options = {}) {
     if (csrf) headers['X-CSRF-Token'] = csrf;
   }
 
-  const res = await fetch(`${BASE}${endpoint}`, {
+  const res = await fetch(path, {
     ...fetchOpts,
     headers,
     // Send the session cookie. Without this the browser omits it and every
@@ -49,41 +55,41 @@ export const api = {
   // httpOnly cookie the backend sets at login, which JavaScript cannot read.
   // SDK and script clients still use Authorization: Bearer — see CLAUDE.md §8.
   register: (email, username, password, fullName) =>
-    request('/auth/register', {
+    request(`${API}/auth/register`, {
       method: 'POST',
       body: JSON.stringify({ email, username, password, full_name: fullName }),
     }),
 
   login: (identifier, password) =>
-    request('/auth/login', {
+    request(`${API}/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ identifier, password }),
     }),
 
-  logout: () => request('/auth/logout', { method: 'POST' }),
+  logout: () => request(`${API}/auth/logout`, { method: 'POST' }),
 
-  getMe: () => request('/auth/me'),
+  getMe: () => request(`${API}/auth/me`),
 
   forgotPassword: (email) =>
-    request('/auth/forgot-password', {
+    request(`${API}/auth/forgot-password`, {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),
 
   resetPassword: (token, newPassword) =>
-    request('/auth/reset-password', {
+    request(`${API}/auth/reset-password`, {
       method: 'POST',
       body: JSON.stringify({ token, new_password: newPassword }),
     }),
 
   verifyEmail: (token) =>
-    request('/auth/verify-email', {
+    request(`${API}/auth/verify-email`, {
       method: 'POST',
       body: JSON.stringify({ token }),
     }),
 
   resendVerification: (email) =>
-    request('/auth/resend-verification', {
+    request(`${API}/auth/resend-verification`, {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),
@@ -92,9 +98,9 @@ export const api = {
   getScenarios: () => request('/scenarios/'),
 
   // Runs / Results
-  getRuns: (limit = 50) => request(`/runs/?limit=${limit}`),
+  getRuns: (limit = 50) => request(`${API}/runs/?limit=${limit}`),
 
-  getRunDetail: (runId) => request(`/runs/${runId}`),
+  getRunDetail: (runId) => request(`${API}/runs/${runId}`),
 
   getBatchJobs: () => request('/jobs/'),
 
@@ -114,7 +120,7 @@ export const api = {
 
   // Live runs (P1.1)
   startRun: (scenarioPath, modelName, masterSeed = 42, tickInterval = 0.02) =>
-    request('/runs/', {
+    request(`${API}/runs/`, {
       method: 'POST',
       body: JSON.stringify({
         scenario_path: scenarioPath,
@@ -124,15 +130,15 @@ export const api = {
       }),
     }),
 
-  listLiveRuns: () => request('/runs/'),
+  listLiveRuns: () => request(`${API}/runs/`),
 
-  getLiveRun: (runId) => request(`/runs/${runId}`),
+  getLiveRun: (runId) => request(`${API}/runs/${runId}`),
 
   // Single-use, 60-second credential for the run's WebSocket (D-04). The
   // session JWT must never appear in a socket URL — URLs reach access logs,
   // proxy logs and browser history.
   createWsTicket: (runId) =>
-    request(`/runs/${runId}/ws-ticket`, { method: 'POST' }),
+    request(`${API}/runs/${runId}/ws-ticket`, { method: 'POST' }),
 
-  cancelLiveRun: (runId) => request(`/runs/${runId}`, { method: 'DELETE' }),
+  cancelLiveRun: (runId) => request(`${API}/runs/${runId}`, { method: 'DELETE' }),
 };
