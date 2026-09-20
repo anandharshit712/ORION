@@ -30,6 +30,20 @@ class EgoSnapshot:
     velocity: float
     acceleration: float
     heading_rate: float = 0.0
+    # Phase 0.5 / D-05: signed lateral offset from the lane centerline, and the
+    # width of the lane it was measured against. Recorded per step because lane
+    # compliance cannot be reconstructed from (x, y) afterwards — that needs the
+    # road geometry the run was driving on.
+    # Negative is left of the direction of travel, positive is right.
+    lane_offset: float = 0.0
+    lane_width: float = 0.0
+    # Half the ego body width, recorded with the offset so the in-lane test can
+    # ask whether the *body* crossed the line rather than the centre point.
+    vehicle_half_width: float = 0.0
+    # False when the world had no lane under the ego (off the road, or a
+    # scenario with no lane geometry). Such steps are excluded from the in-lane
+    # fraction rather than counted as compliant.
+    lane_valid: bool = False
 
 
 @dataclass
@@ -103,6 +117,18 @@ class DataCollector:
             if abs(dt) > 1e-9:
                 heading_rate = dh / dt
 
+        # Lane geometry (D-05). get_current_lane() is the same lookup the
+        # observation builder uses, so the score and what the model saw agree.
+        lane = world.get_current_lane()
+        if lane is not None:
+            lane_offset = lane.get_signed_lateral_offset(ego.position)
+            lane_width = lane.width
+            lane_valid = True
+        else:
+            lane_offset = 0.0
+            lane_width = 0.0
+            lane_valid = False
+
         self._snapshots.append(EgoSnapshot(
             sim_time=world.sim_time,
             x=ego.position.x,
@@ -111,6 +137,10 @@ class DataCollector:
             velocity=ego.velocity,
             acceleration=ego.acceleration,
             heading_rate=heading_rate,
+            lane_offset=lane_offset,
+            lane_width=lane_width,
+            vehicle_half_width=ego.width / 2.0,
+            lane_valid=lane_valid,
         ))
         self._actions.append(action.copy())
 

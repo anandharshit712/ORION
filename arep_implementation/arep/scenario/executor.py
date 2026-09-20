@@ -135,8 +135,22 @@ class ScenarioExecutor:
         lanes = []
 
         for lane_idx in range(road.lanes):
-            # Lane center y-coordinate (centered around y=0)
-            lane_y = (lane_idx - road.lanes / 2.0 + 0.5) * road.lane_width
+            # Lane 0 is centred on y=0 and further lanes sit to its left
+            # (Phase 0.5, D-05).
+            #
+            # This used to centre the whole carriageway on y=0, which for an
+            # even lane count put the *boundary* between lanes at y=0 — while
+            # every scenario in the library places the ego and its traffic at
+            # y=0 and treats it as the travel line. Under the old layout a
+            # correctly driven car straddled the lane line for the entire run,
+            # which was invisible while lane compliance was hardcoded to 1.0 and
+            # scored 0% the moment it was computed for real.
+            #
+            # Reading y=0 as the centre of lane 0 matches what the scenarios
+            # mean: a "lead_vehicle" at y=0 is a vehicle ahead *in my lane*.
+            # It also leaves every stored position untouched, so relative
+            # geometry — and therefore every collision scenario — is unchanged.
+            lane_y = lane_idx * road.lane_width
 
             # Straight centerline (1 km)
             centerline = [

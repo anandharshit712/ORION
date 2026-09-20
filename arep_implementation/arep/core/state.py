@@ -226,9 +226,55 @@ class LaneInfo:
         return best_point
 
     def get_lateral_offset(self, position: Vector2D) -> float:
-        """Distance from position to closest point on centerline."""
+        """Unsigned distance from position to the closest centerline point."""
         closest = self.get_closest_point(position)
         return position.distance_to(closest)
+
+    def get_signed_lateral_offset(self, position: Vector2D) -> float:
+        """
+        Signed lateral offset from the centerline (Phase 0.5, defect D-05).
+
+        Negative is left of the direction of travel, positive is right, matching
+        the sign convention on ``Action.steering``. The sign is what makes the
+        number diagnostic: "drifted 0.4 m" says nothing about which way, so a
+        model that oscillates and one that holds a constant offset look
+        identical in the aggregate.
+
+        Determined by the z component of the cross product between the
+        centerline segment direction and the vector from the centerline to the
+        position. Falls back to the unsigned distance when the lane has no
+        usable direction (a single centerline point).
+        """
+        closest = self.get_closest_point(position)
+        distance = position.distance_to(closest)
+        if distance < 1e-12 or len(self.centerline_points) < 2:
+            return 0.0 if distance < 1e-12 else distance
+
+        # Direction of the segment nearest to `closest`, found by walking the
+        # same segments get_closest_point walked — deterministic, list order.
+        best_dist_sq = float("inf")
+        direction = None
+        for i in range(len(self.centerline_points) - 1):
+            p1 = self.centerline_points[i]
+            p2 = self.centerline_points[i + 1]
+            seg = p2 - p1
+            seg_len_sq = seg.norm_squared()
+            if seg_len_sq < 1e-12:
+                continue
+            t = max(0.0, min(1.0, (position - p1).dot(seg) / seg_len_sq))
+            candidate = p1 + seg * t
+            dist_sq = (position - candidate).norm_squared()
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                direction = seg
+
+        if direction is None:
+            return distance
+
+        to_position = position - closest
+        cross_z = direction.x * to_position.y - direction.y * to_position.x
+        # cross_z > 0 means the position is to the left of the travel direction.
+        return -distance if cross_z > 0 else distance
 
     def to_dict(self) -> Dict[str, Any]:
         return {
