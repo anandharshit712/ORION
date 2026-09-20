@@ -6,8 +6,14 @@ from the ``simulation`` queue, run a headless ``EvaluationRunner.run_single``,
 write results to the database, and increment the parent batch progress.
 
 Failure semantics:
-  - max_retries=0 — a failing simulation is logged, the run counts as failed,
-    and one credit is refunded to the org. The batch keeps going.
+  - max_retries=3 with 5s/15s/60s backoff for transient infrastructure errors
+    (database disconnect, broker hiccup). A model or scenario that fails
+    deterministically is not retried — it would fail identically three more
+    times and bill the customer for the privilege.
+  - The credit is refunded once, on the terminal failure, never per attempt.
+  - Tasks are idempotent on (batch_id, seed): Celery redelivers with acks_late
+    whenever a worker dies mid-task, and a second RunRecord would corrupt the
+    batch aggregate.
   - When the batch's ``runs_completed + runs_failed`` reaches ``num_runs`` the
     last task to write triggers ``finalise_if_done`` which aggregates per-run
     rows and flips the status to ``completed`` (or ``failed`` if every run died).
@@ -18,6 +24,8 @@ Tasks are JSON-serialisable only — never pass ORM objects across the wire.
 from __future__ import annotations
 
 from typing import Optional
+
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from arep.database.connection import session_scope
 from arep.database.repository import (
@@ -47,6 +55,28 @@ _BUILTIN_MODELS = {
 }
 
 
+def _fail_run(batch_id: int, org_id: Optional[str], exc: BaseException) -> None:
+    """Record a run as failed and refund its credit. Terminal path only.
+
+    Called once, after retries are exhausted or for a failure that will never
+    succeed — never on an intermediate retry, or the customer would be refunded
+    one credit per attempt for a single run.
+
+    ponytail: a Celery redelivery of a task that fails again can still
+    double-bump runs_failed. The success path is guarded by the RunRecord row;
+    failures write no row, so there is nothing to check against. Closing it
+    properly means a per-(batch, seed) ledger like webhook_events. Left open
+    because the visible consequence is a batch reporting more failures than it
+    ran, not a wrong score or a wrong charge.
+    """
+    with session_scope() as db:
+        batch_repo = BatchJobRepository(db)
+        batch_repo.increment_failed(batch_id)
+        batch_repo.set_error(batch_id, str(exc))
+        batch_repo.finalise_if_done(batch_id)
+    _refund_credit(org_id)
+
+
 def _refund_credit(org_id: Optional[str]) -> None:
     if not org_id:
         return
@@ -57,14 +87,30 @@ def _refund_credit(org_id: Optional[str]) -> None:
         logger.exception("credit refund failed for org=%s", org_id)
 
 
-@celery_app.task(
-    bind=True,
-    name="arep.worker.tasks.run_single_simulation",
-    max_retries=0,
-    acks_late=True,
+# Failures that are worth another attempt: the broker blinked, the database
+# dropped the connection, the pool timed out. Retrying these turns a transient
+# infrastructure hiccup into a slower run instead of a lost one the customer
+# paid for.
+#
+# Deliberately NOT retried: ModelSandboxError (the artefact broke its limits and
+# the run is void), ValueError and friends from a bad scenario or model. Those
+# fail the same way every time, and retrying them three times just bills three
+# times the compute before the same answer.
+TRANSIENT_ERRORS = (
+    OperationalError,          # includes disconnects and pool timeouts
+    DBAPIError,
+    ConnectionError,           # builtin; redis.ConnectionError subclasses it
+    TimeoutError,
 )
-def run_single_simulation(
-    self,
+
+# 5s, 15s, 60s. Spread out enough that a database restart or a broker failover
+# has time to finish before the last attempt.
+RETRY_BACKOFF_SECONDS = (5, 15, 60)
+MAX_RETRIES = len(RETRY_BACKOFF_SECONDS)
+
+
+def execute_single_run(
+    task,
     batch_id: int,
     scenario_id: int,
     scenario_path: str,
@@ -87,18 +133,45 @@ def run_single_simulation(
         batch_id, scenario_path, model_name, seed,
     )
 
+    # Idempotency (D-08). acks_late means Celery redelivers this message if the
+    # worker dies after starting it, so the task can legitimately run twice for
+    # one (batch, seed). Writing a second RunRecord would corrupt the batch
+    # aggregate and double-bump runs_completed, reporting more runs than were
+    # paid for. (batch_id, seed) identifies the run.
+    with session_scope() as db:
+        if RunRepository(db).get_by_batch_and_seed(batch_id, seed) is not None:
+            logger.info(
+                "run already recorded, skipping redelivery batch=%s seed=%d",
+                batch_id, seed,
+            )
+            return {"batch_id": batch_id, "seed": seed, "skipped": "already_recorded"}
+
     try:
         model = resolve_model(model_name, _BUILTIN_MODELS, org_id=org_id)
         runner = EvaluationRunner()
         result = runner.run_single(scenario_path, model, seed)
+    except TRANSIENT_ERRORS as exc:
+        if task.request.retries < MAX_RETRIES:
+            countdown = RETRY_BACKOFF_SECONDS[task.request.retries]
+            logger.warning(
+                "transient failure batch=%s seed=%d, retry %d/%d in %ds: %s",
+                batch_id, seed, task.request.retries + 1, MAX_RETRIES,
+                countdown, exc,
+            )
+            # No refund and no counter bump here: the run is still in flight.
+            # Refunding on every attempt would hand back one credit per retry.
+            raise task.retry(exc=exc, countdown=countdown)
+
+        logger.exception(
+            "transient failure exhausted retries batch=%s seed=%d", batch_id, seed,
+        )
+        _fail_run(batch_id, org_id, exc)
+        raise
     except Exception as exc:
+        # Deterministic failure — a bad model or scenario fails identically on
+        # every attempt, so retrying only burns the customer's compute.
         logger.exception("run failed batch=%s seed=%d", batch_id, seed)
-        with session_scope() as db:
-            batch_repo = BatchJobRepository(db)
-            batch_repo.increment_failed(batch_id)
-            batch_repo.set_error(batch_id, str(exc))
-            batch_repo.finalise_if_done(batch_id)
-        _refund_credit(org_id)
+        _fail_run(batch_id, org_id, exc)
         raise
 
     with session_scope() as db:
@@ -115,6 +188,23 @@ def run_single_simulation(
         "composite_score": float(result.composite_score),
         "collision": bool(result.safety.collision_occurred),
     }
+
+
+@celery_app.task(
+    bind=True,
+    name="arep.worker.tasks.run_single_simulation",
+    max_retries=MAX_RETRIES,
+    acks_late=True,
+)
+def run_single_simulation(self, *args, **kwargs):
+    """Celery entry point. The logic lives in execute_single_run().
+
+    Split so the retry decisions can be tested directly: the decorator binds
+    `self`, so a test cannot pass its own task double to the task object, and
+    driving retries through eager-mode Celery hides the decision behind its
+    outcome.
+    """
+    return execute_single_run(self, *args, **kwargs)
 
 
 @celery_app.task(

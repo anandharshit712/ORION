@@ -83,6 +83,25 @@ class RunRepository:
     def __init__(self, session: Session):
         self.session = session
 
+    def get_by_batch_and_seed(
+        self, batch_job_id: int, master_seed: int,
+    ) -> Optional[RunRecord]:
+        """Find the row for one run of a batch, if it has already been written.
+
+        (batch_job_id, master_seed) identifies a run: a batch fans out N tasks
+        with distinct seeds. Used by the worker to stay idempotent under Celery
+        redelivery, which happens on its own whenever a worker dies mid-task
+        with acks_late (Phase 0.6, defect D-08).
+        """
+        return (
+            self.session.query(RunRecord)
+            .filter(
+                RunRecord.batch_job_id == batch_job_id,
+                RunRecord.master_seed == master_seed,
+            )
+            .first()
+        )
+
     def save_result(
         self,
         scenario_id: int,
