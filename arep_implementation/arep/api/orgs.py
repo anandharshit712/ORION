@@ -21,6 +21,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from arep.api.auth import (
     OrgSummary, hash_password, get_request_principal, normalise_slug,
+    require_verified_email,
 )
 from arep.api.middleware import generate_api_key, require_role
 from arep.database.connection import session_scope
@@ -155,7 +156,7 @@ def list_api_keys(request: Request):
     "/",
     response_model=ApiKeyCreateResponse,
     status_code=201,
-    dependencies=[Depends(require_role("owner", "admin", "member"))],
+    dependencies=[Depends(require_role("owner", "admin", "member")), Depends(require_verified_email)],
 )
 def create_api_key(req: ApiKeyCreateRequest, request: Request):
     """Create an API key. Plaintext returned ONCE — store it securely."""

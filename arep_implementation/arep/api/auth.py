@@ -194,6 +194,7 @@ class UserResponse(BaseModel):
     username: str
     full_name: Optional[str]
     is_active: bool
+    email_verified: bool
     org_id: Optional[str]
     role: str
     created_at: datetime.datetime
@@ -207,6 +208,75 @@ class UserResponse(BaseModel):
 # ── Router ───────────────────────────────────────────────────────────────
 
 auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+
+
+# ── Email verification (Phase 0.4, D-04) ─────────────────────────────────
+
+def generate_verification_token() -> tuple[str, str]:
+    """Return (raw token, SHA256 hash). Only the hash is ever stored.
+
+    Same shape as the password-reset token: 64 hex characters from
+    secrets.token_hex(32). A database read must not yield anything that can be
+    replayed as a link.
+    """
+    raw = secrets.token_hex(32)
+    return raw, hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _send_verification(email: str, raw_token: str) -> None:
+    """Deliver the verification link, swallowing delivery failures.
+
+    A signup that succeeded must not report failure because SMTP was briefly
+    down — the user can ask for a resend. The error is logged, not raised.
+    """
+    from arep.api.email_sender import send_verification_email
+
+    link = f"{get_settings().public_url}/verify-email?token={raw_token}"
+    try:
+        send_verification_email(email, link)
+    except Exception:
+        logger.error("Verification email delivery failed for %s", email)
+
+
+def require_verified_email(request: Request) -> None:
+    """Dependency: refuse actions that spend credits or run customer code.
+
+    D-04's rule is that an unverified account may sign in and look around but
+    may not start runs, mint API keys or upload models — the operations that
+    cost money or execute submitted code. Read-only routes stay open, so the
+    dashboard is not a dead end while someone finds the email.
+
+    Superadmins bypass, consistently with require_role/require_plan.
+    """
+    from arep.api.middleware import SUPERADMIN_ROLE
+
+    if getattr(request.state, "role", None) == SUPERADMIN_ROLE:
+        return
+
+    user_id = getattr(request.state, "user_id", None)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    session = get_session()
+    try:
+        user = session.query(UserRecord).filter_by(id=int(user_id)).first()
+        if user is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if not user.email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Email address not verified. Check your inbox for the "
+                    "verification link, or request a new one at "
+                    "POST /api/auth/resend-verification."
+                ),
+            )
+    finally:
+        session.close()
 
 
 def _create_user_with_org(req: SignupRequest) -> UserRecord:
@@ -253,6 +323,7 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
             run_credits=initial_credits,
         )
 
+        raw_token, token_hash = generate_verification_token()
         user = UserRecord(
             org_id=org.id,
             role="owner",
@@ -260,6 +331,10 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
             username=req.username,
             hashed_password=hash_password(req.password),
             full_name=req.full_name,
+            # D-04: signup no longer auto-activates the address.
+            email_verified=False,
+            verification_token_hash=token_hash,
+            verification_sent_at=_dt.datetime.utcnow(),
         )
         session.add(user)
         session.flush()
@@ -270,7 +345,11 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
         if user.organisation is not None:
             session.expunge(user.organisation)
         logger.info("Signed up user=%s org=%s slug=%s", user.username, org.id, candidate)
-        return user
+
+    # Sent after the transaction commits: an address that gets a link for an
+    # account that then failed to save is worse than a missing email.
+    _send_verification(req.email, raw_token)
+    return user
 
 
 # The `request: Request` AND `response: Response` parameters on the three routes
@@ -353,6 +432,100 @@ def login(req: LoginRequest, request: Request, response: Response):
 def get_me(current_user: UserRecord = Depends(get_current_user)):
     """Get the currently authenticated user's profile (with org details)."""
     return current_user
+
+
+# ── Email verification endpoints (Phase 0.4, D-04) ───────────────────────
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
+class SimpleMessageResponse(BaseModel):
+    message: str
+
+
+@auth_router.post("/verify-email", response_model=SimpleMessageResponse)
+def verify_email(req: VerifyEmailRequest):
+    """
+    Consume a verification token and mark the address verified.
+
+    Single-use: the hash is cleared on success, so a link that leaks from a
+    browser history or a forwarded email cannot be replayed. Public by design —
+    the token is the credential, and requiring a session first would break the
+    common case of opening the link in a different browser.
+    """
+    token_hash = hashlib.sha256(req.token.encode()).hexdigest()
+    ttl = _dt.timedelta(hours=get_settings().verification_token_ttl_hours)
+
+    with session_scope() as session:
+        user = session.query(UserRecord).filter_by(
+            verification_token_hash=token_hash
+        ).first()
+
+        # One message for "no such token" and "expired": distinguishing them
+        # tells a stranger which tokens once existed.
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired verification token.",
+            )
+        sent_at = user.verification_sent_at
+        if sent_at is None or _dt.datetime.utcnow() - sent_at > ttl:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired verification token.",
+            )
+
+        user.email_verified = True
+        user.email_verified_at = _dt.datetime.utcnow()
+        user.verification_token_hash = None
+        logger.info("Email verified for user=%s", user.id)
+
+    return SimpleMessageResponse(message="Email verified. You can now start runs.")
+
+
+@auth_router.post("/resend-verification", response_model=SimpleMessageResponse)
+@limiter.limit(signup_limit)
+def resend_verification(
+    req: ResendVerificationRequest, request: Request, response: Response,
+):
+    """
+    Issue a fresh verification link.
+
+    Always answers the same way, whether or not the address exists and whether
+    or not it is already verified — otherwise this endpoint becomes an oracle
+    for which emails hold ORION accounts. Carries the signup rate limit (per IP)
+    plus a per-user hourly cap, so it cannot be used to mailbomb one address.
+    """
+    ok = SimpleMessageResponse(
+        message="If that address needs verifying, a new link has been sent.",
+    )
+    settings = get_settings()
+
+    with session_scope() as session:
+        user = session.query(UserRecord).filter_by(email=req.email).first()
+        if user is None or user.email_verified:
+            return ok
+
+        last_sent = user.verification_sent_at
+        if last_sent is not None:
+            since = _dt.datetime.utcnow() - last_sent
+            min_gap = _dt.timedelta(hours=1) / max(settings.verification_resend_per_hour, 1)
+            if since < min_gap:
+                logger.warning("Verification resend throttled for user=%s", user.id)
+                return ok
+
+        raw_token, token_hash = generate_verification_token()
+        user.verification_token_hash = token_hash
+        user.verification_sent_at = _dt.datetime.utcnow()
+        email = user.email
+
+    _send_verification(email, raw_token)
+    return ok
 
 
 # ── Password reset schemas ────────────────────────────────────────────────

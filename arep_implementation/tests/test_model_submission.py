@@ -20,6 +20,8 @@ import tempfile
 
 import pytest
 
+from tests.conftest import verify_email_for
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -84,6 +86,9 @@ def _signup(client, email, username, slug, allow_pickle=True):
         "password": "password123", "org_slug": slug,
     })
     assert r.status_code == 201, r.text
+    # D-04: an unverified account cannot upload or register a model. These tests
+    # are about the artefact paths, not the verification flow.
+    verify_email_for(email)
     if allow_pickle:
         _set_pickle_gate(slug, True)
     return r.json()

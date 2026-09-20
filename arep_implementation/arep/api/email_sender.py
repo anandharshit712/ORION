@@ -64,12 +64,77 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
     </body></html>
     """
 
+    _deliver(to_email, subject, body_text, body_html,
+             kind="password reset", link=reset_link)
+
+
+def send_verification_email(to_email: str, verify_link: str) -> None:
+    """
+    Send an address-verification email (Phase 0.4, defect D-04).
+
+    Same dev fallback as the reset mail: with no SMTP configured the link is
+    logged, so signup remains testable without an email provider.
+    """
+    settings = get_settings()
+    hours = settings.verification_token_ttl_hours
+
+    subject = "Verify your ORION email address"
+    body_text = textwrap.dedent(f"""
+        Welcome to ORION,
+
+        Confirm that {to_email} is your address to finish setting up your account.
+
+        Click the link below (valid for {hours} hours):
+
+            {verify_link}
+
+        Until you confirm, you can sign in and look around, but you will not be
+        able to start evaluation runs, create API keys or upload models.
+
+        If you did not create an ORION account, you can ignore this email.
+
+        -- The ORION team
+    """).strip()
+
+    body_html = f"""
+    <html><body style="font-family:sans-serif;color:#222;max-width:520px;margin:40px auto">
+      <h2 style="color:#1a1a2e">Verify your email address</h2>
+      <p>Confirm that <strong>{to_email}</strong> is your address to finish setting up
+         your ORION account.</p>
+      <p>This link is valid for <strong>{hours} hours</strong>:</p>
+      <p style="text-align:center;margin:32px 0">
+        <a href="{verify_link}"
+           style="background:#4f46e5;color:#fff;padding:12px 28px;
+                  border-radius:6px;text-decoration:none;font-weight:600">
+          Verify Email
+        </a>
+      </p>
+      <p style="color:#666;font-size:13px">Or copy this link:<br>
+         <a href="{verify_link}" style="color:#4f46e5">{verify_link}</a></p>
+      <p style="color:#999;font-size:12px">
+        Until you confirm, you can sign in and look around, but you will not be able
+        to start evaluation runs, create API keys or upload models.
+        If you did not create an ORION account, ignore this email.
+      </p>
+    </body></html>
+    """
+
+    _deliver(to_email, subject, body_text, body_html,
+             kind="verification", link=verify_link)
+
+
+def _deliver(to_email: str, subject: str, body_text: str, body_html: str,
+             *, kind: str, link: str) -> None:
+    """Send one multipart message, or log the link when SMTP is not configured.
+
+    Shared by both templates — the SMTP handshake is the part worth having in
+    exactly one place, since a mistake in it fails silently in dev (where email
+    is disabled) and only shows up in production.
+    """
+    settings = get_settings()
+
     if not settings.email_enabled:
-        # Dev/beta fallback: log the link so you can still test the flow
-        logger.warning(
-            "SMTP not configured — password reset link for %s: %s",
-            to_email, reset_link,
-        )
+        logger.warning("SMTP not configured — %s link for %s: %s", kind, to_email, link)
         return
 
     msg = MIMEMultipart("alternative")
@@ -91,8 +156,8 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
 
         server.sendmail(settings.smtp_from, [to_email], msg.as_string())
         server.quit()
-        logger.info("Password reset email sent to %s", to_email)
+        logger.info("%s email sent to %s", kind.capitalize(), to_email)
 
     except Exception as exc:
-        logger.error("Failed to send reset email to %s: %s", to_email, exc)
+        logger.error("Failed to send %s email to %s: %s", kind, to_email, exc)
         raise

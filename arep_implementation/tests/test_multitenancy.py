@@ -17,6 +17,8 @@ import tempfile
 
 import pytest
 
+from tests.conftest import verify_email_for
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -58,6 +60,9 @@ def _signup(client, email: str, username: str, slug: str) -> dict:
         "org_slug": slug,
     })
     assert r.status_code == 201, r.text
+    # D-04: signup leaves the address unverified, which blocks key creation and
+    # model upload. These tests are about org isolation, not verification.
+    verify_email_for(email)
     return r.json()
 
 

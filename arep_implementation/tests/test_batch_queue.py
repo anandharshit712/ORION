@@ -19,6 +19,8 @@ import tempfile
 
 import pytest
 
+from tests.conftest import verify_email_for
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -71,6 +73,8 @@ def _signup_login(client, email, username, slug):
         "email": email, "username": username, "password": "password123",
         "org_name": f"{username} org", "org_slug": slug,
     })
+    # D-04: an unverified account cannot enqueue a batch.
+    verify_email_for(email)
     r = client.post("/api/auth/login", json={
         "identifier": email, "password": "password123",
     })

@@ -18,7 +18,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from arep.api.auth import get_request_principal
+from arep.api.auth import get_request_principal, require_verified_email
 from arep.api.ratelimit import limiter
 from arep.api.schemas import (
     RunSingleRequest, RunBatchRequest,
@@ -144,7 +144,8 @@ def get_scenario(scenario_id: int):
 
 # ── Evaluate ─────────────────────────────────────────────────────────────
 
-@evaluate_router.post("/single", response_model=MetricsResponse)
+@evaluate_router.post("/single", response_model=MetricsResponse,
+                      dependencies=[Depends(require_verified_email)])
 def run_single(req: RunSingleRequest, request: Request):
     """Run a single simulation and return metrics."""
     org_id, _, _ = get_request_principal(request)
@@ -180,7 +181,8 @@ def run_single(req: RunSingleRequest, request: Request):
     return MetricsResponse(**result.to_dict())
 
 
-@evaluate_router.post("/batch", response_model=BatchResultResponse)
+@evaluate_router.post("/batch", response_model=BatchResultResponse,
+                      dependencies=[Depends(require_verified_email)])
 def run_batch(req: RunBatchRequest, request: Request):
     """Run a batch evaluation and return aggregated metrics."""
     org_id, _, _ = get_request_principal(request)
@@ -335,7 +337,8 @@ class RunStatusResponse(BaseModel):
     collision_occurred: bool = False
 
 
-@runs_router.post("/", response_model=StartRunResponse, status_code=201)
+@runs_router.post("/", response_model=StartRunResponse, status_code=201,
+                  dependencies=[Depends(require_verified_email)])
 async def start_run(req: StartRunRequest, request: Request):
     """Launch a live simulation run. Clients connect to the returned
     ``ws_url`` (with ``?token=<jwt>``) to receive 50 Hz tick frames."""
@@ -415,6 +418,7 @@ async def cancel_live_run(run_id: str, request: Request):
 
 @runs_router.post(
     "/batch", response_model=BatchEnqueueResponse, status_code=202,
+    dependencies=[Depends(require_verified_email)],
 )
 def enqueue_batch(req: RunBatchRequest, request: Request):
     """Enqueue a batch of N simulations.

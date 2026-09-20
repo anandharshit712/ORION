@@ -44,6 +44,11 @@ class Settings:
     public_url: str
     reset_token_ttl_minutes: int
     reset_rate_limit_per_hour: int
+    # Phase 0.4 / D-04. Verification is a "prove you own this inbox" check, not a
+    # password reset, so it gets a day rather than fifteen minutes — a link that
+    # dies while someone is at lunch just generates support mail.
+    verification_token_ttl_hours: int
+    verification_resend_per_hour: int
     redis_url: str
 
     @property
@@ -64,5 +69,9 @@ def get_settings() -> Settings:
         public_url=os.environ.get("ORION_PUBLIC_URL", "http://localhost:5173").rstrip("/"),
         reset_token_ttl_minutes=int(os.environ.get("RESET_TOKEN_TTL_MINUTES", "15") or "15"),
         reset_rate_limit_per_hour=int(os.environ.get("RESET_RATE_LIMIT_PER_HOUR", "5") or "5"),
+        verification_token_ttl_hours=int(
+            os.environ.get("VERIFICATION_TOKEN_TTL_HOURS", "24") or "24"),
+        verification_resend_per_hour=int(
+            os.environ.get("VERIFICATION_RESEND_PER_HOUR", "3") or "3"),
         redis_url=os.environ.get("ORION_REDIS_URL", "redis://localhost:6379/0"),
     )

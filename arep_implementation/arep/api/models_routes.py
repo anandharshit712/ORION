@@ -24,7 +24,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from arep.api.auth import get_request_principal
+from arep.api.auth import require_verified_email, get_request_principal
 from arep.api.middleware import require_role
 from arep.api.model_store import SubmissionType, get_model_store
 from arep.database.connection import session_scope
@@ -70,7 +70,7 @@ class RegisterDockerRequest(BaseModel):
     "/upload",
     response_model=ModelResponse,
     status_code=201,
-    dependencies=[Depends(require_role("owner", "admin", "member"))],
+    dependencies=[Depends(require_role("owner", "admin", "member")), Depends(require_verified_email)],
 )
 async def upload_python_model(
     request: Request,
@@ -129,7 +129,7 @@ async def upload_python_model(
     "/register",
     response_model=ModelResponse,
     status_code=201,
-    dependencies=[Depends(require_role("owner", "admin", "member"))],
+    dependencies=[Depends(require_role("owner", "admin", "member")), Depends(require_verified_email)],
 )
 def register_docker_model(req: RegisterDockerRequest, request: Request):
     """Register a Docker image as a model (Path B — Docker)."""

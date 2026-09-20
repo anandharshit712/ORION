@@ -286,6 +286,8 @@ FastAPI backend. All routes prefixed `/api`. Auth = JWT Bearer token.
 PUT    /api/admin/orgs/{org_id}/pickle-models  body: {enabled, note?} — superadmin: allow/deny this org the cloudpickle model path (D-01 gate, default deny)
 POST   /api/auth/forgot-password    body: {email} — request password reset link (public, no auth)
 POST   /api/auth/reset-password     body: {token, new_password} — consume token, set new password (public, no auth)
+POST   /api/auth/verify-email       body: {token} — consume verification token, mark address verified (public, single-use)
+POST   /api/auth/resend-verification body: {email} — new verification link; always same reply, per-IP + per-user throttled
 GET    /health
 GET    /models/
 GET    /scenarios/
@@ -337,6 +339,13 @@ default body is `{"error": ...}`).
 - **Webhooks**: `POST /api/billing/webhook` verifies the Stripe signature and claims the event
   id in `webhook_events` before doing anything. Any new webhook handler follows the same order —
   verify, claim, handle, `mark_processed` in the same transaction as the side effect.
+- **Email verification (Phase 0.4, D-04)**: signup creates the user with `email_verified=false`
+  and one hashed token on the user row (no side table — a resend replaces it). An unverified
+  account can log in and read, but `Depends(require_verified_email)` blocks the routes that
+  spend credits or run submitted code: `/evaluate/*`, `POST /api/runs/`, `POST /api/runs/batch`,
+  `POST /api/keys/`, `POST /api/models/upload|register`. Superadmin bypasses. Put the dependency
+  on any new route of that kind. In tests, call `verify_email_for(email)` from `tests/conftest.py`
+  right after signing up.
 
 ---
 
@@ -418,7 +427,10 @@ with session_scope() as db:
 
 Never use raw `Session` — always go through repository classes in `database/repository.py`.
 
-Migrations live in `arep/database/migrations/versions/` (latest: `006_webhook_events`).
+Migrations live in `arep/database/migrations/versions/` (latest: `007_email_verification`).
+Note: `alembic upgrade head` does **not** run on SQLite — migration `002` uses an `ALTER`
+with a constraint, which SQLite cannot do. Dev uses `init_database()` (`create_all`); the
+migration chain is only exercised against Postgres. Tracked as D-13 (Phase 0.6).
 `OrganisationRepository.allows_pickle_models(org_id)` is the single read of the D-01 gate —
 check it there, never by reading the column directly.
 

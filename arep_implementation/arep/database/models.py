@@ -269,6 +269,25 @@ class UserRecord(Base):
     hashed_password: Mapped[str] = mapped_column(String(512), nullable=False)
     full_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Phase 0.4 / D-04: signup no longer auto-activates an address. An unverified
+    # user can log in and look around but cannot spend credits or upload code.
+    # The token lives on the row rather than in a side table: there is only ever
+    # one outstanding verification per user, a resend replaces it, and nothing
+    # needs the history. Only the SHA256 is stored, as with password resets.
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+    email_verified_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    verification_token_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    verification_sent_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )
