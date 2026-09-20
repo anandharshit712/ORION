@@ -315,6 +315,28 @@ To add new model to API, add to `AVAILABLE_MODELS` dict in `api/routes.py`.
 Don't instantiate models outside that dict — dict is registry.
 
 All API errors return `{"detail": "..."}` — match this shape in new error handlers.
+Rate-limit 429s go through `rate_limit_exceeded_handler` to keep that shape (slowapi's
+default body is `{"error": ...}`).
+
+### API edge behaviour (Phase 0.3 — DONE)
+
+- **CORS** is an explicit whitelist from `api.cors_origins` (env `ORION_ALLOWED_ORIGINS`,
+  comma-separated). `resolve_cors_origins()` in `config/validate.py` refuses `*` or an empty
+  list outside dev and runs inside `validate_startup()`. Never reintroduce `allow_origins=["*"]`.
+- **Rate limiting** is slowapi through the single shared limiter in `api/ratelimit.py`
+  (`login 5/min`, `signup 3/hour`, `120/min` default, all from `api.rate_limit_*`). Add a
+  per-route limit with `@limiter.limit(...)` and a `request: Request` parameter — slowapi needs
+  it, and a route without it fails at call time. Import the shared `limiter`; a second `Limiter`
+  instance is silently never consulted. `/health` is `@limiter.exempt`.
+- **Auth is declared per router**, not per handler: `dependencies=_AUTHENTICATED` in
+  `api/routes.py`. A new data route is gated by default. `/health`, `/docs`, `/openapi.json`
+  and the auth routes are the only public surface.
+- **Security headers** come from `SecurityHeadersMiddleware` in `api/middleware.py`
+  (nosniff, DENY, no-referrer, `default-src 'none'` CSP; relaxed CSP for `/docs` and `/redoc`,
+  HSTS only over TLS).
+- **Webhooks**: `POST /api/billing/webhook` verifies the Stripe signature and claims the event
+  id in `webhook_events` before doing anything. Any new webhook handler follows the same order —
+  verify, claim, handle, `mark_processed` in the same transaction as the side effect.
 
 ---
 
@@ -396,7 +418,7 @@ with session_scope() as db:
 
 Never use raw `Session` — always go through repository classes in `database/repository.py`.
 
-Migrations live in `arep/database/migrations/versions/` (latest: `005_org_allow_pickle_models`).
+Migrations live in `arep/database/migrations/versions/` (latest: `006_webhook_events`).
 `OrganisationRepository.allows_pickle_models(org_id)` is the single read of the D-01 gate —
 check it there, never by reading the column directly.
 
@@ -459,7 +481,14 @@ start.bat         # Windows (cmd.exe)
 
 **Secret/config resolution (Phase 0.1 — DONE, D-02 closed)**: never read `ORION_SECRET_KEY` / `ORION_DATABASE_URL` directly with a fallback default. Go through `arep/config/validate.py`: `resolve_secret_key()`, `resolve_database_url()`, `validate_startup()`. Non-dev (`ORION_ENV` not in dev/test/local) refuses to boot on missing/weak/placeholder secret or SQLite URL; dev gets an ephemeral secret + `sqlite:///arep.db`. `validate_startup()` runs in `app.py` lifespan. docker-compose pulls all secrets from git-ignored `infrastructure/.env` (`env_file:` + `${VAR}`); see `infrastructure/.env.example`.
 
-**Known violations of these rules in existing code** (tracked in the `docs/ROADMAP.md` defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
+**Known violations of these rules in existing code** (tracked in the `docs/ROADMAP.md` defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. ~~CORS `*` / no rate limiting (D-03)~~ and ~~unauthenticated catalogue routes (D-07)~~ — closed in 0.3. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
+
+**API hardening rules (Phase 0.3 — DONE, D-03 + D-07 closed)**: never set `allow_origins=["*"]`
+or read origins anywhere but `resolve_cors_origins()`. Never hardcode a rate limit at a call
+site — they live in `api.rate_limit_*`. Never add a data route without router-level auth
+(`dependencies=_AUTHENTICATED`); `/health`, `/docs`, `/openapi.json` and `/api/auth/*` are the
+whole public surface. Never act on a webhook before verifying its signature and claiming its
+event id. See Section 8.
 
 ---
 
@@ -473,9 +502,19 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 
 1. ~~**0.1 Secrets hardening (D-02)**~~ — **DONE.** Fallbacks removed; `arep/config/validate.py` is the single resolver (`resolve_secret_key`, `resolve_database_url`, `validate_startup`); fail-fast in non-dev, ephemeral secret + sqlite in dev; `validate_startup()` wired into `app.py` lifespan; docker-compose secrets moved to git-ignored `infrastructure/.env` (`infrastructure/.env.example` documents them). `git grep "Harshit:Harshit\|change-in-production"` in `arep/` → 0 hits. See Section 12.
 2. ~~**0.2 Model sandboxing (D-01)**~~ — **STEP 1 DONE.** `arep/models/sandbox.py` rewritten: env whitelist (no `ORION_*` reaches the child), `unshare --net` when available + in-process socket block installed before unpickling, fresh tmpdir as cwd/`TMPDIR`/`HOME`, rlimits actually applied via `preexec_fn` + `os.setsid()`, hard per-call and per-run wall-clock kill via `killpg(SIGKILL)`. Limits in `config/default.yaml` `sandbox:` (`SandboxConfig`, `ORION_SANDBOX_*`). Cloudpickle path gated per-org: `organisations.allow_pickle_models` (migration `005`, default FALSE), enforced at upload and at resolve, toggled by `PUT /api/admin/orgs/{id}/pickle-models`. `ModelSandboxError` aborts the run (never scored) so the worker refunds. **Step 2 still open**: gVisor/Firecracker before open self-serve signup.
-3. **0.3 API hardening (D-03, D-07) — NEXT.**
-   CORS whitelist via `ORION_ALLOWED_ORIGINS`, slowapi rate limiting (login 5/min/IP), auth on `/models/` `/scenarios/` `/jobs/` `/results/*`, security headers, webhook signature+idempotency groundwork.
-4. **0.4 Auth flow (D-04)** — email verification (reuse hashed-token machinery), httpOnly cookie for browser JWT, short-lived WS ticket replaces `?token=` query param, superadmin expiry 4h.
+3. ~~**0.3 API hardening (D-03, D-07)**~~ — **DONE.** CORS is an explicit whitelist
+   (`ORION_ALLOWED_ORIGINS`, wildcard refused outside dev by `resolve_cors_origins()`);
+   slowapi rate limiting via `api/ratelimit.py` (login 5/min, signup 3/hour, 120/min default,
+   bucketed org → credential hash → IP, `X-Forwarded-For` only when trusted);
+   `SecurityHeadersMiddleware`; router-level auth on `/models/` `/scenarios/` `/evaluate/`
+   `/jobs/` `/results/*` `/api/runs/`; Stripe webhook signature verification + a
+   `webhook_events` idempotency ledger (migration `006`). Tests: `test_api_hardening.py` (21),
+   `test_route_auth.py` (13), `test_webhook_security.py` (15); suite 147 passed.
+   **Correction to the register**: D-07 claimed four unauthenticated routers; only `/models/`
+   and `/scenarios/*` actually were — `/jobs/` and `/results/*` already called
+   `get_request_principal`. Neither open route carried org-scoped rows, so there was no tenancy
+   leak. Both are gated regardless.
+4. **0.4 Auth flow (D-04) — NEXT.** — email verification (reuse hashed-token machinery), httpOnly cookie for browser JWT, short-lived WS ticket replaces `?token=` query param, superadmin expiry 4h.
 5. **0.5 Score integrity (D-05, D-06, D-11, D-12)** — real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
 6. **0.6 Reliability + test gates (D-08, D-09, D-10, D-13)** — Celery `max_retries=3` + backoff + idempotent tasks; CI coverage gate ≥70% on Postgres (not SQLite); WS integration test; cross-org denial tests; partial-refund test; scenario YAML validation test; frontend ErrorBoundary + 404 + OrgProvider decision; hard-rule CI grep.
 

@@ -105,7 +105,7 @@ Full competitor scoring and the four moats: [MARKET.md](MARKET.md).
 | 5 NPC behavior trees | ✅ | `simulation/npc_bt.py` — `hesitant_brake`, `hesitant_cut_in`, `adaptive_tailgate`, `cautious_pedestrian`, `erratic_pedestrian` |
 | `WorldManager` + `SimulationEngine` | ✅ | `simulation/world.py`, `engine.py` |
 | 4-metric evaluation + Wilson / t-dist CIs in aggregator | ⚠ | `evaluation/`, `statistics/` — lane compliance is a stub (D-05), TTC is constant-velocity (D-11) |
-| FastAPI backend + auth + routes | ⚠ | `api/` — CORS `*` and no rate limiting (D-03), unauth `/models/` `/scenarios/` (D-07) |
+| FastAPI backend + auth + routes | ✅ | `api/` — CORS whitelist, slowapi rate limits, security headers, router-level auth (D-03 + D-07 closed) |
 | React + Three.js + Vite frontend ("Mission Control" design system) | ⚠ | `orion-frontend/src/` — JWT in `localStorage` (D-04) |
 | SQLAlchemy models + Postgres config + Alembic | ✅ | `database/`, `config/` |
 | 18 scenario YAMLs, all v2.0, across all 6 categories | ✅ | `scenarios/` |
@@ -129,11 +129,11 @@ weights are frozen — see `CLAUDE.md` § 7.
 | --- | --- | --- | --- |
 | D-01 | ~~Cloudpickle model upload = arbitrary code execution in worker; subprocess inherits `ORION_DATABASE_URL`~~ | CRITICAL | 0.2 Step 1 — **done**; Step 2 (gVisor/Firecracker) before open signup |
 | D-02 | ~~JWT secret falls back to a hardcoded string; hardcoded DB creds; plaintext creds in docker-compose~~ | CRITICAL | 0.1 — **done** |
-| D-03 | CORS `allow_origins=["*"]` + zero rate limiting on login/signup (`api/app.py`) | CRITICAL | 0.3 |
+| D-03 | ~~CORS `allow_origins=["*"]` + zero rate limiting on login/signup (`api/app.py`)~~ | CRITICAL | 0.3 — **done** |
 | D-04 | JWT stored in `localStorage` (`AuthContext.jsx`); signup auto-activates with no email verification | CRITICAL | 0.4 |
 | D-05 | Lane compliance hardcoded `lane_frac = 1.0` (`evaluation/compliance.py`) — lane-keeping score is fake | HIGH | 0.5 |
 | D-06 | `time.time()` in tick frame (`simulation/engine.py`) — breaks the determinism rule and frame hashing | HIGH | 0.5 |
-| D-07 | `/models/`, `/scenarios/`, `/jobs/`, `/results/*` unauthenticated — cross-org info disclosure | HIGH | 0.3 |
+| D-07 | ~~`/models/`, `/scenarios/` unauthenticated~~ (as filed: `/jobs/` and `/results/*` were already gated, and no open route carried org-scoped rows — the cross-org claim was wrong) | HIGH | 0.3 — **done** |
 | D-08 | Celery `max_retries=0` — a transient failure kills the run and the customer eats it | HIGH | 0.6 |
 | D-09 | No coverage gate in CI; WS layer, admin routes, billing routes, partial-batch-refund untested | HIGH | 0.6 |
 | D-10 | Frontend: no error boundaries, no 404, `OrgProvider` written but never mounted, stub pages in sidebar | MED | 0.6 / with features |
@@ -141,7 +141,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-12 | Weight transfer uses previous-step acceleration (`core/physics.py`) — off-by-one | LOW | 0.5 |
 | D-13 | SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev | MED | 0.6 |
 
-**Current position**: Phase 0. 0.1 and 0.2 Step 1 are done; 0.3 (API surface hardening) is the active task.
+**Current position**: Phase 0. 0.1, 0.2 Step 1 and 0.3 are done; 0.4 (auth flow integrity, D-04) is the active task.
 
 ---
 
@@ -271,7 +271,7 @@ dev-only target for this path.
 
 ---
 
-## 0.3 — API Surface Hardening (D-03, D-07)
+## 0.3 — API Surface Hardening (D-03, D-07) — ✅ DONE
 
 - **CORS**: replace `allow_origins=["*"]` with an `ORION_ALLOWED_ORIGINS` env var
   (comma-separated whitelist). Note `allow_credentials=True` with `*` is invalid per spec
@@ -287,16 +287,61 @@ dev-only target for this path.
 - **Webhook stub**: the `api/billing.py` webhook handler gets Stripe signature verification
   and an event-id idempotency table NOW, even as a stub, so Phase 1.4 builds on a safe base.
 
+### What shipped (2026-09-20)
+
+- **CORS**: `api.cors_origins` / `ORION_ALLOWED_ORIGINS`, defaulting to the two local dev
+  servers. `resolve_cors_origins()` (`config/validate.py`, called from `validate_startup()`)
+  refuses a wildcard or an empty list outside dev. Methods and headers enumerated, not `*`.
+- **Rate limiting**: slowapi, one shared limiter in `api/ratelimit.py`. Login 5/min, signup
+  3/hour, 120/min default, all config-driven. Buckets key on `org_id`, then a SHA256 of the
+  Authorization credential, then client IP — the credential tier exists because
+  `SlowAPIMiddleware` runs ahead of `OrgAuthMiddleware`, so requests bearing invalid tokens are
+  rejected upstream of any limiter keyed on `request.state`. `X-Forwarded-For` is honoured only
+  when `api.trust_proxy_headers` is set. 429s use `{"detail": ...}`. `/health` is exempt.
+- **Route auth**: declared once per router (`dependencies=_AUTHENTICATED`) rather than per
+  handler, so a route added later is gated by default.
+- **Security headers**: `SecurityHeadersMiddleware` — nosniff, DENY, no-referrer,
+  `default-src 'none'` CSP, relaxed CSP for the doc pages, HSTS only over TLS.
+- **Webhooks**: signature verification via `stripe.Webhook.construct_event` plus a
+  `webhook_events` idempotency ledger (migration `006`). `received` stays claimable so a crash
+  mid-handler does not swallow the retry; `processed` is dropped. Beta marks events processed
+  immediately — with no credits to move, doing nothing *is* the completed contract.
+
+### Correction to the register
+
+D-07 was filed as four unauthenticated routers leaking cross-org data. Probing the running app
+showed `/jobs/` and `/results/*` already called `get_request_principal`, which 401s, and that
+neither genuinely-open route carried org-scoped rows: `ScenarioRecord` has no `org_id` and
+`/models/` returns the built-in registry. So the exposure was narrower than recorded and was
+not a tenancy leak. Both routes are gated anyway — the scenario library is the product, and an
+anonymous caller hitting the scenarios table is free database load.
+
 ### Acceptance Criteria
 
-- [ ] Request from a non-whitelisted origin gets no CORS grant
-- [ ] 6th login attempt in a minute from one IP → 429
-- [ ] Unauthenticated `GET /scenarios/` → 401
-- [ ] A replayed webhook event id is a no-op
+- [x] Request from a non-whitelisted origin gets no CORS grant —
+      `test_foreign_origin_gets_no_cors_grant`
+- [x] 6th login attempt in a minute from one IP → 429 —
+      `test_sixth_login_in_a_minute_is_rejected`
+- [x] Unauthenticated `GET /scenarios/` → 401 —
+      `test_unauthenticated_scenarios_returns_401`
+- [x] A replayed webhook event id is a no-op — `test_replayed_event_id_is_a_noop`
+
+49 tests across `test_api_hardening.py`, `test_route_auth.py` and `test_webhook_security.py`;
+full suite 147 passed.
+
+### Deferred out of 0.3
+
+- Rate-limit storage is `memory://` by default, which counts per process — N uvicorn workers
+  means N × the limit. docker-compose points the API at `redis://redis:6379/1`; any other
+  multi-worker deployment must set `ORION_RATE_LIMIT_STORAGE_URI`.
+- A malformed login body 422s during FastAPI validation, before the route decorator runs, so
+  those requests are counted only by the global default limit.
+- Lockout-style backoff after repeated failures (the register suggested it) is not implemented —
+  a fixed 5/min window is the control. Revisit if credential stuffing is observed.
 
 ---
 
-## 0.4 — Auth Flow Integrity (D-04)
+## 0.4 — Auth Flow Integrity (D-04) — NEXT
 
 - **Email verification**: signup creates the user with `email_verified=false`; the
   verification token is emailed (reuse the hashed-token machinery from password reset).
