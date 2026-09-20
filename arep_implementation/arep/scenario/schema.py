@@ -66,6 +66,19 @@ class RoadConfiguration:
     lane_width: float = 3.5
     speed_limit: float = 27.8  # ~100 km/h
 
+    # Phase 1.5. Names a factory in arep/core/road_templates.py — for example
+    # "four_way_intersection" or "highway_onramp". Left None, the scenario gets
+    # the flat straight road it has always had, so every existing scenario keeps
+    # running unchanged.
+    #
+    # The topology is declared here rather than inferred from road_type because
+    # "urban" describes a speed limit and a feel, not a shape: INT-001 is a
+    # four-way stop and LAT-001 is a straight road, and both are "urban".
+    template: Optional[str] = None
+    # Extra keyword arguments for that factory (arm_length, radius, ...).
+    # Anything omitted falls back to the factory's own default.
+    template_params: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class WeatherConfiguration:

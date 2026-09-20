@@ -242,6 +242,40 @@ Always write new scenarios in v2 format. Use `LON-003_emergency_stop.yaml` as ca
 `[CATEGORY]-[SEQ]_description.yaml` — e.g. `LON-003_emergency_stop.yaml`
 Categories: `LON`, `LAT`, `INT`, `VRU`, `EMG`, `MLT`
 
+### Road topology (Phase 1.5)
+
+A scenario declares its shape with `environment.road.template` plus optional
+`template_params`, naming a factory in `arep/core/road_templates.py`:
+`highway_straight`, `urban_straight`, `t_junction`, `four_way_intersection`,
+`highway_onramp`, `roundabout`.
+
+```yaml
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+    template: four_way_intersection      # omit for a flat straight road
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false
+```
+
+- **Omitting `template` is supported and means the flat straight road.** Every scenario written
+  before 1.5 keeps the geometry it was scored on, so stored results stay comparable.
+- `lanes`, `lane_width` and `speed_limit` from the road block are passed to the factory;
+  `template_params` overrides them. An unknown template or an unknown parameter raises
+  `ScenarioParseError` at build time — never a silent fallback to a straight road, which would
+  score a model on geometry it was never shown.
+- `WorldState.road_graph` carries the graph **alongside** `lanes`, not instead of it. Lanes
+  answer "where is the centreline" for observations and scoring; the graph answers "am I on the
+  road at all" and "is there a junction here", which parallel lines cannot. `check_off_road()`
+  and `get_speed_limit()` prefer the graph when present.
+- Topology is declared, not inferred from `road_type`: "urban" describes a speed limit and a
+  feel, not a shape — INT-001 is a four-way stop and LAT-001 is a straight road, and both are
+  urban.
+
 ### The foundational taxonomy rule
 
 **One scenario = one behavioral requirement.** Weather, lighting, surface friction = `parameterization` modifiers — NOT separate scenarios. Never create new scenario file just to change weather.
@@ -626,7 +660,9 @@ webhook base) and 1.5 (road topology, which unblocks ~35% of the scenario librar
 
 ### Phase 1 remainder (after Phase 0 exits)
 
-1. **Stripe billing (Phase 1.4)** — `api/billing.py` scaffold only. Builds on 0.3's verified+idempotent webhook base. Includes implementing the `BillingPage` frontend stub.
+1. ~~**Stripe billing (Phase 1.4)**~~ — **DONE.** Checkout, top-up, portal, webhook handlers,
+   `GET /api/billing/plans`, and a live `BillingPage`. See Section 8. Still needs real Stripe
+   price IDs and a test-mode round trip against the live API.
 2. **Road topology engine (Phase 1.5)** — only flat 2-lane straight road exists. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist. Spec: `docs/ROADMAP.md` § 1.5.
 
 ### Done (P1.1 + P1.2 + P1.3)

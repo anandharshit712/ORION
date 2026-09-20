@@ -130,6 +130,9 @@ class ScenarioParser:
                 lanes=int(env_data["road"]["lanes"]),
                 lane_width=float(env_data["road"]["lane_width"]),
                 speed_limit=float(env_data["road"]["speed_limit"]),
+                # Optional (Phase 1.5): omitted means the flat straight road.
+                template=env_data["road"].get("template"),
+                template_params=dict(env_data["road"].get("template_params", {})),
             )
 
             weather = WeatherConfiguration(

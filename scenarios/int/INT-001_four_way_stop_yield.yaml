@@ -25,6 +25,10 @@ environment:
     lanes: 2
     lane_width: 3.5
     speed_limit: 11.11   # 40 km/h
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false   # stop-controlled, not signalised
   weather:
     condition: clear
     visibility: 1000.0

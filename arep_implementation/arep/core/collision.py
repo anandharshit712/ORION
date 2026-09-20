@@ -135,16 +135,27 @@ class CollisionDetector:
         """
         Check if vehicle is off-road.
 
-        A vehicle is off-road if its lateral offset from the nearest
-        lane centerline exceeds half the lane width.
+        With a road graph (Phase 1.5), off-road means "not on any segment",
+        which is the only answer that works once the road bends or branches:
+        a vehicle 2 m from a junction's centreline can be perfectly on the road
+        or well into the verge depending on which arm it is near, and the
+        nearest-centreline test cannot tell those apart.
+
+        Without one, the original rule applies — lateral offset from the
+        nearest lane centreline exceeds half the lane width — so every scenario
+        written before 1.5 terminates exactly as it used to.
 
         Args:
             vehicle: Vehicle to check.
-            world: Current world state (provides lane info).
+            world: Current world state (provides lane and road-graph info).
 
         Returns:
             True if off-road.
         """
+        road_graph = getattr(world, "road_graph", None)
+        if road_graph is not None:
+            return road_graph.is_off_road(vehicle.position)
+
         if not world.lanes:
             return False  # No lanes defined → can't be off-road
 

@@ -645,10 +645,19 @@ and portal buttons. Closes one D-10 stub.
 
 ---
 
-## 1.5 — Road Topology Engine
+## 1.5 — Road Topology Engine — ✅ DONE
 
-**Required for ~35% of the scenario library to execute** (all INT-\*, EMG-002, MLT-\*). Only
-a flat 2-lane straight road exists today.
+**Correction to this heading.** The library was never blocked from *executing*: the flat road
+accepted any scenario, so all 18 ran — an INT-* scenario named "four way stop" simply executed
+on a straight line and was scored on geometry that had nothing to do with what it claimed to
+test. That is worse than a failure, because it produces a number.
+
+`core/road.py` and `core/road_templates.py` also already existed, fully written, dated months
+before this phase. Nothing referenced them: no import of `RoadGraph` appeared anywhere in
+`simulation/`, `scenario/` or `core/state.py`. The work was connecting them, not building them.
+
+On inspection only the INT-* category genuinely needed junction geometry. EMG-002 (wrong-way
+driver) and both MLT-* scenarios model fine on a straight road and were left on it.
 
 ### 1.5.1 Road Graph Data Model
 
@@ -686,6 +695,35 @@ class RoadGraph:
     def is_off_road(self, position: Vector2D, margin: float = 0.5) -> bool: ...
     def get_junction_at(self, position: Vector2D) -> Optional[Junction]: ...
 ```
+
+### What shipped (2026-09-21)
+
+- `RoadConfiguration.template` + `template_params` in the scenario schema, read by the parser.
+- `ScenarioExecutor._create_road_graph()` resolves the name against `road_templates`, passes
+  the road block's `lanes`/`lane_width`/`speed_limit` as defaults, and raises
+  `ScenarioParseError` on an unknown template or an unknown parameter — never a silent
+  fallback to a straight road.
+- `WorldState.road_graph`, carried alongside `lanes` rather than replacing them. Lanes are
+  derived from the graph when there is one, so there is a single geometry rather than two that
+  can disagree.
+- `check_off_road()` and `get_speed_limit()` consult the graph when present. On a junction the
+  nearest-centreline test cannot tell the verge from another arm; "not on any segment" can.
+- The three INT-* scenarios now declare `four_way_intersection`.
+
+**Backward compatibility is part of the contract**: a scenario with no template gets exactly
+the road it had before, because every stored result was produced that way.
+
+32 tests. Full suite 483. All 18 library scenarios execute.
+
+### Still flat, deliberately
+
+- EMG-002 and MLT-* stay on the straight road — they do not need a junction, and moving them
+  would change their scores for no modelling gain.
+- No scenario uses `t_junction`, `highway_onramp` or `roundabout` yet. The templates are tested
+  and available; authoring scenarios for them is scenario work, not engine work.
+- Junction right-of-way is data on the `Junction` (`arms`, `right_of_way`) and is not yet
+  consulted by NPC behaviour — an NPC does not yet yield at a stop line because the graph says
+  it should.
 
 ### 1.5.2 Built-In Road Templates
 

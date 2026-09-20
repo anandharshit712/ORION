@@ -18,9 +18,13 @@ import json
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:  # pragma: no cover
+    # road.py imports this module, so this reference stays type-only.
+    from arep.core.road import RoadGraph
 
 
 # ── Enums ────────────────────────────────────────────────────────────────
@@ -438,6 +442,12 @@ class WorldState:
     # Environment
     traffic_lights: List[TrafficLightInfo] = field(default_factory=list)
     lanes: List[LaneInfo] = field(default_factory=list)
+    # Phase 1.5. Present when the scenario declares a road template; None for
+    # the flat straight road every scenario used before. Carried alongside
+    # `lanes` rather than replacing them: lanes answer "where is the centreline"
+    # for observations and scoring, the graph answers "am I on the road at all"
+    # and "is there a junction here", which parallel lines cannot.
+    road_graph: Optional["RoadGraph"] = None
     weather_condition: str = "clear"
     visibility: float = 1000.0
 
@@ -485,7 +495,16 @@ class WorldState:
         )
 
     def get_speed_limit(self) -> float:
-        """Get speed limit of the ego's current lane, or 0 if no lanes."""
+        """Speed limit where the ego is, or 0 if there is no road under it.
+
+        The road graph wins when present: an intersection's arms can carry
+        different limits, and the nearest *lane* may belong to a different arm
+        than the one the vehicle is travelling on.
+        """
+        if self.road_graph is not None:
+            limit = self.road_graph.get_speed_limit_at(self.ego_vehicle.position)
+            if limit > 0:
+                return limit
         lane = self.get_current_lane()
         return lane.speed_limit if lane else 0.0
 

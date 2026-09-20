@@ -19,6 +19,8 @@ from arep.core.state import (
 from arep.core.random_manager import RandomManager
 from arep.scenario.schema import ScenarioDefinition
 from arep.scenario.parameterizer import ScenarioParameterizer
+from arep.utils.exceptions import ScenarioParseError
+from arep.utils.logging_config import get_logger
 from arep.simulation.world import WorldManager
 
 
@@ -39,6 +41,9 @@ _DIMENSIONS = {
     ObjectType.PEDESTRIAN: (0.5, 0.5),
     ObjectType.BICYCLE: (1.8, 0.6),
 }
+
+
+logger = get_logger("scenario.executor")
 
 
 class ScenarioExecutor:
@@ -74,7 +79,8 @@ class ScenarioExecutor:
 
         ego = self._create_ego(scenario)
         objects = self._create_traffic_objects(scenario)
-        lanes = self._create_lanes(scenario)
+        road_graph = self._create_road_graph(scenario)
+        lanes = self._create_lanes(scenario, road_graph)
         lights = self._create_traffic_lights(scenario, rng)
         npc_behaviors = self._build_npc_behaviors(scenario)
 
@@ -87,6 +93,13 @@ class ScenarioExecutor:
             visibility=scenario.weather.visibility,
         )
         world.npc_behaviors = npc_behaviors
+        # Carried alongside `lanes` rather than replacing it (Phase 1.5).
+        # Everything downstream — observations, lane compliance, the tick frame —
+        # reads LaneInfo, and swapping that out wholesale would rewrite the
+        # metric layer in the same change as the geometry. The graph is what
+        # answers the questions flat lanes cannot: am I off the road, is there a
+        # junction here.
+        world.road_graph = road_graph
         return world
 
     # ── Private builders ─────────────────────────────────────────────
@@ -127,10 +140,72 @@ class ScenarioExecutor:
             ))
         return objects
 
+    def _create_road_graph(self, scenario: ScenarioDefinition):
+        """Build the RoadGraph for this scenario, if it declares a topology.
+
+        Returns None when no template is named, which is every scenario written
+        before Phase 1.5 — those keep the flat straight road they were authored
+        against, and their stored results stay comparable.
+        """
+        from arep.core import road_templates
+
+        template_name = scenario.road.template
+        if not template_name:
+            return None
+
+        factory = getattr(road_templates, template_name, None)
+        if factory is None or not callable(factory):
+            raise ScenarioParseError(
+                f"Unknown road template {template_name!r}. Available: "
+                f"{sorted(n for n in dir(road_templates) if not n.startswith('_'))}"
+            )
+
+        # The road block's own fields are defaults the template can use; explicit
+        # template_params win. Passing only what the factory accepts keeps a
+        # scenario from failing on an argument that template does not take.
+        import inspect
+
+        candidate = {
+            "lanes": scenario.road.lanes,
+            "lane_width": scenario.road.lane_width,
+            "speed_limit": scenario.road.speed_limit,
+            **scenario.road.template_params,
+        }
+        accepted = set(inspect.signature(factory).parameters)
+        kwargs = {k: v for k, v in candidate.items() if k in accepted}
+
+        unknown = set(scenario.road.template_params) - accepted
+        if unknown:
+            raise ScenarioParseError(
+                f"Road template {template_name!r} does not accept "
+                f"{sorted(unknown)}. Accepts: {sorted(accepted)}"
+            )
+
+        graph = factory(**kwargs)
+        logger.info("Road topology for %s: %s", scenario.name, graph.summary())
+        return graph
+
     def _create_lanes(
-        self, scenario: ScenarioDefinition,
+        self, scenario: ScenarioDefinition, road_graph=None,
     ) -> List[LaneInfo]:
-        """Create simple straight-road lanes from road config."""
+        """Lane centerlines for the scenario.
+
+        With a road graph, the lanes are derived from it so there is one
+        geometry rather than two that can disagree. Without one, the flat
+        straight road is built as before.
+        """
+        if road_graph is not None:
+            lanes: List[LaneInfo] = []
+            for segment in road_graph.segments.values():
+                for lane_idx in range(segment.lane_count):
+                    lanes.append(LaneInfo(
+                        lane_id=f"{segment.segment_id}_lane_{lane_idx}",
+                        centerline_points=segment.get_lane_centerline(lane_idx),
+                        width=segment.lane_width,
+                        speed_limit=segment.speed_limit,
+                    ))
+            return lanes
+
         road = scenario.road
         lanes = []
 
