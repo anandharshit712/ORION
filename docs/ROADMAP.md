@@ -134,14 +134,14 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-05 | ~~Lane compliance hardcoded `lane_frac = 1.0` — lane-keeping score is fake~~ | HIGH | 0.5 — **done** |
 | D-06 | ~~`time.time()` in tick frame — breaks the determinism rule and frame hashing~~ | HIGH | 0.5 — **done** |
 | D-07 | ~~`/models/`, `/scenarios/` unauthenticated~~ (as filed: `/jobs/` and `/results/*` were already gated, and no open route carried org-scoped rows — the cross-org claim was wrong) | HIGH | 0.3 — **done** |
-| D-08 | Celery `max_retries=0` — a transient failure kills the run and the customer eats it | HIGH | 0.6 |
-| D-09 | No coverage gate in CI; WS layer, admin routes, billing routes, partial-batch-refund untested | HIGH | 0.6 |
-| D-10 | Frontend: no error boundaries, no 404, `OrgProvider` written but never mounted, stub pages in sidebar | MED | 0.6 / with features |
+| D-08 | ~~Celery `max_retries=0` — a transient failure kills the run and the customer eats it~~ | HIGH | 0.6 — **done** |
+| D-09 | ~~No coverage gate in CI; WS layer, admin routes, billing routes, partial-batch-refund untested~~ | HIGH | 0.6 — **done** (71.3%, gate at 70) |
+| D-10 | ~~Frontend: no error boundaries, no 404, `OrgProvider` written but never mounted, stub pages in sidebar~~ | MED | 0.6 — **done** |
 | D-11 | TTC constant-velocity approximation — **documented** in `docs/METHODOLOGY.md`, `core/ttc.py` and `evaluation/safety.py`; Pacejka coefficients flagged uncalibrated. Constant-acceleration fix still 2.1 | MED | 0.5 documented |
 | D-12 | ~~Weight transfer uses previous-step acceleration~~ | LOW | 0.5 — **done** |
-| D-13 | SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev | MED | 0.6 |
+| D-13 | ~~SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev~~ | MED | 0.6 — **done** (CI job on Postgres + Alembic round trip) |
 
-**Current position**: Phase 0. 0.1, 0.2 Step 1, 0.3, 0.4 and 0.5 are done; 0.6 (reliability and test gates) is the active task.
+**Current position**: Phase 0 is **complete** except 0.2 Step 2 (gVisor/Firecracker), which is gated on open self-serve signup rather than on this phase. Twelve of thirteen register defects are closed; D-11 is documented with the fix scheduled for 2.1. Next: Phase 1.4 (Stripe billing) and 1.5 (road topology).
 
 ---
 
@@ -455,7 +455,7 @@ documented and reproducible.
 
 ---
 
-## 0.6 — Reliability & Test Gates (D-08, D-09, D-10, D-13) — NEXT
+## 0.6 — Reliability & Test Gates (D-08, D-09, D-10, D-13) — ✅ DONE
 
 - **Celery retry policy**: `max_retries=3`, exponential backoff (5 s / 15 s / 60 s),
   `autoretry_for` transient exceptions (DB disconnect, Redis hiccup). Credit refund only
@@ -483,19 +483,71 @@ documented and reproducible.
 
 ### Acceptance Criteria
 
-- [ ] Transient DB error during a run → task retries and succeeds; no refund
-- [ ] CI fails below 70% coverage; CI runs on Postgres
-- [ ] All listed test suites green in CI
-- [ ] Throwing inside any dashboard component shows the fallback UI, not a blank page
+- [x] Transient DB error during a run → task retries and succeeds; no refund —
+      `test_a_transient_database_error_is_retried_without_refunding`
+- [x] CI fails below 70% coverage; CI runs on Postgres — `--cov-fail-under=70`, currently
+      71.34%, plus a `test-postgres` job with an Alembic upgrade → downgrade → upgrade round trip
+- [x] All listed test suites green in CI — scenario library (122), cross-org denial (16),
+      partial refund (5), worker reliability (9), NPC behaviour trees (38), admin routes (17)
+- [x] Throwing inside any dashboard component shows the fallback UI, not a blank page —
+      `ErrorBoundary` verified mounted in `main.jsx` (shipped with the redesign, not rebuilt)
+
+430 tests pass.
+
+### Decisions taken
+
+- **Sidebar marks unready sections rather than hiding them.** Hiding six of seven entries
+  would leave a one-item sidebar that reads as a broken install. They stay visible, disabled,
+  with a `soon` marker — the product's shape is legible and nobody lands on an empty page.
+- **OrgContext deleted rather than mounted.** Nothing imported it, its body was two TODOs, and
+  it imported `api` as a default export that does not exist.
+- **Coverage reached by writing tests, not by lowering the bar.** 67% → 71.3%, via the two
+  areas with the most missing lines and the most consequence: `npc_bt.py` (9% covered while
+  driving every reactive scenario) and the admin router (credits, the cloudpickle allowlist,
+  promotion).
+
+### Deferred out of 0.6
+
+- **A redelivered Celery task that fails again can still double-bump `runs_failed`.** The
+  success path is guarded by the `RunRecord` row; failures write no row. Closing it needs a
+  per-(batch, seed) ledger. The visible consequence is a batch reporting more failures than it
+  ran — not a wrong score or a wrong charge.
+- **No frontend tests.** Still zero, as before this phase; the frontend is verified by build
+  plus a manual end-to-end pass through the Vite proxy. Scheduled with the rest of the
+  frontend debt in Phase 5.
+- **The dev Postgres database is three migrations behind** (at `004`, head is `008`). The API
+  is broken against it and has been since 0.2 — `create_all` never adds columns to existing
+  tables. `alembic upgrade head` against it is an operator action, not a code change.
 
 ---
 
 ## Phase 0 Exit Checklist
 
-- [ ] D-01…D-09 all closed (D-10 may carry stub-page items into their feature phases)
-- [ ] External-facing pen-test-style pass: org A cannot read, write or infer org B data via
-      any route, WS, or uploaded model
-- [ ] The `CLAUDE.md` hard-rules section matches reality again (no known violations)
+- [x] D-01…D-09 all closed — D-01 Step 1 (Step 2 is gated on open signup, not on this phase);
+      D-11 documented with the fix scheduled for 2.1
+- [x] External-facing pen-test-style pass: org A cannot read, write or infer org B data via
+      any route, WS, or uploaded model — `tests/test_cross_org_denial.py` walks the route
+      groups `test_multitenancy.py` did not reach, including WS tickets and run cancel
+- [x] The `CLAUDE.md` hard-rules section matches reality again — and is now enforced
+      mechanically by `scripts/check_hard_rules.py` in CI rather than by review
+
+### What Phase 0 changed, in one line each
+
+| Defect | Was | Now |
+| --- | --- | --- |
+| D-01 | Cloudpickle upload = RCE in the worker | Locked-down subprocess, per-org allowlist, default deny |
+| D-02 | Hardcoded JWT secret and DB credentials | Fail-fast resolution; non-dev refuses to boot on a weak secret |
+| D-03 | CORS `*`, no rate limiting, no security headers | Explicit whitelist, slowapi, CSP/nosniff/DENY |
+| D-04 | JWT in `localStorage`, no email verification, JWT in WS URLs | httpOnly cookie + CSRF, verification gate, single-use WS tickets |
+| D-05 | Lane compliance hardcoded to 1.0 | Body-edge in-lane fraction from recorded signed offsets |
+| D-06 | `time.time()` in every frame | Canonical frames, per-run SHA256 determinism digest |
+| D-07 | Catalogue routes unauthenticated | Router-level auth, secure by default for new routes |
+| D-08 | `max_retries=0`, no idempotency | 3 retries with backoff, refund once, idempotent on (batch, seed) |
+| D-09 | No coverage gate, six suites missing | 70% gate (at 71.3%), 430 tests |
+| D-10 | Dead OrgContext, nav to empty pages | Deleted, unready sections marked and disabled |
+| D-11 | TTC approximation undocumented | Documented at every surface; fix scheduled 2.1 |
+| D-12 | Load transfer used the previous step | Uses the current step |
+| D-13 | CI on SQLite only | Postgres job with Alembic round trip |
 
 ---
 # PHASE 1 — SaaS Foundation (remainder)

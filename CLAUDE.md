@@ -27,7 +27,7 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 
 Supporting, non-governing: `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Current priority: Phase 0 — Security & Score Integrity** (`docs/ROADMAP.md`). No Stripe, no new features until Phase 0 exits. See Section 13.
+**Phase 0 (Security & Score Integrity) is complete** — see Section 13 for what each defect became. Current priority: Phase 1.4 (Stripe billing) and 1.5 (road topology). `docs/METHODOLOGY.md` now documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -53,7 +53,7 @@ Don't confuse names in code — imports always `from arep.*`.
 | Python core | Python ≥ 3.10, numpy==1.26.0, scipy==1.11.3, pyyaml==6.0.1                        | Version-locked for determinism  |
 | API         | FastAPI + uvicorn, SQLAlchemy 2.0, SQLite (dev) / PostgreSQL (prod)               | Auth via JWT (python-jose)      |
 | Frontend    | React 18, Vite 5, React Router 6, Three.js r160, @react-three/fiber 8, Recharts 2 | No TypeScript yet               |
-| Testing     | pytest with `--tb=short`, pytest-cov                                              | Run from `arep_implementation/` |
+| Testing     | pytest with `--tb=short`, pytest-cov                                              | Run from `arep_implementation/`; CI gate at 70% coverage |
 | Linting     | black + ruff + mypy                                                               | All must pass before commit     |
 
 ---
@@ -568,7 +568,7 @@ event id. See Section 8.
 
 **Authority**: `docs/ROADMAP.md` v3.0 — priority *and* implementation detail. Read the relevant phase section before writing code in these areas.
 
-### Phase 0 — Security & Score Integrity (CURRENT PHASE — blocks everything else)
+### Phase 0 — Security & Score Integrity (COMPLETE)
 
 Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 
@@ -592,9 +592,21 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
    WS auth is a 60-second single-use ticket (`POST /api/runs/{id}/ws-ticket`, 4401 on refusal),
    JWT never in a socket URL; superadmin tokens expire in 4 h. Migration `007`. Tests:
    `test_email_verification.py` (18), `test_ws_ticket_auth.py` (13), `test_cookie_auth.py` (19).
-5. **0.5 Score integrity (D-05, D-06, D-11, D-12) — NEXT.**
-   Real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
-6. **0.6 Reliability + test gates (D-08, D-09, D-10, D-13)** — Celery `max_retries=3` + backoff + idempotent tasks; CI coverage gate ≥70% on Postgres (not SQLite); WS integration test; cross-org denial tests; partial-refund test; scenario YAML validation test; frontend ErrorBoundary + 404 + OrgProvider decision; hard-rule CI grep.
+5. ~~**0.5 Score integrity (D-05, D-06, D-11, D-12)**~~ — **DONE.** Real lane compliance
+   (body-edge test against recorded signed `lane_offset`; lane 0 recentred on the travel line);
+   canonical frames with `emit_ts_ms` moved to the WS send site; per-run `FrameHasher` digest
+   on `RunRecord.frame_hash` (migration `008`); TTC approximation documented everywhere it
+   surfaces; weight transfer uses the current step; `docs/METHODOLOGY.md` written.
+6. ~~**0.6 Reliability + test gates (D-08, D-09, D-10, D-13)**~~ — **DONE.** Celery
+   `max_retries=3` with 5/15/60s backoff for transient errors only, refund once, idempotent on
+   `(batch_id, seed)`; CI coverage gate at 70% (currently 71.3%) plus a Postgres job with an
+   Alembic upgrade → downgrade → upgrade round trip; scenario-library, cross-org denial,
+   partial-refund, NPC behaviour-tree and admin suites; `scripts/check_hard_rules.py` enforces
+   the simulation-purity rules in CI; frontend `OrgContext` deleted and unready nav disabled.
+
+**Phase 0 is complete** apart from 0.2 Step 2 (gVisor/Firecracker), which is gated on opening
+self-serve signup rather than on this phase. Next: Phase 1.4 (Stripe billing, on the verified
+webhook base) and 1.5 (road topology, which unblocks ~35% of the scenario library).
 
 ### Phase 1 remainder (after Phase 0 exits)
 
