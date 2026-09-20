@@ -15,7 +15,7 @@ import re
 import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
@@ -273,28 +273,36 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
         return user
 
 
-# The `request: Request` parameter on the three routes below is required by
-# slowapi — it reads the limiter key off it. Removing it silently disables the
-# limit with a runtime error at first call, so keep it even though the handler
-# body does not use it. Limits come from api.rate_limit_* (D-03).
+# The `request: Request` AND `response: Response` parameters on the three routes
+# below are both required by slowapi, and neither is used by the handler bodies:
+#
+#   request  — the limiter reads its bucket key off it.
+#   response — with headers_enabled the limiter writes X-RateLimit-* into the
+#              endpoint's `response` kwarg whenever the handler returns
+#              something that is not a starlette Response (these return Pydantic
+#              models). Without the parameter it receives None and raises, so
+#              every call 500s once the limiter is enabled.
+#
+# Dropping either one breaks the route at call time, not at import. Limits come
+# from api.rate_limit_* (D-03).
 
 @auth_router.post("/signup", response_model=UserResponse, status_code=201)
 @limiter.limit(signup_limit)
-def signup(req: SignupRequest, request: Request):
+def signup(req: SignupRequest, request: Request, response: Response):
     """Create a new organisation and its first owner user."""
     return _create_user_with_org(req)
 
 
 @auth_router.post("/register", response_model=UserResponse, status_code=201)
 @limiter.limit(signup_limit)
-def register(req: SignupRequest, request: Request):
+def register(req: SignupRequest, request: Request, response: Response):
     """Legacy alias of /signup."""
     return _create_user_with_org(req)
 
 
 @auth_router.post("/login", response_model=TokenResponse)
 @limiter.limit(login_limit)
-def login(req: LoginRequest, request: Request):
+def login(req: LoginRequest, request: Request, response: Response):
     """Authenticate and return a JWT token carrying org_id + role."""
     if len(req.password) > 72:
         raise HTTPException(

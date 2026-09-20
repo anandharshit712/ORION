@@ -162,7 +162,10 @@ def test_sixth_login_in_a_minute_is_rejected(client, live_limiter):
 
     for attempt in range(5):
         r = client.post("/api/auth/login", json=payload)
-        assert r.status_code != 429, f"limited too early on attempt {attempt + 1}"
+        # Assert the exact status, not "not 429": an earlier version of this test
+        # accepted anything other than 429 and so passed while the endpoint was
+        # returning 500 on every call with the limiter enabled.
+        assert r.status_code == 401, f"attempt {attempt + 1} gave {r.status_code}: {r.text[:200]}"
 
     r = client.post("/api/auth/login", json=payload)
     assert r.status_code == 429
@@ -187,6 +190,41 @@ def test_rate_limited_response_tells_the_client_when_to_retry(client, live_limit
 
     assert r.status_code == 429
     assert "Retry-After" in r.headers or "X-RateLimit-Reset" in r.headers
+
+
+def test_rate_limited_routes_still_work_when_under_the_limit(client, live_limiter):
+    """Regression: the limiter must not break the endpoints it guards.
+
+    With headers_enabled, slowapi writes X-RateLimit-* into the endpoint's
+    `response` kwarg whenever the handler returns something that is not a
+    starlette Response — which these do, they return Pydantic models. A handler
+    without the parameter got None and raised, so signup and login 500'd on
+    every call while the limiter was on. TestClient tests that only asserted
+    "not 429" sailed past it; a real request against uvicorn did not.
+    """
+    r = client.post("/api/auth/signup", json={
+        "email": "under-limit@example.com",
+        "username": "underlimit",
+        "password": "correct-horse-battery",
+        "org_name": "Under Limit Org",
+    })
+    assert r.status_code == 201, f"signup broke under the limiter: {r.text[:300]}"
+
+    r = client.post("/api/auth/login", json={
+        "identifier": "under-limit@example.com",
+        "password": "correct-horse-battery",
+    })
+    assert r.status_code == 200, f"login broke under the limiter: {r.text[:300]}"
+    assert "access_token" in r.json()
+
+
+def test_rate_limit_headers_reach_the_client(client, live_limiter):
+    """headers_enabled is only worth its complexity if the headers arrive."""
+    r = client.post("/api/auth/login", json={
+        "identifier": "nobody@example.com", "password": "wrong-password",
+    })
+    assert r.status_code == 401
+    assert "x-ratelimit-limit" in {k.lower() for k in r.headers}
 
 
 def test_health_is_exempt_from_the_global_limit(client, live_limiter):
