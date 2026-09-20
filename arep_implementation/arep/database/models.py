@@ -46,7 +46,19 @@ class OrganisationRecord(Base):
     slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     plan: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
     run_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
-    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, index=True
+    )
+    # Phase 1.4. Nullable throughout: an org created in beta has no Stripe
+    # presence and must keep working without one.
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Stored rather than inferred from `plan`, because Stripe distinguishes
+    # states that matter differently here: `past_due` still has access while the
+    # retry schedule runs, `canceled` does not.
+    subscription_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    current_period_end: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Phase 0.2 / D-01: the cloudpickle SDK path executes arbitrary customer
     # Python, so it is opt-in per org and enabled by hand for trusted partners.

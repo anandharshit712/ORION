@@ -47,6 +47,7 @@ PUBLIC_PATHS = {
     "/api/auth/reset-password",
     "/api/auth/verify-email",
     "/api/auth/resend-verification",
+    "/api/billing/plans",        # published prices; the pricing page needs them
 }
 
 # Path prefixes that bypass middleware (WebSocket auth handled separately)

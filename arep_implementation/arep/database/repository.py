@@ -384,15 +384,28 @@ class OrganisationRepository:
         self.session.flush()
         return record
 
+    UNLIMITED_CREDITS = -1
+
     def deduct_credits(self, org_id: str, amount: int) -> bool:
-        """Atomically deduct credits. Returns False if insufficient."""
+        """Atomically deduct credits. Returns False if insufficient.
+
+        ``run_credits == -1`` means unlimited and always succeeds without
+        decrementing. That sentinel is used by the system org and by the admin
+        set-credits route, and the plain ``<`` comparison here refused it: -1 is
+        less than any positive amount, so every org with unlimited credits was
+        unable to start a single run.
+        """
         org = (
             self.session.query(OrganisationRecord)
             .filter_by(id=org_id)
             .with_for_update()
             .first()
         )
-        if org is None or org.run_credits < amount:
+        if org is None:
+            return False
+        if org.run_credits == self.UNLIMITED_CREDITS:
+            return True
+        if org.run_credits < amount:
             return False
         org.run_credits -= amount
         return True
@@ -417,14 +430,66 @@ class OrganisationRepository:
         return org
 
     def add_credits(self, org_id: str, amount: int) -> None:
+        """Grant credits. A no-op for unlimited orgs (see deduct_credits)."""
         org = (
             self.session.query(OrganisationRecord)
             .filter_by(id=org_id)
             .with_for_update()
             .first()
         )
-        if org is not None:
+        if org is not None and org.run_credits != self.UNLIMITED_CREDITS:
             org.run_credits += amount
+
+    # ── Subscription state (Phase 1.4) ───────────────────────────────
+
+    def get_by_stripe_customer_id(self, customer_id: str) -> Optional[OrganisationRecord]:
+        """Find the org a Stripe webhook is about.
+
+        Webhooks identify the account by customer id, never by our org id, so
+        this is the only way in from an inbound event.
+        """
+        if not customer_id:
+            return None
+        return (
+            self.session.query(OrganisationRecord)
+            .filter_by(stripe_customer_id=customer_id)
+            .first()
+        )
+
+    def set_stripe_customer_id(self, org_id: str, customer_id: str) -> None:
+        org = self.get_by_id(org_id)
+        if org is not None:
+            org.stripe_customer_id = customer_id
+            self.session.flush()
+
+    def apply_subscription(
+        self,
+        org_id: str,
+        *,
+        plan: str,
+        subscription_id: Optional[str] = None,
+        status: Optional[str] = None,
+        current_period_end: Optional[datetime.datetime] = None,
+    ) -> Optional[OrganisationRecord]:
+        """Record what Stripe says the subscription now is.
+
+        Deliberately does not touch run_credits: a plan change and a credit
+        grant are different events (``customer.subscription.updated`` versus
+        ``invoice.paid``). Coupling them would grant a month of credits every
+        time someone changed their card.
+        """
+        org = self.get_by_id(org_id)
+        if org is None:
+            return None
+        org.plan = plan
+        if subscription_id is not None:
+            org.stripe_subscription_id = subscription_id
+        if status is not None:
+            org.subscription_status = status
+        if current_period_end is not None:
+            org.current_period_end = current_period_end
+        self.session.flush()
+        return org
 
 
 class ApiKeyRepository:

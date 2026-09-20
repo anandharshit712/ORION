@@ -2,6 +2,7 @@
 // Dashboard sidebar: numbered nav (Mission Control), credits gauge, user chip.
 // See docs/UI_DESIGN.md §9.6. Preserves ids: dashboard-sidebar, sidebar-<key>, sidebar-logout.
 
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Icon from './Icon';
 import './Sidebar.css';
@@ -61,10 +62,14 @@ export default function Sidebar({ active, onNavigate }) {
       </nav>
 
       <div className="side-foot">
-        <div className="credits panel">
+        {/* The credits gauge is the route into billing (Phase 1.4). The
+            numbered nav above is for dashboard sections; billing is its own
+            page, and without this link it had no way in at all. */}
+        <Link className="credits panel" to="/billing" id="sidebar-billing">
           <div className="credits-k mono-label">Run Credits</div>
           <div className="credits-v num">{credits != null ? credits.toLocaleString() : '—'}</div>
-        </div>
+          <span className="credits-cta mono-label">Manage plan</span>
+        </Link>
         <div className="side-user">
           <span className="side-av" aria-hidden="true">{initial}</span>
           <span className="side-user-info">

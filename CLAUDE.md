@@ -87,7 +87,7 @@ ORION/
 │   └── mlt/                      # Multi-agent (MLT-*)
 └── orion-frontend/               # React frontend
     └── src/
-        ├── pages/                # DashboardPage, LandingPage, LoginPage, SignupPage, ResetPasswordPage
+        ├── pages/                # DashboardPage, LandingPage, LoginPage, SignupPage, ResetPasswordPage, VerifyEmailPage, BillingPage
         ├── components/           # auth/, common/, landing/, simulation/
         ├── hooks/                # useSimulationStream.js
         ├── context/              # AuthContext (JWT token management)
@@ -308,6 +308,11 @@ FastAPI backend. All routes prefixed `/api`. Auth = JWT Bearer token.
 PUT    /api/admin/orgs/{org_id}/pickle-models  body: {enabled, note?} — superadmin: allow/deny this org the cloudpickle model path (D-01 gate, default deny)
 POST   /api/auth/forgot-password    body: {email} — request password reset link (public, no auth)
 POST   /api/auth/reset-password     body: {token, new_password} — consume token, set new password (public, no auth)
+GET    /api/billing/plans           plan catalogue: name, monthly_usd, run_credits, self_serve (PUBLIC — the pricing page needs it)
+GET    /api/billing/usage           current plan, credits, renewal date, subscription status
+POST   /api/billing/checkout        body: {plan, success_url, cancel_url} — Stripe hosted Checkout
+POST   /api/billing/topup           body: {quantity, success_url, cancel_url} — one-off credit packs
+GET    /api/billing/portal          ?return_url= — Stripe Customer Portal
 POST   /api/auth/verify-email       body: {token} — consume verification token, mark address verified (public, single-use)
 POST   /api/auth/resend-verification body: {email} — new verification link; always same reply, per-IP + per-user throttled
 GET    /health
@@ -370,6 +375,17 @@ default body is `{"error": ...}`).
 - **Webhooks**: `POST /api/billing/webhook` verifies the Stripe signature and claims the event
   id in `webhook_events` before doing anything. Any new webhook handler follows the same order —
   verify, claim, handle, `mark_processed` in the same transaction as the side effect.
+- **Billing (Phase 1.4)**: plan allocations live in `PLAN_CREDITS` / `PLAN_MONTHLY_USD` in
+  `api/billing.py` and are served by `GET /api/billing/plans`. **The frontend must never
+  hardcode a credit number** — `BillingPage` shipped advertising 100/2,500/15,000 against a
+  backend granting 50/500/3,000. Credits are granted **only** on `invoice.paid`;
+  `customer.subscription.updated` changes the plan and never the balance, or every card update
+  would hand out a free month. Cancellation drops the plan to `free` and leaves paid-for
+  credits alone. `run_credits == -1` means unlimited — `OrganisationRepository.UNLIMITED_CREDITS`;
+  don't compare it with `<`.
+- **Stripe objects are not dicts.** `StripeObject` has no `.get()` in stripe >= 15, and a
+  `hasattr(x, "get")` guard silently evaluates False rather than raising — so a metadata lookup
+  returns `None` and the caller takes the wrong branch. Use `_metadata_value()` in `billing.py`.
 - **Email verification (Phase 0.4, D-04)**: signup creates the user with `email_verified=false`
   and one hashed token on the user row (no side table — a resend replaces it). An unverified
   account can log in and read, but `Depends(require_verified_email)` blocks the routes that
@@ -472,7 +488,7 @@ with session_scope() as db:
 
 Never use raw `Session` — always go through repository classes in `database/repository.py`.
 
-Migrations live in `arep/database/migrations/versions/` (latest: `008_run_frame_hash`).
+Migrations live in `arep/database/migrations/versions/` (latest: `009_subscription_state`).
 Note: `alembic upgrade head` does **not** run on SQLite — migration `002` uses an `ALTER`
 with a constraint, which SQLite cannot do. Dev uses `init_database()` (`create_all`); the
 migration chain is only exercised against Postgres. Tracked as D-13 (Phase 0.6).

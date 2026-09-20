@@ -115,6 +115,22 @@ export const api = {
       }),
     }),
 
+  // Billing (Phase 1.4). Plan allocations come from the backend so the two
+  // sides cannot drift — this page previously advertised credit numbers that
+  // did not match what an account actually received.
+  getPlans: () => request(`${API}/billing/plans`),
+
+  getBillingUsage: () => request(`${API}/billing/usage`),
+
+  createCheckout: (plan, successUrl, cancelUrl) =>
+    request(`${API}/billing/checkout`, {
+      method: 'POST',
+      body: JSON.stringify({ plan, success_url: successUrl, cancel_url: cancelUrl }),
+    }),
+
+  openBillingPortal: (returnUrl) =>
+    request(`${API}/billing/portal?return_url=${encodeURIComponent(returnUrl)}`),
+
   // Health
   getHealth: () => request('/health'),
 

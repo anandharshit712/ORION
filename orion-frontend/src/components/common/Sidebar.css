@@ -118,3 +118,14 @@
   letter-spacing: 0.08em;
   color: var(--text-mute);
 }
+
+/* The credits gauge doubles as the link to billing (Phase 1.4). */
+a.credits { display: block; text-decoration: none; color: inherit; }
+a.credits:hover { border-color: var(--amber); }
+.credits-cta {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px;
+  color: var(--text-mute);
+}
+a.credits:hover .credits-cta { color: var(--amber); }

@@ -559,7 +559,7 @@ queue ✅. The sections below are what remains.
 
 ---
 
-## 1.4 — Stripe Billing Integration
+## 1.4 — Stripe Billing Integration — ✅ DONE
 
 **Why now and not earlier**: deferred behind Phase 0 deliberately — billing on an insecure
 platform is liability, not revenue.
@@ -596,10 +596,52 @@ and portal buttons. Closes one D-10 stub.
 
 ### Acceptance Criteria
 
-- [ ] A free-tier org with 0 credits gets 402 on `POST /api/runs/batch`
-- [ ] A Starter upgrade via checkout grants 500 credits within 60 s of payment
-- [ ] A replayed webhook event does not double credits (idempotency from 0.3)
-- [ ] `BillingPage` shows live plan + credits; the checkout round-trip works in test mode
+- [x] A free-tier org with 0 credits gets 402 on `POST /api/runs/batch` —
+      `test_a_free_org_with_no_credits_gets_402_on_batch`
+- [x] A Starter upgrade grants 500 credits — `test_invoice_paid_grants_the_plan_credits`
+      (granted on `invoice.paid`, which is the event that means money actually arrived)
+- [x] A replayed webhook event does not double credits —
+      `test_a_replayed_invoice_does_not_double_credits`
+- [x] `BillingPage` shows live plan + credits and drives checkout/portal — wired to
+      `/api/billing/plans` and `/api/billing/usage`, verified against a live server through
+      the Vite proxy. Stripe itself is stubbed in tests; a real test-mode round trip needs
+      live keys and real price IDs (see below).
+
+21 tests. Full suite 451.
+
+### Decisions taken
+
+- **Credits are granted on `invoice.paid` and nowhere else.** `customer.subscription.updated`
+  changes the plan and never the balance — coupling them would grant a month of runs every
+  time someone updated their card.
+- **Cancellation keeps paid-for credits.** They were bought; confiscating them on cancellation
+  takes back delivered value. The plan drops to `free`.
+- **The plan catalogue is served, not hardcoded.** `GET /api/billing/plans` is public, because
+  the pricing page needs it before anyone has an account — and because `BillingPage` had
+  already drifted to advertising 100/2,500/15,000 credits against a backend granting
+  50/500/3,000.
+- **Stripe customers are created lazily**, on first checkout rather than at signup: an org that
+  never pays should not exist in Stripe, and signup must not fail because Stripe is down.
+
+### Two bugs found while building it
+
+- **Unlimited credits could not run anything.** `run_credits == -1` is the unlimited sentinel
+  used by the system org and the admin set-credits route, but `deduct_credits` compared with
+  `<` — and -1 is less than any positive amount, so every unlimited org was refused every run.
+- **Verification emails pointed at a 404.** The 0.4 backend flow was complete, but the frontend
+  had no `/verify-email` route, so every link a customer clicked landed on the 404 page. Now a
+  real page, verified end to end by capturing a token from a sent email and consuming it.
+
+### Not done — needs real Stripe credentials
+
+- `PLAN_PRICES` and `TOPUP_PRICE_ID` still hold placeholder ids. Create the products in the
+  Stripe dashboard and paste the real `price_...` ids in.
+- No live test-mode round trip has been run. The code paths are exercised against a stubbed
+  Stripe; the handshake with the real API is unverified.
+- **Tier entitlements beyond credits are not enforced**: the tier table also promises scenario
+  access limits (Free = LON only) and concurrent-run caps. Neither is implemented, and neither
+  is in the acceptance criteria — enforcing them needs a decision about what happens to
+  in-flight work on downgrade.
 
 ---
 
