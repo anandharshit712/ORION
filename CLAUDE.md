@@ -214,6 +214,13 @@ run.unsubscribe(q)
 
 - `SimulationEngine.run_async(on_tick=...)` drives loop, calls `on_tick(world, action)` each step. Preserves synchronous `step()` determinism — wall-clock pacing only affects delivery latency.
 - `SimulationEngine.get_tick_frame(world, action, scenario_name, speed_limit)` = single source of truth for WebSocket JSON frame schema. Don't duplicate frame construction elsewhere; add fields here when extending protocol.
+- **The frame is canonical (Phase 0.5, D-06)**: its content is a pure function of
+  `(seed, scenario, tick)`. Anything you add to `get_tick_frame()` must be deterministic —
+  no wall-clock, no host state, no run ids. Non-deterministic transport fields go at the
+  WebSocket send site instead, which is where `emit_ts_ms` is now stamped. `FrameHasher`
+  (`utils/hashing.py`) folds the canonical frames into a per-run digest stored on
+  `RunRecord.frame_hash` and `LiveRun.frame_hash`, and sent in the `stream_end` message.
+  Same `(model, scenario, seed)` → same digest; `tests/test_frame_determinism.py` enforces it.
 - `monitor.metrics_current` in frame = per-tick *proxy* (collision flag + speed-limit compliance). Authoritative scores still come from `CompositeEvaluator` after run ends.
 - `LiveRun` (in `api/sim_registry.py`) stores `final_metrics` after run completion, populated from last tick frame's `monitor.metrics_current`. Composite score computed inline: `safety×0.5 + compliance×0.2 + stability×0.15 + reactivity×0.15`. Proxy scores until P1.4 wires `CompositeEvaluator` to live runs.
 
@@ -450,7 +457,7 @@ with session_scope() as db:
 
 Never use raw `Session` — always go through repository classes in `database/repository.py`.
 
-Migrations live in `arep/database/migrations/versions/` (latest: `007_email_verification`).
+Migrations live in `arep/database/migrations/versions/` (latest: `008_run_frame_hash`).
 Note: `alembic upgrade head` does **not** run on SQLite — migration `002` uses an `ALTER`
 with a constraint, which SQLite cannot do. Dev uses `init_database()` (`create_all`); the
 migration chain is only exercised against Postgres. Tracked as D-13 (Phase 0.6).
@@ -505,6 +512,8 @@ start.bat         # Windows (cmd.exe)
 - **Never mutate `WorldState` or `VehicleState` in place.** Always `.copy()` first.
 - **Never use Python's `random` module.** Use `RandomManager`, pass explicitly.
 - **Never use `time.time()` or `datetime.now()` inside simulation code.** Use `world.sim_time`.
+  `time.monotonic()` in `run_async` is the one sanctioned exception: it paces live *delivery*
+  and never reaches frame content. `tests/test_frame_determinism.py` greps for violations.
 - **Never change simulation step order** (validate → physics → NPCs → lights → collision → termination → increment time).
 - **Never change pinned dependency versions** (`numpy==1.26.0`, `scipy==1.11.3`) without explicit instruction — breaks determinism tests.
 - **Never create new scenario for weather/lighting variant.** Add to `parameterization:` block.
@@ -516,7 +525,7 @@ start.bat         # Windows (cmd.exe)
 
 **Secret/config resolution (Phase 0.1 — DONE, D-02 closed)**: never read `ORION_SECRET_KEY` / `ORION_DATABASE_URL` directly with a fallback default. Go through `arep/config/validate.py`: `resolve_secret_key()`, `resolve_database_url()`, `validate_startup()`. Non-dev (`ORION_ENV` not in dev/test/local) refuses to boot on missing/weak/placeholder secret or SQLite URL; dev gets an ephemeral secret + `sqlite:///arep.db`. `validate_startup()` runs in `app.py` lifespan. docker-compose pulls all secrets from git-ignored `infrastructure/.env` (`env_file:` + `${VAR}`); see `infrastructure/.env.example`.
 
-**Known violations of these rules in existing code** (tracked in the `docs/ROADMAP.md` defect register, fixed in Phase 0): `time.time()` in `simulation/engine.py:323` tick frame (D-06); JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. ~~CORS `*` / no rate limiting (D-03)~~ and ~~unauthenticated catalogue routes (D-07)~~ — closed in 0.3. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
+**Known violations of these rules in existing code** (tracked in the `docs/ROADMAP.md` defect register, fixed in Phase 0): JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. ~~`time.time()` in the tick frame (D-06)~~ — closed in 0.5. ~~CORS `*` / no rate limiting (D-03)~~ and ~~unauthenticated catalogue routes (D-07)~~ — closed in 0.3. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.
 
 **API hardening rules (Phase 0.3 — DONE, D-03 + D-07 closed)**: never set `allow_origins=["*"]`
 or read origins anywhere but `resolve_cors_origins()`. Never hardcode a rate limit at a call

@@ -272,9 +272,24 @@ class SimulationEngine:
         """
         Serialize the current world to the P1.1 WebSocket JSON frame schema.
 
-        This frame is intended for live visualisation only. Authoritative
-        metric values come from the offline ``CompositeEvaluator`` after
-        the run ends; the ``monitor.metrics_current`` block here is a
+        The frame is **canonical**: its content is a pure function of
+        (seed, scenario, tick) and contains no wall-clock, no host state and
+        nothing else that varies between two runs of the same input. That is
+        what makes ``FrameHasher`` a determinism guarantee rather than a
+        checksum of the weather.
+
+        This is why ``emit_ts_ms`` is not here (Phase 0.5, defect D-06). It used
+        to be, read from ``time.time()`` inside the simulation package, which
+        both broke the no-wall-clock rule and made every frame unhashable. The
+        WebSocket send site adds it on the way out, where it belongs — it is a
+        transport concern for the client's latency HUD, not part of the run.
+
+        Anything added here must be deterministic. If it is not, add it at the
+        send site instead.
+
+        Authoritative metric values come from the offline
+        ``CompositeEvaluator`` after the run ends; the ``monitor.metrics_current``
+        block here is a
         cheap per-tick proxy (collision + speed-limit compliance).
         """
         ego = world.ego_vehicle
@@ -320,7 +335,6 @@ class SimulationEngine:
         frame: Dict[str, Any] = {
             "tick": world.timestep_count,
             "t_ms": round(world.sim_time * 1000.0, 2),
-            "emit_ts_ms": round(time.time() * 1000.0, 2),
             "scenario_name": scenario_name,
             "ego": {
                 "id": ego.object_id,

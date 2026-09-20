@@ -73,3 +73,45 @@ def derive_seed(master_seed: int, subsystem: str) -> int:
     digest = hashlib.sha256(key.encode("utf-8")).digest()
     # First 4 bytes → unsigned 32-bit int (big-endian)
     return int.from_bytes(digest[:4], byteorder="big")
+
+
+class FrameHasher:
+    """
+    Rolling hash over a run's canonical tick frames (Phase 0.5, defect D-06).
+
+    Two runs of the same (model, scenario, seed) must produce byte-identical
+    frames. Folding them into one digest turns that claim into something a test
+    can assert and a customer can check: the determinism guarantee stops being a
+    promise in a README and becomes a number attached to the run.
+
+    Rolling rather than "collect every frame then hash": a 30-second run at
+    50 Hz is 1500 frames, and holding all of them to hash at the end would make
+    memory scale with run length for no benefit.
+
+    The chain is ``h(i) = sha256(h(i-1) || canonical_json(frame_i))``, so the
+    digest depends on frame *order* as well as content — a run that emits the
+    same frames in a different order is not the same run.
+
+    Only feed it canonical frames. ``SimulationEngine.get_tick_frame()`` is
+    canonical by contract; the WebSocket send site adds ``emit_ts_ms`` on the
+    way out, and hashing that would make every run's digest unique and the
+    whole exercise pointless.
+    """
+
+    def __init__(self) -> None:
+        self._digest = hashlib.sha256()
+        self._count = 0
+
+    def update(self, frame: Dict[str, Any]) -> None:
+        """Fold one frame into the rolling digest."""
+        canonical = json.dumps(frame, sort_keys=True, separators=(",", ":"))
+        self._digest.update(canonical.encode("utf-8"))
+        self._count += 1
+
+    @property
+    def frame_count(self) -> int:
+        return self._count
+
+    def hexdigest(self) -> str:
+        """Current digest. Safe to call mid-run; does not finalise anything."""
+        return self._digest.hexdigest()

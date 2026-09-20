@@ -127,6 +127,12 @@ async def run_smoke() -> int:
                     print("[ws_smoke] timeout waiting for frame")
                     return 1
                 msg = json.loads(raw)
+                # D-06: the canonical frame has no wall-clock; the send site
+                # stamps emit_ts_ms for the client's latency HUD. If this stops
+                # arriving, the HUD silently reports nothing.
+                if msg.get("event") != "stream_end" and "emit_ts_ms" not in msg:
+                    print("[ws_smoke] FAIL: emit_ts_ms missing from a streamed frame")
+                    return 1
                 if msg.get("event") == "stream_end":
                     print(f"[ws_smoke] stream_end: {msg}")
                     break

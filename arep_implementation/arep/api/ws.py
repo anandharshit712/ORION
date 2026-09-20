@@ -20,6 +20,8 @@ old frames rather than backpressuring the simulation loop.
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 
 from arep.api.sim_registry import get_registry
@@ -75,9 +77,20 @@ async def simulation_ws(
                     "event": "stream_end",
                     "status": run.status,
                     "error": run.error,
+                    # Published once the run is over, so a client can check the
+                    # determinism digest of what it just watched (D-06).
+                    "frame_hash": run.frame_hash,
                 })
                 break
-            await websocket.send_json(frame)
+            # emit_ts_ms is stamped here, not in get_tick_frame (D-06). It is a
+            # transport concern for the client's latency HUD; inside the frame
+            # it broke the no-wall-clock rule and made every run's hash unique.
+            # A copy, because subscribers share the published dict and the
+            # canonical frame has already been hashed.
+            await websocket.send_json({
+                **frame,
+                "emit_ts_ms": round(time.time() * 1000.0, 2),
+            })
     except WebSocketDisconnect:
         logger.info("WS disconnected: run_id=%s user_id=%s", run_id, user_id)
     except Exception:

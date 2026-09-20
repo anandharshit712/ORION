@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from arep.utils.hashing import FrameHasher
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.sim_registry")
@@ -50,6 +51,10 @@ class LiveRun:
     last_frame: Optional[Dict[str, Any]] = None
     final_metrics: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    # Rolling hash of the canonical frames this run produced (Phase 0.5, D-06).
+    # Two runs of the same (model, scenario, seed) must end with the same digest.
+    frame_hasher: "FrameHasher" = field(default_factory=lambda: FrameHasher())
+    frame_hash: Optional[str] = None
 
     # Pub/sub ────────────────────────────────────────────────────────
 
@@ -215,6 +220,9 @@ async def start_run(
             scenario_name=scenario_def.name,
             speed_limit=speed_limit,
         )
+        # Hash before publishing: the frame is canonical here, and the WebSocket
+        # send site stamps emit_ts_ms onto its own copy on the way out.
+        run.frame_hasher.update(frame)
         run.publish(frame)
 
     async def producer() -> None:
@@ -228,6 +236,7 @@ async def start_run(
                 tick_interval=tick_interval,
             )
             run.status = "complete"
+            run.frame_hash = run.frame_hasher.hexdigest()
             if run.last_frame:
                 mon = run.last_frame.get("monitor", {})
                 m = mon.get("metrics_current", {})

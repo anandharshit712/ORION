@@ -216,6 +216,12 @@ class RunRecord(Base):
     duration: Mapped[float] = mapped_column(Float, nullable=False)
     termination_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     num_timesteps: Mapped[int] = mapped_column(Integer, default=0)
+    # Rolling SHA256 over the run's canonical tick frames (Phase 0.5, D-06).
+    # Two runs of the same (model, scenario, seed) must store the same digest;
+    # a mismatch means the run was not reproducible and the score cannot be
+    # defended. Nullable because runs recorded before 008 have no digest, and
+    # because a batch run executed without frame emission does not produce one.
+    frame_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # Composite score
     composite_score: Mapped[float] = mapped_column(Float, nullable=False)
