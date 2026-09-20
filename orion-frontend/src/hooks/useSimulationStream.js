@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { api } from '../services/api';
 
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BASE_MS = 500;
+
+// Application close code the server uses for a refused credential (D-04).
+// Distinct from 1008 so we know to fetch a fresh ticket rather than give up.
+const WS_AUTH_FAILED = 4401;
 
 export function useSimulationStream(runId, token) {
   const [frame, setFrame] = useState(null);
@@ -20,9 +25,23 @@ export function useSimulationStream(runId, token) {
 
     cancelledRef.current = false;
 
-    const connect = () => {
+    // Each connection gets its own ticket: they are single-use and expire after
+    // 60s, so a reconnect cannot replay the previous one.
+    const connect = async () => {
+      let ticket;
+      try {
+        const issued = await api.createWsTicket(token, runId);
+        ticket = issued.ticket;
+      } catch (err) {
+        if (cancelledRef.current) return;
+        setError(err.message || 'Could not authorise the stream');
+        setStatus('rejected');
+        return;
+      }
+      if (cancelledRef.current) return;
+
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url = `${proto}://${window.location.host}/ws/simulation/${runId}?token=${encodeURIComponent(token)}`;
+      const url = `${proto}://${window.location.host}/ws/simulation/${runId}?ticket=${encodeURIComponent(ticket)}`;
 
       const ws = new WebSocket(url);
       socketRef.current = ws;
@@ -70,8 +89,21 @@ export function useSimulationStream(runId, token) {
           return;
         }
         if (ev.code === 1008) {
-          setError('Auth rejected or run not found');
+          setError('Run not found');
           setStatus('rejected');
+          return;
+        }
+        if (ev.code === WS_AUTH_FAILED) {
+          // The ticket was expired, already used, or for another run. A retry
+          // mints a new one, so this is worth one reconnect rather than none.
+          setError('Stream authorisation expired');
+          if (attemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+            setStatus('rejected');
+            return;
+          }
+          attemptsRef.current += 1;
+          setStatus(`reconnecting (${attemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+          reconnectTimerRef.current = setTimeout(connect, RECONNECT_BASE_MS);
           return;
         }
         if (attemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
@@ -85,7 +117,7 @@ export function useSimulationStream(runId, token) {
       };
     };
 
-    connect();
+    connect();          // async: the cleanup below handles an in-flight attempt
 
     return () => {
       cancelledRef.current = true;

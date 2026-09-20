@@ -378,6 +378,44 @@ async def start_run(req: StartRunRequest, request: Request):
     )
 
 
+class WsTicketResponse(BaseModel):
+    ticket: str
+    expires_in: int
+    ws_url: str
+
+
+@runs_router.post("/{run_id}/ws-ticket", response_model=WsTicketResponse)
+async def create_ws_ticket(run_id: str, request: Request):
+    """
+    Mint a short-lived, single-use ticket for the run's WebSocket (D-04).
+
+    A browser cannot set an Authorization header on a WebSocket handshake, so
+    the credential has to be in the URL. This one is worth sixty seconds and one
+    connection to one run, instead of the session JWT that used to be pasted
+    there and then copied into every access and proxy log on the way.
+
+    Ownership is checked here, while we still have a normal authenticated
+    request to check it on.
+    """
+    from arep.api.sim_registry import get_registry
+    from arep.api.ws_tickets import issue_ticket
+
+    org_id, user_id, _ = get_request_principal(request)
+
+    run = await get_registry().get(run_id)
+    if run is None or run.org_id != org_id:
+        # Same 404 for "no such run" and "not yours": a 403 would confirm that
+        # a run with this id exists in some other organisation.
+        raise HTTPException(404, "Run not found")
+
+    ticket, ttl = issue_ticket(run_id, user_id, org_id)
+    return WsTicketResponse(
+        ticket=ticket,
+        expires_in=ttl,
+        ws_url=f"/ws/simulation/{run_id}?ticket={ticket}",
+    )
+
+
 @runs_router.get("/", response_model=List[RunStatusResponse])
 async def list_live_runs(request: Request):
     org_id, _, _ = get_request_principal(request)

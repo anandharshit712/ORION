@@ -300,7 +300,8 @@ POST   /api/runs/                body: {scenario_path, model_name, master_seed, 
 GET    /api/runs/                list live runs (returns score fields after completion)
 GET    /api/runs/{run_id}        live-run status + scores
 DELETE /api/runs/{run_id}        cancel a live run
-WS     /ws/simulation/{run_id}   live tick frames (auth: ?token=<jwt>)
+POST   /api/runs/{run_id}/ws-ticket  mint a single-use 60s WebSocket ticket (auth required, run must be yours)
+WS     /ws/simulation/{run_id}   live tick frames (auth: ?ticket=<single-use ticket>; 4401 close if refused)
 POST   /api/runs/batch           async batch — body: {scenario_path, model_name, num_runs, master_seed}; returns 202 {batch_id, status, num_runs, enqueued, credits_remaining}
 GET    /api/runs/batch/{id}/status   live progress {status, total, queued, running, completed, failed, composite_mean, collision_rate, error_message}
 ```
@@ -394,6 +395,11 @@ Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer wired end-
 - `src/hooks/useSimulationStream.js` — owns WebSocket. Returns `{ frame, isConnected, status, error, latencyRef }`. Handles exponential-backoff reconnect (max 3 attempts), cleans up on unmount. Don't open sockets from components directly.
 - `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has `← Dashboard` back button (`.btn-ghost`, top). Scene + overlay restyled to Mission Control palette; HUD = glassless instrument panels.
 - Frame shape frozen in `SimulationEngine.get_tick_frame()`. To extend protocol: add fields there, consume in hook/viewer.
+- **Auth is a ticket, never the JWT (Phase 0.4, D-04).** The hook calls `api.createWsTicket()` per
+  connection attempt, then connects with `?ticket=`. Tickets are single-use and expire in 60 s
+  (`arep/api/ws_tickets.py`, in-memory alongside `sim_registry`). A refused credential closes
+  with **4401** (not 1008) so the client knows to mint a new ticket rather than give up. Never
+  put a JWT in a WebSocket URL — URLs reach access logs, proxy logs and browser history.
 - Server closes with `{"event": "stream_end", ...}` — hook handles before deciding reconnect.
 - Latency measured from `frame.emit_ts_ms` against client `Date.now()`; running average and max exposed via `latencyRef.current` for HUD display.
 - Control-plane calls (`POST /api/runs/`, etc.) go through `src/services/api.js` (`api.startRun`, `api.getLiveRun`, `api.cancelLiveRun`) — hook only owns WS.

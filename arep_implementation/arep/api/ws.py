@@ -2,9 +2,17 @@
 ORION WebSocket streaming endpoint (P1.1).
 
 Serves ``WS /ws/simulation/{run_id}`` — a live stream of per-tick JSON
-frames produced by the SimulationEngine. Auth is a JWT passed as the
-``?token=<jwt>`` query parameter (matching the roadmap schema; browsers
-cannot set Authorization headers on WebSocket handshakes).
+frames produced by the SimulationEngine.
+
+Auth is a single-use ticket from ``POST /api/runs/{run_id}/ws-ticket``, passed
+as ``?ticket=...`` (Phase 0.4, D-04). A browser cannot set an Authorization
+header on a WebSocket handshake, so the credential must travel in the URL —
+and URLs end up in access logs, proxy logs and browser history. This used to be
+the session JWT, which meant one log export handed over a credential good until
+expiry. A ticket is worth sixty seconds and one connection.
+
+Auth failures close with 4401 (application range) rather than 1008, so a client
+can tell "your ticket was no good, go get another" apart from a policy close.
 
 Each client gets its own bounded ``asyncio.Queue``; slow consumers drop
 old frames rather than backpressuring the simulation loop.
@@ -12,49 +20,36 @@ old frames rather than backpressuring the simulation loop.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
-from jose import JWTError, jwt
 
-from arep.api.auth import ALGORITHM, SECRET_KEY
 from arep.api.sim_registry import get_registry
+from arep.api.ws_tickets import redeem_ticket
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.ws")
 
 ws_router = APIRouter()
 
-
-def _verify_token(token: str) -> Optional[tuple[int, Optional[str]]]:
-    """Decode a JWT access token; return (user_id, org_id) on success, else None."""
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
-        return None
-    sub = payload.get("sub")
-    if sub is None:
-        return None
-    try:
-        user_id = int(str(sub))
-    except ValueError:
-        return None
-    org_id = payload.get("org_id")
-    return user_id, (str(org_id) if org_id else None)
+# Application close code for "your credential was not accepted". 1008 is the
+# generic policy violation and gives a client nothing to act on; 4401 mirrors
+# HTTP 401 so the frontend knows to fetch a fresh ticket rather than retry.
+WS_AUTH_FAILED = 4401
 
 
 @ws_router.websocket("/ws/simulation/{run_id}")
 async def simulation_ws(
     websocket: WebSocket,
     run_id: str,
-    token: str = Query(..., description="JWT access token"),
+    ticket: str = Query(..., description="Single-use ticket from POST /api/runs/{run_id}/ws-ticket"),
 ) -> None:
-    verified = _verify_token(token)
-    if verified is None:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        logger.warning("WS auth rejected for run_id=%s", run_id)
+    # Redeeming consumes the ticket, so a replay of the same URL fails here even
+    # if it is still inside its sixty seconds.
+    redeemed = redeem_ticket(ticket, run_id)
+    if redeemed is None:
+        await websocket.close(code=WS_AUTH_FAILED, reason="invalid or expired ticket")
+        logger.warning("WS ticket rejected for run_id=%s", run_id)
         return
-    user_id, org_id = verified
+    user_id, org_id = redeemed
 
     registry = get_registry()
     run = await registry.get(run_id)

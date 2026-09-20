@@ -1,10 +1,13 @@
 """
 Standalone smoke test for the P1.1 WebSocket streaming endpoint.
 
-Starts uvicorn in-process, hits POST /api/runs/ to launch a live run,
-then opens a WebSocket to /ws/simulation/{run_id}?token=... and prints
-the first ~20 frames. Intended for manual validation end-to-end; it
-does not need a frontend.
+Starts uvicorn in-process, signs up and verifies an account, launches a live
+run, mints a single-use WebSocket ticket and streams the first ~20 frames.
+Intended for manual validation end-to-end; it does not need a frontend.
+
+The signup/verify dance is not ceremony: POST /api/runs/ requires a verified
+account (D-04) and the socket requires a ticket rather than a JWT (D-04), so
+this is the shortest path a real client can take.
 
 Usage (from arep_implementation/):
     python scripts/ws_smoke.py
@@ -24,6 +27,16 @@ import httpx
 import uvicorn
 import websockets
 
+# A throwaway database, set before anything imports arep.config.env (which loads
+# .env and would otherwise point this at the real dev Postgres). A smoke script
+# that signs up users must not write to a database anyone cares about.
+import os
+import tempfile
+
+_fd, _db = tempfile.mkstemp(suffix=".db")
+os.close(_fd)
+os.unlink(_db)
+os.environ["ORION_DATABASE_URL"] = "sqlite:///" + _db.replace("\\", "/")
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -60,13 +73,31 @@ async def run_smoke() -> int:
     server = _start_server()
     print(f"[ws_smoke] uvicorn up on http://{HOST}:{PORT}")
     try:
-        # Mint a JWT directly (WS endpoint validates the token, does not
-        # require a real DB user).
-        from arep.api.auth import create_access_token
-        token = create_access_token({"sub": "1", "email": "smoke@local"})
-
         async with httpx.AsyncClient(base_url=f"http://{HOST}:{PORT}") as http:
-            resp = await http.post("/api/runs/", json={
+            email = f"ws-smoke-{int(time.time())}@example.com"
+            resp = await http.post("/api/auth/signup", json={
+                "email": email,
+                "username": email.split("@")[0],
+                "password": "ws-smoke-password",
+                "org_name": "WS Smoke Org",
+            })
+            resp.raise_for_status()
+
+            # Starting a run needs a verified address. Flipping the flag
+            # directly is the local stand-in for clicking the emailed link.
+            from arep.database.connection import session_scope
+            from arep.database.models import UserRecord
+            with session_scope() as session:
+                user = session.query(UserRecord).filter_by(email=email).first()
+                user.email_verified = True
+
+            resp = await http.post("/api/auth/login", json={
+                "identifier": email, "password": "ws-smoke-password",
+            })
+            resp.raise_for_status()
+            auth = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+            resp = await http.post("/api/runs/", headers=auth, json={
                 "scenario_path": SCENARIO,
                 "model_name": "EmergencyBrake",
                 "master_seed": 42,
@@ -78,7 +109,13 @@ async def run_smoke() -> int:
                   f"scenario={body['scenario_name']}")
             run_id = body["run_id"]
 
-        ws_url = f"ws://{HOST}:{PORT}/ws/simulation/{run_id}?token={token}"
+            resp = await http.post(f"/api/runs/{run_id}/ws-ticket", headers=auth)
+            resp.raise_for_status()
+            ticket = resp.json()["ticket"]
+            print(f"[ws_smoke] ticket minted (expires in "
+                  f"{resp.json()['expires_in']}s)")
+
+        ws_url = f"ws://{HOST}:{PORT}/ws/simulation/{run_id}?ticket={ticket}"
         print(f"[ws_smoke] connecting to {ws_url}")
         async with websockets.connect(ws_url) as ws:
             t0 = time.monotonic()
