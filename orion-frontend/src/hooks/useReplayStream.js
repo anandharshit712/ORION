@@ -25,7 +25,7 @@ import { useAuth } from '../context/AuthContext';
  *   error        — error message | null
  */
 export function useReplayStream(runId) {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [frames, setFrames] = useState([]);
   const [currentTick, setCurrentTick] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -36,15 +36,15 @@ export function useReplayStream(runId) {
 
   // Fetch all frames on mount
   useEffect(() => {
-    if (!runId || !token) return;
+    if (!runId || !user) return;
     setIsLoading(true);
     setCurrentTick(0);
     setIsPlaying(false);
 
-    // TODO [P5]: Call api.getRunReplay(token, runId) → GET /api/runs/{runId}/replay
+    // TODO [P5]: Call api.getRunReplay(runId) → GET /api/runs/{runId}/replay
     // TODO [P5]: setFrames(data.frames)
     setIsLoading(false);
-  }, [runId, token]);
+  }, [runId, user]);
 
   // Playback loop
   useEffect(() => {

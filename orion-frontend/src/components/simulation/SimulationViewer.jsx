@@ -283,9 +283,8 @@ function HUD({ frame, status, latencyRef, runId }) {
 
 export default function SimulationViewer() {
   const { runId } = useParams();
-  const { token } = useAuth();
   const navigate = useNavigate();
-  const { frame, status, error, latencyRef } = useSimulationStream(runId, token);
+  const { frame, status, error, latencyRef } = useSimulationStream(runId);
 
   return (
     <div className="sim-viewer">

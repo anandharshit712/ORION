@@ -1,16 +1,39 @@
 const BASE = '/api';
 
-async function request(endpoint, options = {}) {
-  const { token, ...fetchOpts } = options;
+// Methods that change state and therefore need the CSRF token (RFC 9110).
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+/**
+ * Read the readable half of the double-submit CSRF pair (Phase 0.4, D-04).
+ *
+ * The session JWT lives in an httpOnly cookie we deliberately cannot read. This
+ * companion cookie is readable on purpose: echoing it back in a header is what
+ * proves the request came from our own page. A cross-site page can make the
+ * browser send the cookies, but cannot read them to build this header.
+ */
+function csrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)orion_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function request(endpoint, options = {}) {
+  const { ...fetchOpts } = options;
+  const method = (fetchOpts.method || 'GET').toUpperCase();
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (UNSAFE_METHODS.has(method)) {
+    const csrf = csrfToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+  }
 
   const res = await fetch(`${BASE}${endpoint}`, {
     ...fetchOpts,
     headers,
+    // Send the session cookie. Without this the browser omits it and every
+    // authenticated call 401s — the API is same-origin through the Vite proxy
+    // in dev and through the reverse proxy in production, but fetch still needs
+    // telling.
+    credentials: 'include',
   });
 
   if (!res.ok) {
@@ -22,7 +45,9 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
-  // Auth
+  // Auth. No method takes a token any more: the browser is authenticated by the
+  // httpOnly cookie the backend sets at login, which JavaScript cannot read.
+  // SDK and script clients still use Authorization: Bearer — see CLAUDE.md §8.
   register: (email, username, password, fullName) =>
     request('/auth/register', {
       method: 'POST',
@@ -35,8 +60,9 @@ export const api = {
       body: JSON.stringify({ identifier, password }),
     }),
 
-  getMe: (token) =>
-    request('/auth/me', { token }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+
+  getMe: () => request('/auth/me'),
 
   forgotPassword: (email) =>
     request('/auth/forgot-password', {
@@ -50,25 +76,32 @@ export const api = {
       body: JSON.stringify({ token, new_password: newPassword }),
     }),
 
+  verifyEmail: (token) =>
+    request('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  resendVerification: (email) =>
+    request('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
   // Scenarios
-  getScenarios: (token) =>
-    request('/scenarios/', { token }),
+  getScenarios: () => request('/scenarios/'),
 
   // Runs / Results
-  getRuns: (token, limit = 50) =>
-    request(`/runs/?limit=${limit}`, { token }),
+  getRuns: (limit = 50) => request(`/runs/?limit=${limit}`),
 
-  getRunDetail: (token, runId) =>
-    request(`/runs/${runId}`, { token }),
+  getRunDetail: (runId) => request(`/runs/${runId}`),
 
-  getBatchJobs: (token) =>
-    request('/jobs/', { token }),
+  getBatchJobs: () => request('/jobs/'),
 
   // Evaluate
-  evaluateSingle: (token, scenarioName, modelName, seed) =>
+  evaluateSingle: (scenarioName, modelName, seed) =>
     request('/evaluate/single', {
       method: 'POST',
-      token,
       body: JSON.stringify({
         scenario_name: scenarioName,
         model_name: modelName,
@@ -80,10 +113,9 @@ export const api = {
   getHealth: () => request('/health'),
 
   // Live runs (P1.1)
-  startRun: (token, scenarioPath, modelName, masterSeed = 42, tickInterval = 0.02) =>
+  startRun: (scenarioPath, modelName, masterSeed = 42, tickInterval = 0.02) =>
     request('/runs/', {
       method: 'POST',
-      token,
       body: JSON.stringify({
         scenario_path: scenarioPath,
         model_name: modelName,
@@ -92,16 +124,15 @@ export const api = {
       }),
     }),
 
-  listLiveRuns: (token) => request('/runs/', { token }),
+  listLiveRuns: () => request('/runs/'),
 
-  getLiveRun: (token, runId) => request(`/runs/${runId}`, { token }),
+  getLiveRun: (runId) => request(`/runs/${runId}`),
 
   // Single-use, 60-second credential for the run's WebSocket (D-04). The
   // session JWT must never appear in a socket URL — URLs reach access logs,
   // proxy logs and browser history.
-  createWsTicket: (token, runId) =>
-    request(`/runs/${runId}/ws-ticket`, { method: 'POST', token }),
+  createWsTicket: (runId) =>
+    request(`/runs/${runId}/ws-ticket`, { method: 'POST' }),
 
-  cancelLiveRun: (token, runId) =>
-    request(`/runs/${runId}`, { method: 'DELETE', token }),
+  cancelLiveRun: (runId) => request(`/runs/${runId}`, { method: 'DELETE' }),
 };

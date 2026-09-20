@@ -306,6 +306,14 @@ POST   /api/runs/batch           async batch — body: {scenario_path, model_nam
 GET    /api/runs/batch/{id}/status   live progress {status, total, queued, running, completed, failed, composite_mean, collision_rate, error_message}
 ```
 
+POST `/api/auth/logout` clears both cookies (public — clearing cookies you may not have is a no-op).
+
+**Two authentication paths, both first-class**: the browser uses the `orion_session` httpOnly
+cookie plus the `X-CSRF-Token` double-submit header on writes; SDK, CLI and API-key clients use
+`Authorization: Bearer` and are exempt from CSRF (the browser never attaches that header, so
+there is nothing to forge). The header wins when both are present. `get_current_user` and
+`OrgAuthMiddleware` both read header-then-cookie — keep them in step.
+
 `GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` with:
 `composite_score`, `safety_score`, `compliance_score`, `stability_score`, `reactivity_score`, `collision_occurred` — populated once `status == "completed"`.
 
@@ -377,7 +385,16 @@ React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 
 - All HTTP calls through `src/services/api.js` — never use `fetch()` directly in component.
 - Auth token lives in `AuthContext` — use `const { user, token, logout } = useAuth()` everywhere.
-- **Token storage (D-04, being redesigned in Phase 0.4)**: today `AuthContext` persists the JWT in `localStorage` (`orion_token` key) — this is a known security defect, target is httpOnly cookie + `GET /api/auth/me` bootstrap. Don't add NEW `localStorage` token reads/writes outside `AuthContext`; don't build features that depend on reading the raw token in components.
+- **Token storage (D-04 — CLOSED in Phase 0.4)**: the JWT lives in an `httpOnly` cookie
+  (`orion_session`) that JavaScript cannot read. `AuthContext` holds no token at all and derives
+  auth state from `GET /api/auth/me` on mount, so a refresh stays logged in. **`useAuth()` returns
+  `{ user, loading, login, register, logout, isAuthenticated, isVerified }` — there is no `token`.**
+  Never reintroduce one, and never put a credential in `localStorage` (the only sanctioned key
+  stays `orion-theme`).
+- **CSRF**: cookies ride along automatically, so `src/services/api.js` echoes the readable
+  `orion_csrf` cookie in an `X-CSRF-Token` header on POST/PUT/PATCH/DELETE. Every call must go
+  through `request()` in that file or it will 403. API methods take **no token argument** —
+  `api.getRuns(50)`, not `api.getRuns(token, 50)`.
 - `OrgContext.jsx` exists but `OrgProvider` is NOT mounted anywhere — `useOrg()` throws. Mount it or don't call it (Phase 0.6 resolves).
 - Dashboard sections: `overview`, `scenarios`, `runs`, `models`, `batches`, `compare`, `settings` — string keys used in `Sidebar` (numbered nav). Non-`overview` views render styled "coming soon" placeholder panels until wired.
 - Charts use Recharts (`LineChart`, `RadarChart`, `BarChart`) — don't add Chart.js or D3.
@@ -532,8 +549,14 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
    and `/scenarios/*` actually were — `/jobs/` and `/results/*` already called
    `get_request_principal`. Neither open route carried org-scoped rows, so there was no tenancy
    leak. Both are gated regardless.
-4. **0.4 Auth flow (D-04) — NEXT.** — email verification (reuse hashed-token machinery), httpOnly cookie for browser JWT, short-lived WS ticket replaces `?token=` query param, superadmin expiry 4h.
-5. **0.5 Score integrity (D-05, D-06, D-11, D-12)** — real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
+4. ~~**0.4 Auth flow (D-04)**~~ — **DONE.** Email verification (token hashed on the user row,
+   `require_verified_email` gates runs/keys/model upload); JWT moved to an `httpOnly` cookie with
+   a double-submit CSRF partner and a `GET /api/auth/me` bootstrap, `localStorage` token gone;
+   WS auth is a 60-second single-use ticket (`POST /api/runs/{id}/ws-ticket`, 4401 on refusal),
+   JWT never in a socket URL; superadmin tokens expire in 4 h. Migration `007`. Tests:
+   `test_email_verification.py` (18), `test_ws_ticket_auth.py` (13), `test_cookie_auth.py` (19).
+5. **0.5 Score integrity (D-05, D-06, D-11, D-12) — NEXT.**
+   Real lane compliance via `lane_offset` in `EgoSnapshot`; remove `emit_ts_ms` from canonical frame (inject at WS send site); per-run frame hash = enforceable determinism guarantee; TTC approximation documented; weight-transfer fix; methodology doc.
 6. **0.6 Reliability + test gates (D-08, D-09, D-10, D-13)** — Celery `max_retries=3` + backoff + idempotent tasks; CI coverage gate ≥70% on Postgres (not SQLite); WS integration test; cross-org denial tests; partial-refund test; scenario YAML validation test; frontend ErrorBoundary + 404 + OrgProvider decision; hard-rule CI grep.
 
 ### Phase 1 remainder (after Phase 0 exits)

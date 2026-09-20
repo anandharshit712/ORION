@@ -19,21 +19,21 @@ const POLL_INTERVAL_MS = 2000;
  *   refresh — manually trigger a poll
  */
 export function useBatchStatus(batchId) {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null);
 
   const poll = useCallback(async () => {
-    if (!batchId || !token) return;
+    if (!batchId || !user) return;
     try {
-      // TODO [P1]: Call api.getBatchStatus(token, batchId)
+      // TODO [P1]: Call api.getBatchStatus(batchId)
       // TODO [P1]: setStatus(data)
       // TODO [P1]: If data.complete + data.failed === data.total, clearInterval
     } catch (err) {
       setError(err.message);
     }
-  }, [batchId, token]);
+  }, [batchId, user]);
 
   useEffect(() => {
     if (!batchId) return;

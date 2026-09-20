@@ -51,7 +51,7 @@ function MetricPanel({ label, value, accent = 'cyan', live = false }) {
 }
 
 function LaunchSimPanel() {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [scenarioPath, setScenarioPath] = useState(SCENARIO_PRESETS[0]);
   const [modelName, setModelName] = useState('EmergencyBrake');
@@ -64,7 +64,7 @@ function LaunchSimPanel() {
     setLaunching(true);
     setErr(null);
     try {
-      const res = await api.startRun(token, scenarioPath, modelName, Number(seed), Number(tickInterval));
+      const res = await api.startRun(scenarioPath, modelName, Number(seed), Number(tickInterval));
       navigate(`/simulation/${res.run_id}`);
     } catch (e) {
       setErr(e.message || 'Failed to start run');
@@ -129,7 +129,7 @@ function ComingSoon({ view }) {
 }
 
 export default function DashboardPage() {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const palette = useChartPalette();
   const [view, setView] = useState('overview');
   const [runs, setRuns] = useState([]);
@@ -138,14 +138,14 @@ export default function DashboardPage() {
   const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
     setLoading(true);
     setError(null);
-    api.getRuns(token, 50)
+    api.getRuns(50)
       .then((data) => setRuns(Array.isArray(data) ? data : data.runs || []))
       .catch((e) => { setRuns([]); setError(e.message || 'Failed to load runs'); })
       .finally(() => setLoading(false));
-  }, [token, refreshCount]);
+  }, [user, refreshCount]);
 
   const latestRuns = runs.slice(0, 20);
   const avg = (k) => (runs.length ? runs.reduce((s, r) => s + (r[k] || 0), 0) / runs.length * 100 : 0);

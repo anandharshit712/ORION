@@ -3,30 +3,40 @@ import { api } from '../services/api';
 
 const AuthContext = createContext(null);
 
+/**
+ * Session state for the browser app (Phase 0.4, D-04).
+ *
+ * The JWT is no longer here, and no longer in localStorage. It lives in an
+ * httpOnly cookie the backend sets at login, which JavaScript cannot read — so
+ * a script injected into the page cannot walk off with a 24-hour credential.
+ *
+ * That means the client has no way to inspect its own session, so auth state is
+ * derived instead: call GET /api/auth/me on mount, and whether it succeeds is
+ * the answer. A page refresh keeps the user logged in because the cookie
+ * survives it.
+ */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem('orion_token'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      api.getMe(token)
-        .then(setUser)
-        .catch(() => {
-          localStorage.removeItem('orion_token');
-          setToken(null);
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
+    let cancelled = false;
+
+    // A 401 here is the normal "not logged in" case, not an error worth
+    // surfacing — every first-time visitor hits it.
+    api.getMe()
+      .then((me) => { if (!cancelled) setUser(me); })
+      .catch(() => { if (!cancelled) setUser(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, []);
 
   const login = async (identifier, password) => {
-    const data = await api.login(identifier, password);
-    localStorage.setItem('orion_token', data.access_token);
-    setToken(data.access_token);
-    const me = await api.getMe(data.access_token);
+    // Sets the session and CSRF cookies; the token in the response body is for
+    // SDK clients and is deliberately ignored here.
+    await api.login(identifier, password);
+    const me = await api.getMe();
     setUser(me);
     return me;
   };
@@ -35,14 +45,32 @@ export function AuthProvider({ children }) {
     return api.register(email, username, password, fullName);
   };
 
-  const logout = () => {
-    localStorage.removeItem('orion_token');
-    setToken(null);
+  const logout = async () => {
+    // The server has to clear the cookie — the page cannot, which is the point
+    // of httpOnly. Local state is dropped either way, so a failed request still
+    // logs the user out of this tab.
+    try {
+      await api.logout();
+    } catch {
+      // Network failure or an already-expired session: nothing to recover.
+    }
     setUser(null);
   };
 
+  const value = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    isAuthenticated: user !== null,
+    // Signup no longer auto-activates an address (D-04). Pages gate the
+    // actions that need a verified account on this.
+    isVerified: Boolean(user?.email_verified),
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

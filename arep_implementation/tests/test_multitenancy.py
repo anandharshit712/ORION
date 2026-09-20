@@ -121,6 +121,9 @@ def test_orgs_me_returns_current_org(client):
 
 
 def test_unauthenticated_request_rejected(client):
+    # D-04: login leaves a session cookie on the shared TestClient, so an
+    # "anonymous" request has to start from an empty jar.
+    client.cookies.clear()
     r = client.get("/api/orgs/me")
     assert r.status_code == 401
 

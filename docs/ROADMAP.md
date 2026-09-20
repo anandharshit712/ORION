@@ -106,10 +106,10 @@ Full competitor scoring and the four moats: [MARKET.md](MARKET.md).
 | `WorldManager` + `SimulationEngine` | ✅ | `simulation/world.py`, `engine.py` |
 | 4-metric evaluation + Wilson / t-dist CIs in aggregator | ⚠ | `evaluation/`, `statistics/` — lane compliance is a stub (D-05), TTC is constant-velocity (D-11) |
 | FastAPI backend + auth + routes | ✅ | `api/` — CORS whitelist, slowapi rate limits, security headers, router-level auth (D-03 + D-07 closed) |
-| React + Three.js + Vite frontend ("Mission Control" design system) | ⚠ | `orion-frontend/src/` — JWT in `localStorage` (D-04) |
+| React + Three.js + Vite frontend ("Mission Control" design system) | ✅ | `orion-frontend/src/` — session is an httpOnly cookie, no token in JS (D-04 closed) |
 | SQLAlchemy models + Postgres config + Alembic | ✅ | `database/`, `config/` |
 | 18 scenario YAMLs, all v2.0, across all 6 categories | ✅ | `scenarios/` |
-| WebSocket telemetry + R3F live viewer | ⚠ | `api/ws.py`, `sim_registry.py`, `SimulationViewer.jsx` — `time.time()` in frame (D-06) |
+| WebSocket telemetry + R3F live viewer | ⚠ | `api/ws.py`, `sim_registry.py`, `SimulationViewer.jsx` — ticket auth (D-04 closed); `time.time()` still in frame (D-06) |
 | Multi-tenancy: orgs, roles, API keys, org-scoped routes | ✅ | `OrgAuthMiddleware`, `/api/orgs/*`, `/api/keys/*` |
 | Model submission (cloudpickle SDK + Docker) | ⚠ | `api/models_routes.py`, `models/resolver.py`, `orion-sdk/` — cloudpickle path is an RCE vector (D-01) |
 | Async batch queue (Celery + Redis, atomic credit deduction) | ⚠ | `worker/` — `max_retries=0` (D-08) |
@@ -130,7 +130,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-01 | ~~Cloudpickle model upload = arbitrary code execution in worker; subprocess inherits `ORION_DATABASE_URL`~~ | CRITICAL | 0.2 Step 1 — **done**; Step 2 (gVisor/Firecracker) before open signup |
 | D-02 | ~~JWT secret falls back to a hardcoded string; hardcoded DB creds; plaintext creds in docker-compose~~ | CRITICAL | 0.1 — **done** |
 | D-03 | ~~CORS `allow_origins=["*"]` + zero rate limiting on login/signup (`api/app.py`)~~ | CRITICAL | 0.3 — **done** |
-| D-04 | JWT stored in `localStorage` (`AuthContext.jsx`); signup auto-activates with no email verification | CRITICAL | 0.4 |
+| D-04 | ~~JWT stored in `localStorage` (`AuthContext.jsx`); signup auto-activates with no email verification~~ | CRITICAL | 0.4 — **done** |
 | D-05 | Lane compliance hardcoded `lane_frac = 1.0` (`evaluation/compliance.py`) — lane-keeping score is fake | HIGH | 0.5 |
 | D-06 | `time.time()` in tick frame (`simulation/engine.py`) — breaks the determinism rule and frame hashing | HIGH | 0.5 |
 | D-07 | ~~`/models/`, `/scenarios/` unauthenticated~~ (as filed: `/jobs/` and `/results/*` were already gated, and no open route carried org-scoped rows — the cross-org claim was wrong) | HIGH | 0.3 — **done** |
@@ -141,7 +141,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-12 | Weight transfer uses previous-step acceleration (`core/physics.py`) — off-by-one | LOW | 0.5 |
 | D-13 | SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev | MED | 0.6 |
 
-**Current position**: Phase 0. 0.1, 0.2 Step 1 and 0.3 are done; 0.4 (auth flow integrity, D-04) is the active task.
+**Current position**: Phase 0. 0.1, 0.2 Step 1, 0.3 and 0.4 are done; 0.5 (score integrity) is the active task.
 
 ---
 
@@ -341,7 +341,7 @@ full suite 147 passed.
 
 ---
 
-## 0.4 — Auth Flow Integrity (D-04) — NEXT
+## 0.4 — Auth Flow Integrity (D-04) — ✅ DONE
 
 - **Email verification**: signup creates the user with `email_verified=false`; the
   verification token is emailed (reuse the hashed-token machinery from password reset).
@@ -361,14 +361,42 @@ full suite 147 passed.
 
 ### Acceptance Criteria
 
-- [ ] JWT absent from `localStorage`, present only as an httpOnly cookie
-- [ ] Unverified account → `POST /api/runs/` returns 403 with a clear message
-- [ ] WS connect with an expired or reused ticket → 4401 close; JWT never in the WS URL
-- [ ] Page refresh keeps the user logged in (cookie + `/me` bootstrap)
+- [x] JWT absent from `localStorage`, present only as an httpOnly cookie —
+      `test_login_sets_an_httponly_session_cookie`; `grep -rn orion_token orion-frontend/src` is empty
+- [x] Unverified account → `POST /api/runs/` returns 403 with a clear message —
+      `test_unverified_start_run_is_403_with_a_clear_message`
+- [x] WS connect with an expired or reused ticket → 4401 close; JWT never in the WS URL —
+      `test_ws_with_a_reused_ticket_closes_4401`, `test_ws_url_from_the_endpoint_carries_no_jwt`
+- [x] Page refresh keeps the user logged in (cookie + `/me` bootstrap) —
+      `test_session_survives_a_simulated_refresh`
+
+50 tests across `test_email_verification.py`, `test_ws_ticket_auth.py` and `test_cookie_auth.py`;
+full suite 199 passed; `scripts/api_smoke.py` and `scripts/ws_smoke.py` both green.
+
+### Decisions taken along the way
+
+- **Verification token on the user row, not a side table.** There is only ever one outstanding
+  per user, a resend replaces it, and nothing needs the history.
+- **Unverified users can read.** Blocking only credit-spending and code-executing routes keeps
+  the dashboard usable while someone hunts for the email. API key creation is on the blocked
+  list, or the gate would be one POST away from permanent bypass.
+- **Existing users backfilled as verified** (migration `007`). Retro-enforcing a rule they were
+  never shown would be an outage, not a security win.
+- **Both auth paths stay first-class.** Browser = cookie + CSRF header; SDK/CLI = Bearer, exempt
+  from CSRF because the browser never attaches that header. The header wins if both are present.
+- **Beta webhook events are marked processed immediately** so replay suppression is observable
+  in the mode we actually run in.
+
+### Deferred out of 0.4
+
+- WS tickets are in-memory, matching `sim_registry`. Behind a load balancer both need Redis, and
+  they need it together.
+- No email-change flow: changing an address should re-trigger verification, but nothing exposes
+  an address change yet.
 
 ---
 
-## 0.5 — Score Integrity (D-05, D-06, D-11, D-12)
+## 0.5 — Score Integrity (D-05, D-06, D-11, D-12) — NEXT
 
 The product is the score. Every component of every published score must be computed,
 documented and reproducible.

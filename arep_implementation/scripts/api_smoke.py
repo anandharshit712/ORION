@@ -47,7 +47,14 @@ def check(label: str, ok: bool, detail: object = "") -> None:
         _failures.append(label)
 
 
-def call(method: str, path: str, body=None, headers=None, origin=None):
+_cookies: dict[str, str] = {}
+# Per-cookie attributes. A response can carry several Set-Cookie headers and the
+# flattened header dict keeps only the last, so reading flags from there reports
+# the CSRF cookie's attributes for the session cookie.
+_cookie_flags: dict[str, str] = {}
+
+
+def call(method: str, path: str, body=None, headers=None, origin=None, use_cookies=False):
     """Return (status, lowercased headers, body text).
 
     Header names are lowercased because uvicorn emits them that way on the wire,
@@ -58,11 +65,14 @@ def call(method: str, path: str, body=None, headers=None, origin=None):
     req.add_header("Content-Type", "application/json")
     if origin:
         req.add_header("Origin", origin)
+    if use_cookies and _cookies:
+        req.add_header("Cookie", "; ".join(f"{k}={v}" for k, v in _cookies.items()))
     for key, value in (headers or {}).items():
         req.add_header(key, value)
     data = json.dumps(body).encode() if body is not None else None
     try:
         with urllib.request.urlopen(req, data) as response:
+            _remember_cookies(response.headers)
             return (response.status,
                     {k.lower(): v for k, v in response.headers.items()},
                     response.read().decode())
@@ -70,6 +80,14 @@ def call(method: str, path: str, body=None, headers=None, origin=None):
         return (exc.code,
                 {k.lower(): v for k, v in exc.headers.items()},
                 exc.read().decode())
+
+
+def _remember_cookies(headers) -> None:
+    """Keep Set-Cookie values and attributes, the way a browser would."""
+    for raw in headers.get_all("Set-Cookie") or []:
+        name, _, rest = raw.partition("=")
+        _cookies[name.strip()] = rest.split(";", 1)[0]
+        _cookie_flags[name.strip()] = raw
 
 
 def main() -> int:
@@ -118,7 +136,17 @@ def main() -> int:
     })
     check("signup 201", status == 201, f"{status} {body[:160]}")
 
-    status, _, body = call("POST", "/api/auth/login", {
+    # Signup leaves the address unverified (D-04), which blocks key creation
+    # below. Flipping the column is the local stand-in for clicking the link;
+    # the real flow has its own tests.
+    from arep.database.connection import session_scope
+    from arep.database.models import UserRecord
+    with session_scope() as session:
+        user = session.query(UserRecord).filter_by(email="smoke@example.com").first()
+        if user is not None:
+            user.email_verified = True
+
+    status, headers, body = call("POST", "/api/auth/login", {
         "identifier": "smoke@example.com", "password": "smoke-password-123",
     })
     check("login 200", status == 200, f"{status} {body[:160]}")
@@ -148,6 +176,33 @@ def main() -> int:
 
     print("\n-- health stays exempt --")
     check("health still 200 after the limit bit", call("GET", "/health")[0] == 200)
+
+    print("\n-- cookie session + CSRF (D-04) --")
+    # No second login here: the per-IP budget is spent by the rate-limit section
+    # above, and the cookies from the successful login are still in _cookies —
+    # which is the point, a browser keeps them across requests.
+    check("session cookie issued", "orion_session" in _cookies, sorted(_cookies))
+    check("csrf cookie issued", "orion_csrf" in _cookies, sorted(_cookies))
+    check("session cookie is HttpOnly",
+          "HttpOnly" in _cookie_flags.get("orion_session", ""),
+          _cookie_flags.get("orion_session", "")[:100])
+    check("csrf cookie is readable on purpose",
+          "HttpOnly" not in _cookie_flags.get("orion_csrf", ""),
+          _cookie_flags.get("orion_csrf", "")[:100])
+
+    status, _, _ = call("GET", "/api/auth/me", use_cookies=True)
+    check("cookie alone authenticates /me", status == 200, status)
+
+    status, _, body = call("POST", "/api/keys/", {"label": "no-csrf"}, use_cookies=True)
+    # Assert *why* it was refused: the verification gate also answers 403, and a
+    # test that cannot tell them apart passes for the wrong reason.
+    check("cookie write without CSRF is refused", status == 403 and "CSRF" in body,
+          f"{status} {body[:120]}")
+
+    status, _, body = call("POST", "/api/keys/", {"label": "with-csrf"},
+                           headers={"X-CSRF-Token": _cookies.get("orion_csrf", "")},
+                           use_cookies=True)
+    check("cookie write with CSRF is allowed", status == 201, f"{status} {body[:100]}")
 
     print("\n-- webhook (0.3) --")
     status, _, body = call("POST", "/api/billing/webhook",

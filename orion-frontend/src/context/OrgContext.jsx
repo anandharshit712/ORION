@@ -14,22 +14,22 @@ const OrgContext = createContext(null);
  * Must be placed inside AuthProvider.
  */
 export function OrgProvider({ children }) {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [org, setOrg] = useState(null);           // { name, slug, plan, run_credits }
   const [loading, setLoading] = useState(false);
 
   const refreshOrg = useCallback(async () => {
-    if (!token) return;
+    if (!user) return;
     setLoading(true);
     try {
-      // TODO [P1]: Call api.getOrgStatus(token) → GET /api/orgs/me
+      // TODO [P1]: Call api.getOrgStatus() → GET /api/orgs/me
       // TODO [P1]: setOrg(data)
     } catch (err) {
       console.error('Failed to load org:', err);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [user]);
 
   return (
     <OrgContext.Provider value={{ org, loading, refreshOrg }}>

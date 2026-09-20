@@ -20,7 +20,9 @@ from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from arep.api.auth import decode_access_token
+from arep.api.auth import (
+    CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, decode_access_token,
+)
 from arep.database.connection import get_session
 from arep.database.models import UserRecord
 from arep.database.repository import ApiKeyRepository
@@ -40,12 +42,20 @@ PUBLIC_PATHS = {
     "/api/auth/signup",
     "/api/auth/register",
     "/api/auth/me",  # uses JWT dep directly — handled by route
+    "/api/auth/logout",          # clearing cookies you may not have is a no-op
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/verify-email",
+    "/api/auth/resend-verification",
 }
 
 # Path prefixes that bypass middleware (WebSocket auth handled separately)
 PUBLIC_PREFIXES = (
     "/ws/",
 )
+
+# Methods that do not change state, and so need no CSRF token (RFC 9110).
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 
 def hash_api_key(plaintext: str) -> str:
@@ -100,11 +110,40 @@ class OrgAuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         token = self._extract_token(auth_header)
 
+        # Cookie fallback for the browser app (Phase 0.4, D-04). The header wins:
+        # an SDK client that sends one is explicit about which identity it wants,
+        # and a stale cookie in the same jar must not override it.
+        from_cookie = False
+        if token is None:
+            cookie_token = request.cookies.get(SESSION_COOKIE)
+            if cookie_token:
+                token = cookie_token
+                from_cookie = True
+
         if token is None:
             request.state.org_id = None
             request.state.user_id = None
             request.state.role = None
             return await call_next(request)
+
+        # CSRF only applies to cookie auth. A Bearer header is not attached
+        # automatically by the browser, so a cross-site page cannot forge it and
+        # there is nothing to protect against. Safe methods are exempt: they are
+        # not supposed to change state, and gating them would break plain
+        # navigation to the API.
+        if from_cookie and request.method not in SAFE_METHODS:
+            csrf_cookie = request.cookies.get(CSRF_COOKIE)
+            csrf_header = request.headers.get(CSRF_HEADER)
+            if not csrf_cookie or not csrf_header or not secrets.compare_digest(
+                csrf_cookie, csrf_header
+            ):
+                logger.warning(
+                    "CSRF check failed for %s %s", request.method, request.url.path
+                )
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF token missing or invalid"},
+                )
 
         try:
             org_id, user_id, role = self._resolve_credentials(token)

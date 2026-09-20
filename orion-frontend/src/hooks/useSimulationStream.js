@@ -8,7 +8,7 @@ const RECONNECT_BASE_MS = 500;
 // Distinct from 1008 so we know to fetch a fresh ticket rather than give up.
 const WS_AUTH_FAILED = 4401;
 
-export function useSimulationStream(runId, token) {
+export function useSimulationStream(runId) {
   const [frame, setFrame] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
@@ -21,7 +21,7 @@ export function useSimulationStream(runId, token) {
   const latencyRef = useRef({ count: 0, sumMs: 0, maxMs: 0 });
 
   useEffect(() => {
-    if (!runId || !token) return undefined;
+    if (!runId) return undefined;
 
     cancelledRef.current = false;
 
@@ -30,7 +30,7 @@ export function useSimulationStream(runId, token) {
     const connect = async () => {
       let ticket;
       try {
-        const issued = await api.createWsTicket(token, runId);
+        const issued = await api.createWsTicket(runId);
         ticket = issued.ticket;
       } catch (err) {
         if (cancelledRef.current) return;
@@ -131,7 +131,7 @@ export function useSimulationStream(runId, token) {
       }
       socketRef.current = null;
     };
-  }, [runId, token]);
+  }, [runId]);
 
   return { frame, isConnected, status, error, latencyRef };
 }

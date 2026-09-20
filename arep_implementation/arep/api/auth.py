@@ -43,6 +43,19 @@ from arep.config.validate import resolve_secret_key
 SECRET_KEY = resolve_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
+# A superadmin token crosses org boundaries, so a stolen one is worth far more
+# than a tenant's. Four hours means a working session without leaving a
+# platform-wide credential valid overnight (Phase 0.4, D-04).
+SUPERADMIN_TOKEN_EXPIRE_HOURS = 4
+
+# Browser session cookie (Phase 0.4, D-04). httpOnly so a script injected into
+# the app cannot read the JWT the way it could read localStorage.
+SESSION_COOKIE = "orion_session"
+# Readable counterpart for the double-submit CSRF check. Deliberately NOT
+# httpOnly: the frontend has to read it to echo it back in a header, and that is
+# safe because a cross-site attacker can send the cookie but cannot read it.
+CSRF_COOKIE = "orion_csrf"
+CSRF_HEADER = "X-CSRF-Token"
 
 # ── Password hashing ────────────────────────────────────────────────────
 
@@ -64,10 +77,17 @@ def verify_password(plain: str, hashed: str) -> bool:
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
+def token_lifetime_for(role: Optional[str]) -> datetime.timedelta:
+    """How long a token for this role should live (D-04)."""
+    if role == "superadmin":
+        return datetime.timedelta(hours=SUPERADMIN_TOKEN_EXPIRE_HOURS)
+    return datetime.timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+
+
 def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + (
-        expires_delta or datetime.timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+        expires_delta or token_lifetime_for(data.get("role"))
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -78,13 +98,74 @@ def decode_access_token(token: str) -> dict:
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> UserRecord:
-    """FastAPI dependency — decode JWT and return the UserRecord."""
+def _cookies_are_secure() -> bool:
+    """Whether to mark session cookies Secure.
+
+    On in a real deployment; off in dev, because a Secure cookie is dropped by
+    the browser over plain http:// and local development would silently never
+    log in. Keyed on ORION_ENV, the same switch the secret and database
+    resolvers use.
+    """
+    from arep.config.validate import is_dev
+
+    return not is_dev()
+
+
+def set_session_cookies(response: Response, token: str, role: Optional[str]) -> None:
+    """Put the JWT in an httpOnly cookie and issue a CSRF partner (D-04).
+
+    The JWT used to live in localStorage, where any injected script could read
+    it. httpOnly removes that: the browser attaches the cookie without exposing
+    its value to JavaScript.
+
+    A cookie is sent automatically, which is what makes CSRF possible, so a
+    second readable cookie holds a random value the frontend must echo in the
+    CSRF header. A cross-site page can cause the request but cannot read the
+    cookie to forge the header. SameSite=Lax blocks the obvious cases on its
+    own; the double-submit token covers the rest.
+    """
+    max_age = int(token_lifetime_for(role).total_seconds())
+    secure = _cookies_are_secure()
+
+    response.set_cookie(
+        SESSION_COOKIE, token,
+        max_age=max_age, httponly=True, secure=secure, samesite="lax", path="/",
+    )
+    response.set_cookie(
+        CSRF_COOKIE, secrets.token_urlsafe(32),
+        max_age=max_age, httponly=False, secure=secure, samesite="lax", path="/",
+    )
+
+
+def clear_session_cookies(response: Response) -> None:
+    """Drop both cookies. Must match path/samesite or the browser keeps them."""
+    for name in (SESSION_COOKIE, CSRF_COOKIE):
+        response.delete_cookie(name, path="/", samesite="lax")
+
+
+def get_current_user(request: Request) -> UserRecord:
+    """FastAPI dependency — resolve the caller from a Bearer header or cookie.
+
+    Reads the header first and the session cookie second. The cookie matters:
+    /api/auth/me is how the browser app discovers whether it is logged in after
+    a refresh, and since D-04 the page has no token to send — the credential is
+    httpOnly and unreadable by JavaScript. A header-only dependency (the
+    previous OAuth2PasswordBearer) made that bootstrap impossible.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    else:
+        token = request.cookies.get(SESSION_COOKIE, "")
+    if not token:
+        raise credentials_exception
+
     try:
         payload = decode_access_token(token)
         user_id_str = payload.get("sub")
@@ -413,7 +494,11 @@ def login(req: LoginRequest, request: Request, response: Response):
             "org_id": user.org_id,
             "role": user.role,
         })
+        set_session_cookies(response, token, user.role)
         logger.info("User logged in: %s (org=%s)", user.username, user.org_id)
+        # The body still carries the token. The browser app ignores it and uses
+        # the cookie; SDK and script clients that cannot hold a cookie jar read
+        # it from here. Both paths are first-class — see Section 8 of CLAUDE.md.
         return TokenResponse(
             access_token=token,
             org_id=user.org_id,
@@ -446,6 +531,20 @@ class ResendVerificationRequest(BaseModel):
 
 class SimpleMessageResponse(BaseModel):
     message: str
+
+
+@auth_router.post("/logout", response_model=SimpleMessageResponse)
+def logout(response: Response):
+    """
+    Clear the browser session (D-04).
+
+    Needed because the frontend can no longer delete the credential itself —
+    that is the point of httpOnly. Public: clearing cookies on a caller who has
+    none is a no-op, and refusing unauthenticated logouts would strand anyone
+    holding an expired session.
+    """
+    clear_session_cookies(response)
+    return SimpleMessageResponse(message="Logged out.")
 
 
 @auth_router.post("/verify-email", response_model=SimpleMessageResponse)

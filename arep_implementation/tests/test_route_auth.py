@@ -58,6 +58,20 @@ def client():
         pass
 
 
+@pytest.fixture(autouse=True)
+def anonymous_by_default(client):
+    """Empty the cookie jar before each test.
+
+    Since D-04 a login leaves a session cookie on the TestClient, and the client
+    is module-scoped — so without this the "unauthenticated" tests below would
+    silently be running as a logged-in user and pass for the wrong reason.
+    Tests that want a caller use the Bearer header explicitly.
+    """
+    client.cookies.clear()
+    yield
+    client.cookies.clear()
+
+
 @pytest.fixture(scope="module")
 def token(client):
     """A real JWT, so the positive cases prove the gate opens for a valid caller."""
