@@ -1,10 +1,27 @@
 """
 ORION Time-To-Collision Calculator.
 
-Computes TTC using constant-velocity linear approximation.
+Computes TTC using a constant-velocity linear approximation.
+
+**TTC is optimistic under braking** (Phase 0.5, D-11). Both vehicles are
+projected forward at their current velocity, so a decelerating ego is credited
+with closing speed it will not actually carry. The reported TTC is therefore an
+upper bound on danger-free time in exactly the situation the safety score cares
+about most: the seconds after a lead vehicle brakes.
+
+Consequences, stated plainly because the safety score is 50% collision and
+30% minimum TTC:
+  - min_ttc is biased high during any braking manoeuvre
+  - a model that brakes early looks similar to one that brakes late, until the
+    late one actually collides
+  - TTC values are comparable *between models on the same scenario*, which is
+    what the score is used for; they are not a calibrated time-to-impact
+
+The constant-acceleration upgrade is tracked as Phase 2.1. Until it lands, do
+not quote TTC as an absolute safety margin anywhere customer-facing.
 
 Assumptions:
-  - Constant velocity (no acceleration)
+  - Constant velocity (no acceleration) — see above
   - Straight-line motion (no steering)
   - Point-mass approximation for TTC (size handled by collision detector)
 

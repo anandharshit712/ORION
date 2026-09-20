@@ -120,7 +120,19 @@ class DynamicVehicleParams:
     rolling_resistance: float = 0.015  # rolling resistance coefficient
     air_density: float = 1.225       # kg/m³
 
-    # Tire parameters
+    # Tire parameters.
+    #
+    # UNCALIBRATED (Phase 0.5, D-11). The Pacejka coefficients below are plausible
+    # passenger-car defaults in the range the Magic Formula literature uses for a
+    # dry road; they are NOT fitted to any measured tire, and no vehicle here
+    # corresponds to a real make or model. Absolute lateral forces should be read
+    # as indicative. What the model is good for is *comparison*: two models driven
+    # over the same tires and the same surface are ranked on equal terms, which is
+    # what the score is used for.
+    #
+    # Do not publish an absolute handling claim from these numbers, and do not
+    # tune them to make a scenario pass — that changes every stored baseline.
+    # docs/METHODOLOGY.md states this limitation for the customer's reviewer.
     front_tire: PacejkaParams = None
     rear_tire: PacejkaParams = None
 
@@ -308,9 +320,24 @@ class VehiclePhysics:
         F_front_static = total_weight * p.front_weight_ratio
         F_rear_static = total_weight * (1.0 - p.front_weight_ratio)
 
-        # Weight transfer due to acceleration (forward accel → shifts to rear)
+        # Weight transfer due to acceleration (forward accel → shifts to rear).
+        #
+        # D-12: this used state.acceleration, which is the value carried in from
+        # the *previous* step — so at 50 Hz the load on each axle lagged the
+        # driver input by 20 ms. That is precisely backwards at the moment it
+        # matters most: on brake application the front axle stays unloaded for a
+        # step exactly when the model is asking it for grip, and the available
+        # tire force is underestimated at the start of every emergency stop.
+        #
+        # driver_accel is this step's demand. It is not the achieved
+        # longitudinal acceleration — that depends on the tire forces this
+        # calculation is feeding into, so resolving it exactly would need a
+        # predictor-corrector iteration per step. Using the demand is correct to
+        # first order and is right in the regime that matters, where the tires
+        # are not saturated. The residual error appears only while sliding, and
+        # is documented in docs/METHODOLOGY.md rather than silently absorbed.
         weight_transfer_long = (
-            p.mass * state.acceleration * p.cg_height / self.wheelbase
+            p.mass * driver_accel * p.cg_height / self.wheelbase
         )
         F_front_normal = max(F_front_static - weight_transfer_long, 100.0)
         F_rear_normal = max(F_rear_static + weight_transfer_long, 100.0)

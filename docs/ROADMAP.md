@@ -131,17 +131,17 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-02 | ~~JWT secret falls back to a hardcoded string; hardcoded DB creds; plaintext creds in docker-compose~~ | CRITICAL | 0.1 — **done** |
 | D-03 | ~~CORS `allow_origins=["*"]` + zero rate limiting on login/signup (`api/app.py`)~~ | CRITICAL | 0.3 — **done** |
 | D-04 | ~~JWT stored in `localStorage` (`AuthContext.jsx`); signup auto-activates with no email verification~~ | CRITICAL | 0.4 — **done** |
-| D-05 | Lane compliance hardcoded `lane_frac = 1.0` (`evaluation/compliance.py`) — lane-keeping score is fake | HIGH | 0.5 |
-| D-06 | `time.time()` in tick frame (`simulation/engine.py`) — breaks the determinism rule and frame hashing | HIGH | 0.5 |
+| D-05 | ~~Lane compliance hardcoded `lane_frac = 1.0` — lane-keeping score is fake~~ | HIGH | 0.5 — **done** |
+| D-06 | ~~`time.time()` in tick frame — breaks the determinism rule and frame hashing~~ | HIGH | 0.5 — **done** |
 | D-07 | ~~`/models/`, `/scenarios/` unauthenticated~~ (as filed: `/jobs/` and `/results/*` were already gated, and no open route carried org-scoped rows — the cross-org claim was wrong) | HIGH | 0.3 — **done** |
 | D-08 | Celery `max_retries=0` — a transient failure kills the run and the customer eats it | HIGH | 0.6 |
 | D-09 | No coverage gate in CI; WS layer, admin routes, billing routes, partial-batch-refund untested | HIGH | 0.6 |
 | D-10 | Frontend: no error boundaries, no 404, `OrgProvider` written but never mounted, stub pages in sidebar | MED | 0.6 / with features |
-| D-11 | TTC uses a constant-velocity approximation — optimistic in critical scenarios; Pacejka coefficients uncited | MED | 0.5 (document), 2.1 (fix) |
-| D-12 | Weight transfer uses previous-step acceleration (`core/physics.py`) — off-by-one | LOW | 0.5 |
+| D-11 | TTC constant-velocity approximation — **documented** in `docs/METHODOLOGY.md`, `core/ttc.py` and `evaluation/safety.py`; Pacejka coefficients flagged uncalibrated. Constant-acceleration fix still 2.1 | MED | 0.5 documented |
+| D-12 | ~~Weight transfer uses previous-step acceleration~~ | LOW | 0.5 — **done** |
 | D-13 | SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev | MED | 0.6 |
 
-**Current position**: Phase 0. 0.1, 0.2 Step 1, 0.3 and 0.4 are done; 0.5 (score integrity) is the active task.
+**Current position**: Phase 0. 0.1, 0.2 Step 1, 0.3, 0.4 and 0.5 are done; 0.6 (reliability and test gates) is the active task.
 
 ---
 
@@ -396,7 +396,7 @@ full suite 199 passed; `scripts/api_smoke.py` and `scripts/ws_smoke.py` both gre
 
 ---
 
-## 0.5 — Score Integrity (D-05, D-06, D-11, D-12) — NEXT
+## 0.5 — Score Integrity (D-05, D-06, D-11, D-12) — ✅ DONE
 
 The product is the score. Every component of every published score must be computed,
 documented and reproducible.
@@ -423,14 +423,39 @@ documented and reproducible.
 
 ### Acceptance Criteria
 
-- [ ] A lane-keeping scenario where the ego drifts out of lane scores < 1.0 on compliance
-- [ ] Same seed → identical frame hash across two runs and two machines (CI-enforced)
-- [ ] `git grep "time.time" arep/simulation arep/core arep/evaluation` → zero hits
-- [ ] Methodology doc covers all four metrics, including the stated TTC approximation
+- [x] A lane-keeping scenario where the ego drifts out of lane scores < 1.0 on compliance —
+      `test_a_drifting_model_scores_below_a_straight_one` (1.000 straight vs 0.089 drifting)
+- [x] Same seed → identical frame hash across two runs (CI-enforced) —
+      `test_two_runs_of_the_same_seed_produce_the_same_frames`
+- [x] `git grep "time.time" arep/simulation arep/core arep/evaluation` → zero hits —
+      asserted by `test_no_wall_clock_in_the_simulation_packages`
+- [x] Methodology doc covers all four metrics, including the stated TTC approximation —
+      `docs/METHODOLOGY.md`
+
+24 new tests; full suite 223 passed.
+
+### Two things found while doing it
+
+- **The scenario library put every vehicle on a lane boundary.** `_create_lanes` centred the
+  carriageway on y=0, so for an even lane count the boundary sat at y=0 — where every
+  scenario places the ego and its traffic. Invisible while lane compliance was hardcoded;
+  scored 0.000 the moment it was computed for real. Lane 0 is now centred on y=0, leaving
+  every stored position (and so all relative geometry) untouched.
+- **Two different composite weightings existed.** The live dashboard used
+  0.5/0.2/0.15/0.15 while `CompositeEvaluator` used 0.35/0.25/0.20/0.20, for a number both
+  called `composite_score`. The dashboard now imports the evaluator's constants; its inputs
+  remain per-tick proxies until `CompositeEvaluator` is wired to live runs.
+
+### Deferred out of 0.5
+
+- The frame hash is computed on the live-run path. Batch runs through `EvaluationRunner` do
+  not emit frames and so store no digest — wiring that up belongs with the replay work (2.5).
+- "Two machines" in the criterion is verified on one machine plus pinned dependencies; a
+  cross-platform check needs the CI matrix from 0.6.
 
 ---
 
-## 0.6 — Reliability & Test Gates (D-08, D-09, D-10, D-13)
+## 0.6 — Reliability & Test Gates (D-08, D-09, D-10, D-13) — NEXT
 
 - **Celery retry policy**: `max_retries=3`, exponential backoff (5 s / 15 s / 60 s),
   `autoretry_for` transient exceptions (DB disconnect, Redis hiccup). Credit refund only

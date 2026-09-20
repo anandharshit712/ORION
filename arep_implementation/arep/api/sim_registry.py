@@ -241,12 +241,20 @@ async def start_run(
                 mon = run.last_frame.get("monitor", {})
                 m = mon.get("metrics_current", {})
                 verdict = mon.get("verdict_so_far", "INCONCLUSIVE")
+                # Weights come from CompositeEvaluator, not a second copy
+                # (Phase 0.5). These were 0.5/0.2/0.15/0.15 here against
+                # 0.35/0.25/0.20/0.20 there, so the dashboard and the batch
+                # report disagreed on a number both called "composite_score".
+                # The inputs are still per-tick proxies until CompositeEvaluator
+                # is wired to live runs — but the weighting is now one fact in
+                # one place, and changing it changes both.
+                from arep.evaluation.composite import CompositeEvaluator as _CE
                 run.final_metrics = {
                     "composite_score": (
-                        m.get("safety_score", 0.0) * 0.5
-                        + m.get("compliance_score", 0.0) * 0.2
-                        + m.get("stability_score", 0.0) * 0.15
-                        + m.get("reactivity_score", 0.0) * 0.15
+                        m.get("safety_score", 0.0) * _CE.SAFETY_WEIGHT
+                        + m.get("compliance_score", 0.0) * _CE.COMPLIANCE_WEIGHT
+                        + m.get("stability_score", 0.0) * _CE.STABILITY_WEIGHT
+                        + m.get("reactivity_score", 0.0) * _CE.REACTIVITY_WEIGHT
                     ),
                     "safety_score": m.get("safety_score", 0.0),
                     "compliance_score": m.get("compliance_score", 0.0),

@@ -277,11 +277,26 @@ TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags c
 
 **Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating specification document and all existing baselines.
 
-**Known metric defects (fix in Phase 0.5 — see `docs/ROADMAP.md` defect register):**
+**Scoring methodology is documented in `docs/METHODOLOGY.md`** — every weight, threshold
+and stated approximation, written for a customer's safety reviewer. Update it in the same
+change as any scoring change, and add a row to its change log: scores are only comparable
+within a scoring version.
 
-- D-05: lane compliance in `compliance.py:88` is a stub — `lane_frac = 1.0` hardcoded except on `off_road` termination. Lane-keeping score currently fake. Fix = record `lane_offset` in `EgoSnapshot`, compute real in-lane fraction.
-- D-11: TTC (`core/ttc.py`) assumes constant velocity — optimistic under braking. Document everywhere it surfaces; constant-acceleration upgrade in Phase 2.1.
-- D-12: weight transfer (`core/physics.py:312`) uses previous-step acceleration.
+**Metric defect status (Phase 0.5):**
+
+- ~~D-05 lane compliance stub~~ — **closed.** `EgoSnapshot` records signed `lane_offset`,
+  `lane_width` and `vehicle_half_width`; in-lane means the *body* is inside the line
+  (`|offset| + half_width <= lane_width/2`), because a centre-point test against the nearest
+  lane is tautological. Lane 0 is now centred on y=0 to match what scenarios mean by y=0.
+- ~~D-12 weight transfer off-by-one~~ — **closed.** Uses the current step's commanded
+  acceleration; the achieved-value residual is documented in `docs/METHODOLOGY.md`.
+- **D-11 TTC constant-velocity** — documented, not fixed (that is Phase 2.1). It is
+  optimistic under braking, so `min_ttc` is biased high in exactly the manoeuvres the safety
+  score judges. Never quote TTC as an absolute safety margin. Stated in `core/ttc.py`,
+  `evaluation/safety.py` and the methodology doc.
+- **Pacejka coefficients are uncalibrated** — plausible defaults, not fitted to a measured
+  tire. Don't publish absolute handling claims from them, and don't tune them to make a
+  scenario pass.
 
 ---
 
