@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 from arep.api.auth import get_request_principal
 from arep.config import get_config
 from arep.database.connection import session_scope
-from arep.database.repository import OrganisationRepository
+from arep.database.repository import OrganisationRepository, WebhookEventRepository
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.billing")
@@ -147,29 +147,112 @@ def billing_portal(request: Request):
     raise NotImplementedError("Set billing_enabled=true and implement Stripe portal")
 
 
+def verify_stripe_signature(payload: bytes, signature_header: Optional[str]):
+    """
+    Verify a Stripe webhook signature and return the decoded event.
+
+    This endpoint is unauthenticated by necessity — Stripe cannot hold one of our
+    tokens — so the signature IS the authentication. Anything reaching the
+    handler body without passing through here is an anonymous stranger posting
+    JSON at a route that grants credits.
+
+    ``stripe.Webhook.construct_event`` checks the HMAC and the timestamp
+    tolerance (replay window) in one call; hand-rolling the scheme would be more
+    code with more ways to get constant-time comparison wrong.
+
+    Raises:
+        HTTPException: 400 on a missing, malformed or invalid signature.
+        HTTPException: 503 when live billing is on but no signing secret is set —
+            a misconfiguration, not a caller error, and the one case where
+            failing open would be silently unsafe.
+    """
+    import stripe
+
+    secret = get_config().billing.stripe_webhook_secret
+    if not secret:
+        logger.error("Stripe webhook received but stripe_webhook_secret is unset")
+        raise HTTPException(
+            status_code=503,
+            detail="Webhook signing secret is not configured",
+        )
+
+    if not signature_header:
+        raise HTTPException(status_code=400, detail="Missing stripe-signature header")
+
+    try:
+        return stripe.Webhook.construct_event(payload, signature_header, secret)
+    except ValueError as exc:                        # unparseable body
+        logger.warning("Stripe webhook payload rejected: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+    except stripe.error.SignatureVerificationError as exc:
+        logger.warning("Stripe webhook signature rejected: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+
 @billing_router.post("/webhook", status_code=200)
 async def stripe_webhook(
     request: Request,
     stripe_signature: Optional[str] = Header(None, alias="stripe-signature"),
 ):
     """
-    Beta: 200 no-op. Live: verify signature and handle invoice.paid /
-    subscription.updated / subscription.deleted. Must be idempotent.
+    Inbound Stripe webhook.
+
+    Signature verification and replay suppression are live in both modes; only
+    the per-event side effects wait for 1.4. That ordering is deliberate: they
+    are the parts that are dangerous to bolt onto a money path afterwards.
+
+    Flow: verify signature -> claim the event id -> handle -> mark processed.
+    A replayed event id that already reached ``processed`` returns 200 without
+    re-running anything, because a retried ``invoice.paid`` would otherwise
+    grant the credits twice. Stripe retries on any non-2xx, so a duplicate must
+    answer 200, not an error.
     """
     cfg = get_config()
-    if not cfg.billing.billing_enabled:
-        logger.debug("Stripe webhook received in beta mode -- ignoring")
+    payload = await request.body()
+
+    # In beta with no secret configured, Stripe is not sending anything real —
+    # accept and drop, which keeps local development free of Stripe setup. With
+    # a secret present we verify even in beta, so the wiring is exercised before
+    # it guards real money.
+    if not cfg.billing.billing_enabled and not cfg.billing.stripe_webhook_secret:
+        logger.debug("Stripe webhook received in beta mode with no secret -- ignoring")
         return {"status": "beta_noop"}
 
-    # TODO: payload = await request.body()
-    # TODO: event = stripe.Webhook.construct_event(
-    #     payload, stripe_signature, cfg.billing.stripe_webhook_secret
-    # )
-    # TODO: handle event.type:
+    event = verify_stripe_signature(payload, stripe_signature)
+
+    # construct_event returns a StripeObject, which exposes fields as attributes
+    # and has no dict .get() in stripe >= 15 — reading it like a dict raises
+    # AttributeError at runtime, not at import.
+    event_id = getattr(event, "id", None)
+    event_type = getattr(event, "type", None)
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Webhook event has no id")
+
+    with session_scope() as session:
+        repo = WebhookEventRepository(session)
+        if not repo.claim(event_id, provider="stripe", event_type=event_type):
+            logger.info("Stripe webhook %s (%s) already processed -- replay ignored",
+                        event_id, event_type)
+            return {"status": "duplicate", "event_id": event_id}
+
+        if not cfg.billing.billing_enabled:
+            # Beta has no credits to move, so the handler's contract for this
+            # event is "do nothing" — and it discharged it. Marking it processed
+            # in the same transaction as the claim is the honest record, and it
+            # makes replay suppression observable in the mode we actually run in.
+            # Stripe's retry window is hours, so nothing pending here survives
+            # to the day billing goes live.
+            repo.mark_processed(event_id)
+            logger.info("Stripe webhook %s (%s) verified in beta mode -- no action",
+                        event_id, event_type)
+            return {"status": "beta_noop", "event_id": event_id}
+
+    # TODO (Phase 1.4): handle event_type
     #   "invoice.paid"           -> add PLAN_CREDITS[org.plan] to org.run_credits
     #   "subscription.updated"   -> update org.plan
     #   "subscription.deleted"   -> org.plan = "free"
-    # TODO: store event.id to deduplicate replays
+    # then, inside the same transaction as the credit change:
+    #   WebhookEventRepository(session).mark_processed(event_id)
     raise NotImplementedError("Set billing_enabled=true and implement Stripe webhook")
 
 

@@ -302,3 +302,39 @@ class PasswordResetRecord(Base):
 
     def __repr__(self) -> str:
         return f"<PasswordReset user={self.user_id} expires={self.expires_at}>"
+
+
+class WebhookEventRecord(Base):
+    """
+    A webhook delivery we have seen, keyed by the provider's own event id.
+
+    Exists to make webhook handling idempotent (Phase 0.3, defect D-07 groundwork
+    for the billing work in 1.4). Payment providers retry deliveries whenever a
+    response is slow, non-2xx, or simply lost, so the same event id arrives more
+    than once as a matter of routine — not only under attack. Without this table
+    a retried ``invoice.paid`` grants the credits twice.
+
+    ``status`` is what makes a crash mid-handler recoverable:
+      - ``received``  — signature verified, row claimed, handler not finished.
+        A retry of this event is allowed through, because the effect may never
+        have been applied.
+      - ``processed`` — the handler completed. Later retries are dropped.
+
+    The payload is deliberately not stored: it carries customer billing details,
+    and nothing in the replay path needs it.
+    """
+    __tablename__ = "webhook_events"
+
+    # The provider's event id (Stripe: "evt_..."), not one we generate — that is
+    # the whole point, it must match across retries of the same delivery.
+    event_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="stripe")
+    event_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="received")
+    received_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+    processed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<WebhookEvent {self.provider}:{self.event_id} {self.status}>"

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from arep.database.models import (
     ScenarioRecord, RunRecord, BatchJobRecord,
     OrganisationRecord, ApiKeyRecord, UserRecord, ModelRecord,
-    PasswordResetRecord,
+    PasswordResetRecord, WebhookEventRecord,
 )
 from arep.evaluation.composite import EvaluationResult
 from arep.statistics.aggregator import AggregatedMetrics
@@ -617,4 +617,72 @@ class PasswordResetRepository:
                 PasswordResetRecord.created_at >= since,
             )
             .count()
+        )
+
+
+class WebhookEventRepository:
+    """
+    Idempotency ledger for inbound provider webhooks (Phase 0.3).
+
+    Payment providers retry a delivery whenever the response is slow, non-2xx or
+    lost, so the same event id arrives repeatedly in normal operation. Every
+    handler must therefore claim the event before acting on it and only mark it
+    processed once the side effect is durable.
+    """
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def claim(
+        self,
+        event_id: str,
+        provider: str = "stripe",
+        event_type: Optional[str] = None,
+    ) -> bool:
+        """Try to take ownership of an event.
+
+        Returns True when the caller should process it, False when it is a
+        replay of an already-completed delivery.
+
+        A row left in ``received`` is claimable again on purpose: it means a
+        previous attempt verified the signature and then died before finishing,
+        so the side effect may never have been applied. Dropping the retry there
+        would lose the event entirely, which is worse than the handler running
+        twice — handlers are expected to be idempotent in their own right.
+        """
+        existing = self.get(event_id)
+        if existing is not None:
+            return existing.status != "processed"
+
+        self.session.add(
+            WebhookEventRecord(
+                event_id=event_id,
+                provider=provider,
+                event_type=event_type,
+                status="received",
+            )
+        )
+        self.session.flush()
+        return True
+
+    def mark_processed(self, event_id: str) -> None:
+        """Record that the handler finished. Later retries become no-ops."""
+        record = self.get(event_id)
+        if record is not None:
+            record.status = "processed"
+            record.processed_at = datetime.datetime.utcnow()
+            self.session.flush()
+
+    def get(self, event_id: str) -> Optional[WebhookEventRecord]:
+        """Look up an event by id alone.
+
+        ``provider`` labels the row for operators; it is not part of the key.
+        Provider event ids are globally unique within a provider and prefixed
+        by it in practice ("evt_" for Stripe), so a composite key would buy a
+        collision guarantee nothing needs.
+        """
+        return (
+            self.session.query(WebhookEventRecord)
+            .filter(WebhookEventRecord.event_id == event_id)
+            .first()
         )
