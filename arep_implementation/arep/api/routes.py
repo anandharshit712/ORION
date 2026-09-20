@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from arep.api.auth import get_request_principal
@@ -69,13 +69,29 @@ def _get_model(name: str, org_id: Optional[str] = None) -> ModelInterface:
 
 # ── Routers ──────────────────────────────────────────────────────────────
 
+# Auth is declared at the router, not per route (Phase 0.3, defect D-07).
+# get_request_principal raises 401 when OrgAuthMiddleware resolved no
+# credentials. Handlers that need the org id still call it directly for the
+# value; this dependency is what makes a *newly added* route secure by
+# default instead of secure only if its author remembered.
+_AUTHENTICATED = [Depends(get_request_principal)]
+
+# /health stays public: load balancers and container probes cannot hold a token.
 health_router = APIRouter(tags=["Health"])
-models_router = APIRouter(prefix="/models", tags=["Models"])
-scenarios_router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
-evaluate_router = APIRouter(prefix="/evaluate", tags=["Evaluate"])
-jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"])
-results_router = APIRouter(prefix="/results", tags=["Results"])
-runs_router = APIRouter(prefix="/api/runs", tags=["Runs"])
+
+# The scenario library and the built-in model list are gated too. They hold no
+# per-org rows, so this is not a tenancy leak — but the library is the product
+# (see docs/MARKET.md on the scenario-coverage moat), the model list enumerates
+# our evaluation surface, and an anonymous caller hitting the scenarios table is
+# free load on the database. No public page consumes either: the frontend's
+# api.getScenarios() already sends a token. Revisit only if a marketing page
+# needs to render the catalogue, and then serve it from a static snapshot.
+models_router = APIRouter(prefix="/models", tags=["Models"], dependencies=_AUTHENTICATED)
+scenarios_router = APIRouter(prefix="/scenarios", tags=["Scenarios"], dependencies=_AUTHENTICATED)
+evaluate_router = APIRouter(prefix="/evaluate", tags=["Evaluate"], dependencies=_AUTHENTICATED)
+jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"], dependencies=_AUTHENTICATED)
+results_router = APIRouter(prefix="/results", tags=["Results"], dependencies=_AUTHENTICATED)
+runs_router = APIRouter(prefix="/api/runs", tags=["Runs"], dependencies=_AUTHENTICATED)
 
 
 # ── Health ───────────────────────────────────────────────────────────────
