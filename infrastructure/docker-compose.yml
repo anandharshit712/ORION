@@ -48,6 +48,11 @@ services:
       ORION_DATABASE_URL: postgresql://${POSTGRES_USER:-orion}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-orion}
       ORION_REDIS_URL: redis://redis:6379/0
       ORION_MODEL_STORE_PATH: /tmp/orion_model_store
+      # Rate-limit counters in Redis (db 1, separate from the Celery broker on
+      # db 0) so limits hold across API replicas instead of per process.
+      ORION_RATE_LIMIT_STORAGE_URI: ${ORION_RATE_LIMIT_STORAGE_URI:-redis://redis:6379/1}
+      # ORION_ALLOWED_ORIGINS and the other ORION_RATE_LIMIT_* knobs come from
+      # .env via env_file above; see infrastructure/.env.example.
     volumes:
       - ../arep_implementation:/arep/arep_implementation   # live reload in dev
       - ../scenarios:/arep/scenarios

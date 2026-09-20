@@ -244,3 +244,61 @@ def require_plan(*allowed_plans: str):
         finally:
             session.close()
     return _check
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Attach baseline security headers to every response (Phase 0.3, defect D-03).
+
+    This is an API, not an HTML app, so the headers are the ones that matter for
+    a JSON surface plus the two doc pages:
+
+      - ``X-Content-Type-Options: nosniff`` — stop a browser from re-typing a
+        JSON error body as HTML and running it.
+      - ``X-Frame-Options: DENY`` — nothing here is meant to be framed.
+      - ``Referrer-Policy: no-referrer`` — URLs carry run ids and (until 0.4)
+        WS tickets; don't leak them to third parties.
+      - ``Content-Security-Policy: default-src 'none'`` — a JSON response has no
+        business loading anything. Relaxed for /docs and /redoc, which are real
+        HTML pages pulling Swagger/ReDoc bundles from a CDN.
+      - ``Strict-Transport-Security`` — only over HTTPS. Sending it over plain
+        HTTP is ignored by browsers and would break local dev over http://.
+    """
+
+    # Swagger UI and ReDoc load their JS/CSS from jsdelivr and inline a bootstrap
+    # script; a default-src 'none' policy would render both pages blank.
+    _DOC_PATHS = ("/docs", "/redoc", "/openapi.json")
+    _DOC_CSP = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+        "img-src 'self' data: https://fastapi.tiangolo.com; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "connect-src 'self'"
+    )
+    _API_CSP = "default-src 'none'; frame-ancestors 'none'"
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+
+        path = request.url.path
+        is_docs = any(path.startswith(p) for p in self._DOC_PATHS)
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            self._DOC_CSP if is_docs else self._API_CSP,
+        )
+
+        # HSTS is meaningless (and ignored) over http://; only assert it when the
+        # request actually arrived over TLS, directly or via a trusted proxy.
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+        if request.url.scheme == "https" or forwarded_proto == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
+
+        return response

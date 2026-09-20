@@ -61,11 +61,30 @@ class PathConfig:
 
 @dataclass(frozen=True)
 class APIConfig:
-    """REST API parameters."""
+    """REST API parameters.
+
+    The rate-limit and CORS fields are security controls (Phase 0.3, defect
+    D-03), not performance tuning. ``cors_origins`` must be an explicit
+    whitelist outside dev — ``validate_startup()`` refuses to boot on ``*``.
+    """
     host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: tuple = ("*",)
+    cors_origins: tuple = ("http://localhost:5173", "http://localhost:3000")
     debug: bool = False
+
+    # Rate limiting (slowapi). Empty string disables a specific limit.
+    rate_limit_enabled: bool = True
+    rate_limit_login: str = "5/minute"       # per IP — credential stuffing
+    rate_limit_signup: str = "3/hour"        # per IP — account-farm abuse
+    rate_limit_default: str = "120/minute"   # per principal — global API budget
+    # "memory://" is per-process: with >1 uvicorn worker each worker keeps its
+    # own counters, so the effective limit is N x the configured one. Point this
+    # at the Redis the worker queue already uses to make limits global.
+    rate_limit_storage_uri: str = "memory://"
+    # Only honour X-Forwarded-For when a trusted proxy sets it. Off by default:
+    # if it were on and the API were exposed directly, any client could spoof
+    # the header and get a fresh rate-limit bucket per request.
+    trust_proxy_headers: bool = False
 
 
 @dataclass(frozen=True)
@@ -285,6 +304,20 @@ def _apply_yaml(
             root[key] = data[key]
 
 
+def _bool(v: str) -> bool:
+    """Parse a truthy env var value."""
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _csv_tuple(v: str) -> tuple:
+    """Parse a comma-separated env var into a tuple, dropping blanks.
+
+    Used for ORION_ALLOWED_ORIGINS. An empty string yields an empty tuple,
+    which means "no cross-origin browser access" — not "allow everything".
+    """
+    return tuple(item.strip() for item in v.split(",") if item.strip())
+
+
 _ENV_MAP = {
     # AREP_TIMESTEP → simulation.timestep (float)
     "AREP_TIMESTEP": ("sim", "timestep", float),
@@ -295,6 +328,14 @@ _ENV_MAP = {
     "AREP_DATABASE_URL": ("db", "url", str),
     "AREP_API_HOST": ("api", "host", str),
     "AREP_API_PORT": ("api", "port", int),
+    # API surface hardening (Phase 0.3, D-03) — ops tunables, never secrets
+    "ORION_ALLOWED_ORIGINS": ("api", "cors_origins", _csv_tuple),
+    "ORION_RATE_LIMIT_ENABLED": ("api", "rate_limit_enabled", _bool),
+    "ORION_RATE_LIMIT_LOGIN": ("api", "rate_limit_login", str),
+    "ORION_RATE_LIMIT_SIGNUP": ("api", "rate_limit_signup", str),
+    "ORION_RATE_LIMIT_DEFAULT": ("api", "rate_limit_default", str),
+    "ORION_RATE_LIMIT_STORAGE_URI": ("api", "rate_limit_storage_uri", str),
+    "ORION_TRUST_PROXY_HEADERS": ("api", "trust_proxy_headers", _bool),
     "AREP_DEBUG": ("root", "debug", lambda v: v.lower() in ("1", "true", "yes")),
     # Physics
     "AREP_PHYSICS_MODE": ("phys", "mode", str),

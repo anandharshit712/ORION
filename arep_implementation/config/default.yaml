@@ -51,6 +51,25 @@ api:
   host: "0.0.0.0"
   port: 8000
   debug: false
+
+  # ── Security controls (Phase 0.3, defect D-03) ──────────────────────────
+  # CORS origins are deployment-specific, so they live in the environment,
+  # not here: ORION_ALLOWED_ORIGINS="https://app.example.com,https://admin.example.com".
+  # The built-in default is the two local dev servers. A non-dev ORION_ENV
+  # refuses to boot on "*" — see arep/config/validate.py.
+  #
+  # Rate limits use slowapi syntax ("5/minute", "3/hour"). Set
+  # rate_limit_enabled: false only in tests that need to hammer an endpoint.
+  rate_limit_enabled: true
+  rate_limit_login: "5/minute"       # per IP
+  rate_limit_signup: "3/hour"        # per IP
+  rate_limit_default: "120/minute"   # per principal (API key / org / IP)
+  # memory:// counts per process. With >1 uvicorn worker, point this at the
+  # Redis the Celery queue already runs on: redis://localhost:6379/1
+  rate_limit_storage_uri: "memory://"
+  # Honour X-Forwarded-For for the client IP. Enable ONLY behind a proxy you
+  # control, otherwise clients spoof the header to reset their own limits.
+  trust_proxy_headers: false
 # ── Billing ───────────────────────────────────────────────────────────────
 # Set billing_enabled: true and provide Stripe keys via env vars when ready
 # to go live. Everything else (credit deduction, refund, org isolation) works

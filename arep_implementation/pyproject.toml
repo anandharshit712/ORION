@@ -33,6 +33,7 @@ api = [
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     "python-multipart>=0.0.6",
+    "slowapi>=0.1.9",           # [P0.3] rate limiting (D-03)
     "stripe>=7.0.0",            # [P1] billing integration
     "jinja2>=3.1.0",            # [P2] report templates
     "python-dotenv>=1.0.0",     # [P1] .env loading

@@ -2,7 +2,8 @@
 ORION FastAPI Application Factory.
 
 Creates the ORION REST API application with:
-  - CORS middleware
+  - CORS middleware (explicit origin whitelist — D-03)
+  - Rate limiting and security headers (D-03)
   - All API routers mounted
   - Database initialization on startup
   - OpenAPI documentation
@@ -15,11 +16,14 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from arep.api.admin import admin_router
 from arep.api.auth import auth_router
 from arep.api.billing import billing_router
-from arep.api.middleware import OrgAuthMiddleware
+from arep.api.middleware import OrgAuthMiddleware, SecurityHeadersMiddleware
+from arep.api.ratelimit import limiter, rate_limit_exceeded_handler
 from arep.api.models_routes import models_api_router
 from arep.api.orgs import keys_router, orgs_router
 from arep.api.routes import (
@@ -27,7 +31,7 @@ from arep.api.routes import (
     evaluate_router, jobs_router, results_router, runs_router,
 )
 from arep.api.ws import ws_router
-from arep.config.validate import validate_startup
+from arep.config.validate import resolve_cors_origins, validate_startup
 from arep.database.connection import init_database
 from arep.utils.logging_config import get_logger
 
@@ -59,17 +63,32 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # Org-scoped auth middleware (added BEFORE CORS so it runs AFTER CORS in Starlette's
-    # reverse-add semantics — CORS sees requests first, auth resolves before route handlers).
-    app.add_middleware(OrgAuthMiddleware)
+    # Rate limiting (D-03). The limiter must be on app.state: slowapi resolves
+    # it from there, both in the decorator and in the middleware.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-    # CORS (outermost — handles preflight OPTIONS without auth)
+    # Starlette runs middleware in REVERSE order of registration, so this block
+    # reads bottom-up: CORS first (preflight answered without auth), then
+    # security headers, then rate limiting, then org auth closest to the route.
+    #
+    # Rate limiting sits *after* OrgAuthMiddleware in add order, meaning it runs
+    # *before* it — so the default limit is keyed on IP for unauthenticated
+    # callers and the per-route limits on authenticated routes still see
+    # request.state once the auth middleware has run beneath it.
+    app.add_middleware(OrgAuthMiddleware)
+    app.add_middleware(SlowAPIMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    # CORS (outermost). resolve_cors_origins() refuses a wildcard outside dev;
+    # allow_credentials=True is only valid against an explicit origin list.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=resolve_cors_origins(),
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+        expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"],
     )
 
     # Mount routers

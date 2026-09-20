@@ -125,6 +125,45 @@ def resolve_database_url() -> str:
     return "sqlite:///arep.db"
 
 
+def resolve_cors_origins() -> list[str]:
+    """
+    Browser origins allowed to call the API (Phase 0.3, defect D-03).
+
+    Sourced from ``api.cors_origins`` (env ``ORION_ALLOWED_ORIGINS``, comma
+    separated). A wildcard is refused outside dev: the API is served with
+    ``allow_credentials=True``, and per the CORS spec a wildcard origin is
+    invalid with credentials — so ``["*"]`` was both insecure and broken.
+
+    Raises:
+        ConfigurationError: non-dev environment with a wildcard or empty list.
+    """
+    from arep.config import get_config
+
+    origins = [str(o).strip() for o in get_config().api.cors_origins if str(o).strip()]
+
+    if is_dev():
+        if "*" in origins:
+            logger.warning(
+                "CORS allow_origins=* in dev (ORION_ENV=%s) — every origin may "
+                "call this API with credentials. Never ship this.", get_env(),
+            )
+        return origins
+
+    if "*" in origins:
+        raise ConfigurationError(
+            "CORS wildcard '*' is not permitted in a non-dev environment "
+            f"(ORION_ENV={get_env()!r}). Set ORION_ALLOWED_ORIGINS to an "
+            "explicit comma-separated whitelist. Refusing to boot."
+        )
+    if not origins:
+        raise ConfigurationError(
+            "ORION_ALLOWED_ORIGINS is empty in a non-dev environment "
+            f"(ORION_ENV={get_env()!r}); no browser client could reach the API. "
+            "Set it to the frontend's origin. Refusing to boot."
+        )
+    return origins
+
+
 def validate_startup() -> None:
     """
     Run all fail-fast checks. Call from the API lifespan and worker bootstrap.
@@ -133,4 +172,5 @@ def validate_startup() -> None:
     """
     resolve_secret_key()
     resolve_database_url()
+    resolve_cors_origins()
     logger.info("Configuration validated (ORION_ENV=%s)", get_env())

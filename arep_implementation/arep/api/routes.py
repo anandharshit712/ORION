@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from arep.api.auth import get_request_principal
+from arep.api.ratelimit import limiter
 from arep.api.schemas import (
     RunSingleRequest, RunBatchRequest,
     MetricsResponse, BatchResultResponse, AggregatedResponse,
@@ -79,7 +80,10 @@ runs_router = APIRouter(prefix="/api/runs", tags=["Runs"])
 
 # ── Health ───────────────────────────────────────────────────────────────
 
+# Exempt from the global rate limit (D-03): liveness probes hit this every few
+# seconds from one address, and a throttled health check reads as an outage.
 @health_router.get("/health", response_model=HealthResponse)
+@limiter.exempt
 def health_check():
     return HealthResponse(
         status="healthy",

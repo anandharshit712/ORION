@@ -26,6 +26,7 @@ import os as _os
 import secrets
 import datetime as _dt
 
+from arep.api.ratelimit import limiter, login_limit, signup_limit
 from arep.config import get_config
 from arep.config.env import get_settings
 from arep.database.connection import get_session, session_scope
@@ -272,20 +273,28 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
         return user
 
 
+# The `request: Request` parameter on the three routes below is required by
+# slowapi — it reads the limiter key off it. Removing it silently disables the
+# limit with a runtime error at first call, so keep it even though the handler
+# body does not use it. Limits come from api.rate_limit_* (D-03).
+
 @auth_router.post("/signup", response_model=UserResponse, status_code=201)
-def signup(req: SignupRequest):
+@limiter.limit(signup_limit)
+def signup(req: SignupRequest, request: Request):
     """Create a new organisation and its first owner user."""
     return _create_user_with_org(req)
 
 
 @auth_router.post("/register", response_model=UserResponse, status_code=201)
-def register(req: SignupRequest):
+@limiter.limit(signup_limit)
+def register(req: SignupRequest, request: Request):
     """Legacy alias of /signup."""
     return _create_user_with_org(req)
 
 
 @auth_router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest):
+@limiter.limit(login_limit)
+def login(req: LoginRequest, request: Request):
     """Authenticate and return a JWT token carrying org_id + role."""
     if len(req.password) > 72:
         raise HTTPException(
