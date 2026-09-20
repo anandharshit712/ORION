@@ -514,6 +514,19 @@ black arep/ tests/
 ruff check arep/ tests/
 mypy arep/
 
+# Hard-rule check (no wall-clock / unseeded randomness in the simulation
+# packages). AST-based, same check CI runs.
+python scripts/check_hard_rules.py
+
+# End-to-end smoke tests against a real uvicorn server. Both use throwaway
+# databases; run them for anything touching middleware, headers or the ASGI
+# stack, where TestClient and production diverge.
+PYTHONPATH=. python scripts/api_smoke.py
+PYTHONPATH=. python scripts/ws_smoke.py
+
+# Coverage with the CI gate
+pytest --cov=arep --cov-report=term-missing --cov-fail-under=70
+
 # Start everything (from project root)
 ./start.sh        # Linux/Mac (bash)
 start.bat         # Windows (cmd.exe)

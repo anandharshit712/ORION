@@ -7,6 +7,7 @@ on:
     branches: ["**"]
 
 jobs:
+  # SQLite matrix: fast, and it is what developers actually run locally.
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -19,7 +20,97 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         working-directory: arep_implementation
-        run: pip install -e ".[dev,api]"
+        # worker extras included: the batch and reliability suites import celery
+        # and cloudpickle, and without them 13 tests error rather than run.
+        run: pip install -e ".[dev,api,worker]"
       - name: Run tests
         working-directory: arep_implementation
-        run: pytest --tb=short -v
+        run: pytest --tb=short -q
+
+  # Postgres job: dev/prod parity (D-13).
+  #
+  # SQLite silently no-ops `SELECT ... FOR UPDATE`, which is what the atomic
+  # credit deduction relies on. A race that corrupts a customer's balance is
+  # therefore invisible in the matrix above by construction. This job is also
+  # the only place the Alembic chain runs at all — migration 002 uses an ALTER
+  # with a constraint, which SQLite cannot do, so `alembic upgrade head` has
+  # never been executable against the dev database.
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: orion
+          POSTGRES_PASSWORD: orion_ci_password
+          POSTGRES_DB: orion_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ORION_ENV: test
+      ORION_DATABASE_URL: postgresql://orion:orion_ci_password@localhost:5432/orion_test
+      ORION_REDIS_URL: redis://localhost:6379/0
+      # Non-dev environments refuse to boot without a strong secret, so CI
+      # supplies one. It is public, disposable and used only here.
+      ORION_SECRET_KEY: ci-only-secret-not-used-anywhere-else-32chars
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: arep_implementation
+        run: pip install -e ".[dev,api,worker]"
+
+      - name: Alembic upgrade → downgrade → upgrade
+        working-directory: arep_implementation
+        # Round trip, not just forward: a downgrade that does not work is found
+        # during an incident, at the worst possible moment.
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Run tests against Postgres with a coverage gate
+        working-directory: arep_implementation
+        run: |
+          pytest --tb=short -q \
+            --cov=arep --cov-report=term-missing --cov-report=xml \
+            --cov-fail-under=70
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: arep_implementation/coverage.xml
+          if-no-files-found: warn
+
+  # The hard rules from CLAUDE.md, enforced mechanically rather than by review.
+  hard-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check simulation purity
+        working-directory: arep_implementation
+        run: python scripts/check_hard_rules.py
