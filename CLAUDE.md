@@ -538,3 +538,52 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 - **Sensor simulation** — no LiDAR, camera, GPS/IMU today; observation = ground-truth state. Scheduled as **Phase 6** (`docs/ROADMAP.md`), which starts only after Phase 5 exits — structured sensor output (object lists, ranges), never rendered pixels. Until it ships, ORION = planning/control eval: don't promise perception testing anywhere, and don't build sensor code early.
 - **Standards alignment (Phase 4.5)** — no ISO 26262/21448 story today; traceability matrix + ODD declarations planned, certification never claimed.
 - **3D visualization polish + frontend debt (Phase 5)** — GLTF assets, trajectory traces, progressive TypeScript migration, frontend tests (currently zero), `DashboardPage.jsx` decomposition.
+
+---
+
+## 14. Git Workflow & Branching
+
+GitHub Flow. `main` is the production branch and is **always deployable** — every commit on it
+should have a green CI run. All work happens on short-lived branches off `main`.
+
+### When to cut a branch
+
+Size a branch by **what gets reviewed and merged as one unit** — days of work, not weeks. A
+roadmap item bigger than that gets split into slices that each leave `main` working; if the
+feature isn't user-ready, land the slices behind a flag (as `billing_enabled` does) rather
+than letting a branch live for weeks and rot against `main`.
+
+| Stay on the current branch | Cut a new branch |
+| -------------------------- | ---------------- |
+| Fixing review comments      | Unrelated work (different defect, different roadmap item) |
+| Repairing tests you broke   | Anything that should merge independently of what's in flight |
+| Refactors the change needs  | A bug found in passing, unrelated to the current change |
+| Docs for that change        | The current branch is merged (never reuse a merged branch) |
+
+Deciding question: *if the branch I'm on were rejected, should this change die with it?*
+No → new branch.
+
+### Naming
+
+`<type>/<scope>-<what>`, type matching the Conventional Commit prefix:
+`fix/d03-cors-whitelist`, `feat/road-topology`, `chore/ci-postgres`, `docs/branching-convention`.
+
+For Phase 0 work, one branch per defect or per separable part of a sub-phase — e.g. 0.3 splits
+into `fix/d03-cors-and-ratelimit` and `fix/d07-route-auth`, each its own PR.
+
+### Rules
+
+- **Never commit directly to `main`.** Branch, PR, merge.
+- **Rebase onto `main` before opening the PR** — don't merge `main` into the branch. Keeps
+  history linear and the diff honest.
+- **Squash-merge** small branches (one commit per landed change, easy `git revert`). Keep a
+  real merge commit only when a branch's individual steps are worth preserving.
+- **Delete the branch after merge**, local and remote.
+- CI (`.github/workflows/`) must be green before merge. Lint baseline is dirty (see Section 12
+  notes) — don't reformat untouched files inside a feature commit to make it pass.
+
+### Not used
+
+No Git Flow (`develop` / `release/*` / `hotfix/*`). It exists for versioned releases shipped by
+multiple teams; for this repo it is four branches of ceremony for a problem we don't have.
+Revisit only if a staging environment starts lagging production.
