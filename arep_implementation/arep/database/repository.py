@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from arep.database.models import (
     ScenarioRecord, RunRecord, BatchJobRecord,
     OrganisationRecord, ApiKeyRecord, UserRecord, ModelRecord,
-    PasswordResetRecord, WebhookEventRecord,
+    PasswordResetRecord, WebhookEventRecord, RunFailureRecord,
 )
 from arep.evaluation.composite import EvaluationResult
 from arep.statistics.aggregator import AggregatedMetrics
@@ -83,6 +83,34 @@ class RunRepository:
     def __init__(self, session: Session):
         self.session = session
 
+    def claim_failure(
+        self, batch_job_id: int, master_seed: int, error: str = "",
+    ) -> bool:
+        """Record a terminal failure once. False if it was already recorded.
+
+        The caller must skip both the runs_failed increment and the credit
+        refund when this returns False — a Celery redelivery of a failing task
+        would otherwise refund a second credit for one run.
+
+        Relies on the composite primary key rather than a read-then-write:
+        two workers can reach this at the same moment for the same redelivered
+        message, and only the database can arbitrate that.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        savepoint = self.session.begin_nested()
+        try:
+            self.session.add(RunFailureRecord(
+                batch_id=batch_job_id,
+                master_seed=master_seed,
+                error=(error or "")[:2000],
+            ))
+            savepoint.commit()
+            return True
+        except IntegrityError:
+            savepoint.rollback()
+            return False
+
     def get_by_batch_and_seed(
         self, batch_job_id: int, master_seed: int,
     ) -> Optional[RunRecord]:
@@ -132,6 +160,10 @@ class RunRepository:
                 if result.reactivity.brake_response_time != float("inf")
                 else None
             ),
+            # Determinism digest: lets a customer re-run and compare rather
+            # than take the reproducibility claim on trust. None for records
+            # produced without frame emission.
+            frame_hash=result.frame_hash or None,
         )
         self.session.add(record)
         self.session.flush()

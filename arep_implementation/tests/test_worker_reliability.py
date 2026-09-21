@@ -53,9 +53,10 @@ def spy(monkeypatch):
 
     monkeypatch.setattr(tasks, "_refund_credit",
                         lambda org_id: calls["refunds"].append(org_id))
+    # Signature carries the seed since the failure ledger keys on (batch, seed).
     monkeypatch.setattr(tasks, "_fail_run",
-                        lambda batch_id, org_id, exc: calls["failures"].append(
-                            (batch_id, org_id, str(exc))))
+                        lambda batch_id, seed, org_id, exc: calls["failures"].append(
+                            (batch_id, seed, org_id, str(exc))))
     return calls
 
 
@@ -250,6 +251,113 @@ def test_repository_lookup_distinguishes_seeds(tmp_path):
             assert repo.get_by_batch_and_seed(7, 1) is not None
             assert repo.get_by_batch_and_seed(7, 2) is None      # other seed
             assert repo.get_by_batch_and_seed(8, 1) is None      # other batch
+    finally:
+        conn_mod._engine = None
+        conn_mod._SessionFactory = None
+
+
+# -- Failure idempotency (closing the D-08 residual) ----------------------
+
+def test_a_failure_is_counted_and_refunded_only_once(tmp_path):
+    """A redelivered failing task used to refund a second credit.
+
+    The success path was guarded by the RunRecord row; the failure path wrote
+    nothing, so there was nothing to check. acks_late makes redelivery routine
+    whenever a worker dies mid-task, so this was a real wrong charge — in the
+    customer's favour, but wrong.
+    """
+    from arep.database import connection as conn_mod
+    from arep.database.models import BatchJobRecord, OrganisationRecord
+
+    db_path = tmp_path / "failures.db"
+    conn_mod._engine = None
+    conn_mod._SessionFactory = None
+    conn_mod.init_database(url=f"sqlite:///{db_path}")
+
+    try:
+        with conn_mod.session_scope() as db:
+            db.add(OrganisationRecord(
+                id="org-fail", name="Fail Org", slug="fail-org", run_credits=10,
+            ))
+            db.add(BatchJobRecord(
+                id=1, org_id="org-fail", scenario_name="s", model_name="m",
+                num_runs=3, master_seed=1, status="queued",
+            ))
+
+        def credits() -> int:
+            with conn_mod.session_scope() as db:
+                return db.query(OrganisationRecord).filter_by(
+                    id="org-fail").first().run_credits
+
+        def failed_count() -> int:
+            with conn_mod.session_scope() as db:
+                return db.query(BatchJobRecord).filter_by(id=1).first().runs_failed
+
+        before = credits()
+        tasks._fail_run(1, 42, "org-fail", ValueError("boom"))
+        after_first = credits()
+
+        assert after_first == before + 1, "the failed run should refund one credit"
+        assert failed_count() == 1
+
+        # The redelivery.
+        tasks._fail_run(1, 42, "org-fail", ValueError("boom"))
+
+        assert credits() == after_first, "a redelivery must not refund again"
+        assert failed_count() == 1, "a redelivery must not count again"
+    finally:
+        conn_mod._engine = None
+        conn_mod._SessionFactory = None
+
+
+def test_distinct_seeds_each_count_their_own_failure(tmp_path):
+    """The guard is per run, not per batch — three failures are three refunds."""
+    from arep.database import connection as conn_mod
+    from arep.database.models import BatchJobRecord, OrganisationRecord
+
+    db_path = tmp_path / "failures2.db"
+    conn_mod._engine = None
+    conn_mod._SessionFactory = None
+    conn_mod.init_database(url=f"sqlite:///{db_path}")
+
+    try:
+        with conn_mod.session_scope() as db:
+            db.add(OrganisationRecord(
+                id="org-multi", name="Multi", slug="multi-org", run_credits=0,
+            ))
+            db.add(BatchJobRecord(
+                id=2, org_id="org-multi", scenario_name="s", model_name="m",
+                num_runs=3, master_seed=1, status="queued",
+            ))
+
+        for seed in (10, 11, 12):
+            tasks._fail_run(2, seed, "org-multi", ValueError("boom"))
+
+        with conn_mod.session_scope() as db:
+            assert db.query(OrganisationRecord).filter_by(
+                id="org-multi").first().run_credits == 3
+            assert db.query(BatchJobRecord).filter_by(id=2).first().runs_failed == 3
+    finally:
+        conn_mod._engine = None
+        conn_mod._SessionFactory = None
+
+
+def test_claim_failure_reports_whether_it_was_the_first(tmp_path):
+    from arep.database import connection as conn_mod
+    from arep.database.repository import RunRepository
+
+    db_path = tmp_path / "claims.db"
+    conn_mod._engine = None
+    conn_mod._SessionFactory = None
+    conn_mod.init_database(url=f"sqlite:///{db_path}")
+
+    try:
+        with conn_mod.session_scope() as db:
+            repo = RunRepository(db)
+            assert repo.claim_failure(7, 1, "first") is True
+            assert repo.claim_failure(7, 1, "again") is False
+            assert repo.claim_failure(7, 2, "other seed") is True
+            assert repo.claim_failure(8, 1, "other batch") is True
     finally:
         conn_mod._engine = None
         conn_mod._SessionFactory = None

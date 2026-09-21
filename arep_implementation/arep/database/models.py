@@ -341,6 +341,28 @@ class PasswordResetRecord(Base):
         return f"<PasswordReset user={self.user_id} expires={self.expires_at}>"
 
 
+class RunFailureRecord(Base):
+    """One terminal failure of one run, keyed by (batch, seed).
+
+    Exists so a redelivered task cannot be counted twice. A successful run is
+    guarded by its RunRecord; a failed one wrote nothing, so a redelivery
+    bumped runs_failed again *and refunded a second credit*. The composite
+    primary key makes the database enforce "once" rather than an application
+    check that races with itself across workers.
+    """
+    __tablename__ = "run_failures"
+
+    batch_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    master_seed: Mapped[int] = mapped_column(Integer, primary_key=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recorded_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+
+    def __repr__(self) -> str:
+        return f"<RunFailure batch={self.batch_id} seed={self.master_seed}>"
+
+
 class WebhookEventRecord(Base):
     """
     A webhook delivery we have seen, keyed by the provider's own event id.

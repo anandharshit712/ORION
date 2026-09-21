@@ -55,25 +55,35 @@ _BUILTIN_MODELS = {
 }
 
 
-def _fail_run(batch_id: int, org_id: Optional[str], exc: BaseException) -> None:
-    """Record a run as failed and refund its credit. Terminal path only.
+def _fail_run(
+    batch_id: int, seed: int, org_id: Optional[str], exc: BaseException,
+) -> None:
+    """Record a run as failed and refund its credit. Terminal path only, once.
 
-    Called once, after retries are exhausted or for a failure that will never
+    Called after retries are exhausted or for a failure that will never
     succeed — never on an intermediate retry, or the customer would be refunded
     one credit per attempt for a single run.
 
-    ponytail: a Celery redelivery of a task that fails again can still
-    double-bump runs_failed. The success path is guarded by the RunRecord row;
-    failures write no row, so there is nothing to check against. Closing it
-    properly means a per-(batch, seed) ledger like webhook_events. Left open
-    because the visible consequence is a batch reporting more failures than it
-    ran, not a wrong score or a wrong charge.
+    Claims (batch_id, seed) in run_failures first. A successful run is guarded
+    by its RunRecord row; a failed one used to write nothing, so a Celery
+    redelivery — which acks_late makes routine whenever a worker dies mid-task —
+    bumped runs_failed a second time and refunded a second credit. The refund is
+    the part that mattered: a wrong charge, in the customer's favour, on every
+    redelivered failure.
     """
     with session_scope() as db:
+        if not RunRepository(db).claim_failure(batch_id, seed, str(exc)):
+            logger.info(
+                "failure already recorded for batch=%s seed=%s — not counting twice",
+                batch_id, seed,
+            )
+            return
+
         batch_repo = BatchJobRepository(db)
         batch_repo.increment_failed(batch_id)
         batch_repo.set_error(batch_id, str(exc))
         batch_repo.finalise_if_done(batch_id)
+
     _refund_credit(org_id)
 
 
@@ -165,13 +175,13 @@ def execute_single_run(
         logger.exception(
             "transient failure exhausted retries batch=%s seed=%d", batch_id, seed,
         )
-        _fail_run(batch_id, org_id, exc)
+        _fail_run(batch_id, seed, org_id, exc)
         raise
     except Exception as exc:
         # Deterministic failure — a bad model or scenario fails identically on
         # every attempt, so retrying only burns the customer's compute.
         logger.exception("run failed batch=%s seed=%d", batch_id, seed)
-        _fail_run(batch_id, org_id, exc)
+        _fail_run(batch_id, seed, org_id, exc)
         raise
 
     with session_scope() as db:
