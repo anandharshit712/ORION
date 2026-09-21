@@ -1,0 +1,93 @@
+scenario:
+  name: "MLT-003 Highway On-Ramp — Merge Into Moving Traffic"
+  version: "2.0"
+  description: >
+    Ego accelerates down an on-ramp and must merge into the nearside lane of a
+    highway carrying two vehicles. The gap it is offered is randomised: some
+    runs it is comfortable, some it requires either accelerating hard to take
+    the lead position or backing off to follow. The main carriageway holds
+    priority in the road graph; the ramp is marked "yield".
+
+    Known limitation: the engine has no goal condition, so a model that simply
+    stops on the ramp and never merges scores well on safety. This scenario
+    discriminates on whether a merge is attempted safely, not on whether one
+    is completed. Add a "reached main carriageway" termination condition when
+    the engine grows goals.
+  duration: 35.0
+
+ego:
+  initial:
+    x: 115.1
+    y: -36.1
+    heading: 0.2618    # 15 degrees, matching the ramp's angle onto the main road
+    velocity: 16.67    # 60 km/h, still building speed
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 3
+    lane_width: 3.75
+    speed_limit: 33.33
+    template: highway_onramp
+    template_params:
+      main_length: 400.0
+      ramp_length: 150.0
+      merge_point: 250.0
+
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  # The vehicle the ego has to merge ahead of or behind.
+  - id: main_lead
+    type: car
+    initial:
+      x: 20.0            # ~8 s from the merge at 29 m/s, as the ego is
+      y: 0.0
+      heading: 0.0
+      velocity: 29.17    # 105 km/h
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+  # A tailgater in the same lane, so simply slotting in behind the lead is not
+  # automatically safe either.
+  - id: main_follow
+    type: car
+    initial:
+      x: -25.0
+      y: 0.0
+      heading: 0.0
+      velocity: 30.56    # 110 km/h, closing on main_lead
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: adaptive_tailgate
+        target_ttc:
+          min: 0.8
+          max: 1.4
+
+events: []
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 35.0
+
+parameterization:
+  ego_velocity:
+    min: 13.89     # 50 km/h — a slow merge
+    max: 22.22     # 80 km/h — arriving fast
+  # No ego_x_jitter here. The ramp runs at 15 degrees, so shifting x without
+  # shifting y moves the ego off a lane only 3.75 m wide — the jitter put it in
+  # the verge before the run started, and every model failed identically.
+
+master_seed: 3103

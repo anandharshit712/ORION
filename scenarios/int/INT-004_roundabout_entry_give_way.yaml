@@ -1,0 +1,87 @@
+scenario:
+  name: "INT-004 Roundabout Entry — Give Way to Circulating Traffic"
+  version: "2.0"
+  description: >
+    Ego approaches a four-arm roundabout and must give way to a vehicle already
+    circulating before entering. The circulating vehicle's speed is randomised,
+    so the acceptable entry moment moves between runs and a model cannot pass
+    by timing alone. The road graph marks the circulating carriageway
+    "priority" and every arm "yield".
+  duration: 30.0
+
+ego:
+  initial:
+    x: -50.0
+    y: 0.0
+    heading: 0.0      # east, down the western arm toward the roundabout
+    velocity: 8.33    # 30 km/h on approach
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 2.5
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 1
+    lane_width: 4.0
+    speed_limit: 8.33
+    template: roundabout
+    template_params:
+      radius: 20.0
+      arm_count: 4
+      arm_length: 60.0
+
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  # Already on the roundabout, approaching the ego's entry point. It has
+  # priority and behaves accordingly: it does not slow for the ego.
+  - id: circulating
+    type: car
+    initial:
+      x: 0.0
+      y: -20.0
+      heading: 0.0      # travelling round toward the ego's arm
+      velocity: 7.5
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+  # Waiting on the southern arm. It must give way as well, so a model that
+  # simply follows the vehicle in front through the give-way line fails.
+  - id: south_arm_waiter
+    type: car
+    initial:
+      x: 0.0
+      y: -45.0
+      heading: 1.5708
+      velocity: 5.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: junction_yield
+        stop_distance: 22.0     # just outside the circle
+        conflict_radius: 26.0
+
+events: []
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+parameterization:
+  ego_velocity:
+    min: 5.56      # 20 km/h
+    max: 11.11     # 40 km/h
+  ego_x_jitter:
+    min: -6.0
+    max: 6.0
+
+master_seed: 3004

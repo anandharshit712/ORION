@@ -1,0 +1,85 @@
+scenario:
+  name: "INT-003 T-Junction — Yield to Through Traffic Before Joining"
+  version: "2.0"
+  description: >
+    Ego approaches a T-junction on the minor (south) arm and must give way to
+    traffic on the priority through road before joining. Two through vehicles
+    pass with a randomised gap between them; the gap is sometimes acceptable to
+    join and sometimes not, so a model cannot pass by always waiting or always
+    going. Right of way comes from the road graph — the south arm is marked
+    "yield", the east and west arms "priority".
+  duration: 30.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -55.0
+    heading: 1.5708    # north, up the minor arm toward the junction
+    velocity: 8.33     # 30 km/h on approach
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 2.5
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+    template: t_junction
+    template_params:
+      approach_length: 80.0
+      cross_length: 120.0
+      has_traffic_light: false    # give-way markings, not signals
+
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  # Through traffic on the priority road. It does not yield, because it does
+  # not have to — the whole point of the scenario is that the ego must.
+  - id: through_lead
+    type: car
+    initial:
+      x: -70.0
+      y: -1.75
+      heading: 0.0      # east along the through road
+      velocity: 12.5
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+  - id: through_follow
+    type: car
+    initial:
+      x: -110.0
+      y: -1.75
+      heading: 0.0
+      velocity: 12.5
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+events: []
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+parameterization:
+  # The gap between the two through vehicles is what makes this a decision
+  # rather than a fixed sequence.
+  ego_velocity:
+    min: 6.94      # 25 km/h
+    max: 9.72      # 35 km/h
+  ego_x_jitter:
+    min: -4.0
+    max: 4.0
+
+master_seed: 3003
