@@ -28,6 +28,7 @@ from arep.scenario.executor import ScenarioExecutor
 from arep.scenario.parser import ScenarioParser
 from arep.simulation.engine import SimulationEngine
 from arep.statistics.aggregator import StatisticalAggregator, AggregatedMetrics
+from arep.utils.hashing import FrameHasher
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("execution.runner")
@@ -105,6 +106,14 @@ class EvaluationRunner:
         world = initial_world.copy()
         previous_world = None
 
+        # Determinism digest (Phase 2, closing the 0.5 gap). Live runs hashed
+        # their frames from the start; batch runs — the ones whose numbers get
+        # published — did not, because they never emitted frames. The frame is
+        # built here purely to hash it, which is the same canonical frame the
+        # WebSocket path uses, so a batch digest and a live digest of the same
+        # (model, scenario, seed) are directly comparable.
+        frame_hasher = FrameHasher()
+
         max_steps = int(scenario.duration / self.sim_config.timestep)
 
         try:
@@ -129,6 +138,11 @@ class EvaluationRunner:
                     break
 
                 collector.record_step(world, action, previous_world)
+                frame_hasher.update(self.engine.get_tick_frame(
+                    world, action=action,
+                    scenario_name=scenario.name,
+                    speed_limit=world.get_speed_limit(),
+                ))
 
                 previous_world = world
                 world = self.engine.step(world, action, rng)
@@ -140,6 +154,7 @@ class EvaluationRunner:
 
         record = collector.finalize(world)
         record.master_seed = master_seed
+        record.frame_hash = frame_hasher.hexdigest()
 
         return self.evaluator.evaluate(record)
 

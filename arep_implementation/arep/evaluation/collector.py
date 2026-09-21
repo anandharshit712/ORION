@@ -63,6 +63,9 @@ class SimulationRecord:
     collision_object_id: Optional[str] = None
     min_ttc_overall: float = 30.0
     speed_limit: float = 0.0
+    # Rolling SHA256 over this run's canonical tick frames (Phase 2). Set by
+    # EvaluationRunner; empty for records built without frame emission.
+    frame_hash: str = ""
 
     # Metadata
     scenario_name: str = ""

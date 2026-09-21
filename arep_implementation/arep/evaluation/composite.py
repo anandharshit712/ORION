@@ -29,6 +29,10 @@ class EvaluationResult:
     stability: StabilityResult
     reactivity: ReactivityResult
     composite_score: float            # Weighted average [0, 1]
+    # Determinism digest for this run (Phase 2). Two runs of the same
+    # (model, scenario, seed) must agree; stored on RunRecord.frame_hash so a
+    # customer can re-run and compare rather than take the claim on trust.
+    frame_hash: str = ""
 
     # Metadata
     scenario_name: str = ""
@@ -108,4 +112,5 @@ class CompositeEvaluator:
             duration=record.duration,
             termination_reason=record.termination_reason or "",
             master_seed=record.master_seed,
+            frame_hash=record.frame_hash,
         )
