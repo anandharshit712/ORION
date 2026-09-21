@@ -69,6 +69,7 @@ def resolve_model(
         if record is None:
             raise KeyError(f"Model not found: {name_or_id}")
         artefact_uri = record.artefact_uri
+        content_hash = record.content_hash
         submission_type = record.submission_type
         status = record.status
         # Gate on the ORG THAT OWNS THE ARTEFACT, not on the caller's org_id:
@@ -90,7 +91,9 @@ def resolve_model(
                 f"disabled for its organisation. Use the Docker submission "
                 f"path, or ask an administrator to enable it."
             )
-        pickle_bytes = store.fetch_python_sdk(artefact_uri)
+        # Verified against the hash recorded at upload: these bytes are
+        # about to be unpickled, and unpickling is code execution.
+        pickle_bytes = store.fetch_python_sdk(artefact_uri, content_hash)
         return SubprocessModelRunner(pickle_bytes=pickle_bytes)
 
     if submission_type == SubmissionType.DOCKER.value:

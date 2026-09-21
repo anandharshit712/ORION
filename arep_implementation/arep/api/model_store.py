@@ -14,6 +14,7 @@ In development, the local filesystem is used as a fallback store.
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 from dataclasses import dataclass
 from enum import Enum
@@ -23,6 +24,10 @@ from typing import Optional
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.model_store")
+
+
+class ModelArtefactError(RuntimeError):
+    """An artefact could not be fetched, or is not the one that was uploaded."""
 
 
 class SubmissionType(str, Enum):
@@ -108,17 +113,78 @@ class ModelStore:
         logger.info(f"Registered Docker model artefact: {uri}")
         return uri
 
-    def fetch_python_sdk(self, artefact_uri: str) -> bytes:
+    def fetch_python_sdk(
+        self, artefact_uri: str, expected_hash: Optional[str] = None,
+    ) -> bytes:
         """
         Fetch the cloudpickle blob for a python_sdk model.
 
-        TODO [P1]: Add S3 download path.
-        TODO [P1]: Verify hash against DB record before returning.
+        These bytes get unpickled, and unpickling is code execution. The
+        sandbox contains what the code can do once running; the hash check is
+        what notices that the bytes are not the ones the customer uploaded.
+        Storage is not a trust boundary: an artefact on a shared volume or in a
+        bucket can be replaced without touching the API.
+
+        Args:
+            artefact_uri: file:// or s3:// reference from the model record.
+            expected_hash: the SHA-256 recorded at upload. Strongly
+                recommended — callers that omit it get the old behaviour, and
+                a warning, because a silent unverified read is the thing this
+                argument exists to prevent.
+
+        Raises:
+            ModelArtefactError: the bytes do not match the recorded hash.
         """
         if artefact_uri.startswith("file://"):
-            path = Path(artefact_uri[7:])
-            return path.read_bytes()
-        raise ValueError(f"Unsupported artefact URI scheme: {artefact_uri}")
+            data = Path(artefact_uri[7:]).read_bytes()
+        elif artefact_uri.startswith("s3://"):
+            data = self._fetch_s3(artefact_uri)
+        else:
+            raise ValueError(f"Unsupported artefact URI scheme: {artefact_uri}")
+
+        if expected_hash:
+            actual = self.compute_hash(data)
+            if actual != expected_hash:
+                # Refuse rather than warn. A mismatch means either corruption
+                # or substitution, and there is no version of "run it anyway"
+                # that is safe when the payload is executable.
+                raise ModelArtefactError(
+                    f"Artefact hash mismatch for {artefact_uri}: recorded "
+                    f"{expected_hash[:16]}..., found {actual[:16]}.... "
+                    f"Refusing to load it."
+                )
+        else:
+            logger.warning(
+                "Loading %s without a hash check — the caller passed no "
+                "expected_hash", artefact_uri,
+            )
+
+        return data
+
+    @staticmethod
+    def _fetch_s3(artefact_uri: str) -> bytes:
+        """Download an artefact from S3.
+
+        boto3 is imported here rather than at module scope: object storage is
+        a deployment choice, and a local install should not need the AWS SDK
+        to run a simulation.
+        """
+        try:
+            import boto3
+        except ImportError as exc:
+            raise ModelArtefactError(
+                "This artefact is in S3 but boto3 is not installed. "
+                "Install it, or store artefacts on a local volume."
+            ) from exc
+
+        without_scheme = artefact_uri[5:]
+        bucket, _, key = without_scheme.partition("/")
+        if not bucket or not key:
+            raise ValueError(f"Malformed S3 URI: {artefact_uri}")
+
+        buffer = io.BytesIO()
+        boto3.client("s3").download_fileobj(bucket, key, buffer)
+        return buffer.getvalue()
 
     def get_docker_image(self, artefact_uri: str) -> tuple[str, int]:
         """

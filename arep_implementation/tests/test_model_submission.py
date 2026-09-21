@@ -382,3 +382,62 @@ def test_resolver_refuses_pickle_model_after_the_gate_is_revoked(env):
     # ...and an unscoped caller cannot slip past it either
     with pytest.raises(PermissionError):
         resolve_model(model_id, AVAILABLE_MODELS, org_id=None)
+
+
+# -- Artefact integrity (Phase 2, closing the model_store TODO) ----------
+
+def test_a_tampered_artefact_is_refused(tmp_path):
+    """These bytes get unpickled, and unpickling is code execution. The
+    sandbox contains what the code does once running; the hash check is what
+    notices the bytes are not the ones the customer uploaded."""
+    from arep.api.model_store import ModelArtefactError, ModelStore
+
+    store = ModelStore()
+    blob = b"the original artefact"
+    path = tmp_path / "model.pkl"
+    path.write_bytes(blob)
+    uri = f"file://{path}"
+    recorded = store.compute_hash(blob)
+
+    # Unchanged: loads fine.
+    assert store.fetch_python_sdk(uri, recorded) == blob
+
+    # Replaced on disk without touching the API — storage is not a trust
+    # boundary, and a shared volume or bucket can be written by other things.
+    path.write_bytes(b"something else entirely")
+    with pytest.raises(ModelArtefactError, match="hash mismatch"):
+        store.fetch_python_sdk(uri, recorded)
+
+
+def test_fetching_without_a_hash_still_works_but_warns(tmp_path, caplog):
+    """Callers that predate the check keep working; the warning is what makes
+    the gap visible rather than silent."""
+    import logging
+
+    from arep.api.model_store import ModelStore
+
+    store = ModelStore()
+    path = tmp_path / "model.pkl"
+    path.write_bytes(b"unverified")
+
+    with caplog.at_level(logging.WARNING):
+        assert store.fetch_python_sdk(f"file://{path}") == b"unverified"
+
+    assert any("without a hash check" in record.message for record in caplog.records)
+
+
+def test_the_resolver_passes_the_recorded_hash():
+    """The resolver holds the record, so it has no excuse not to verify."""
+    import inspect
+
+    from arep.models import resolver
+
+    source = inspect.getsource(resolver.resolve_model)
+    assert "fetch_python_sdk(artefact_uri, content_hash)" in source
+
+
+def test_a_malformed_s3_uri_is_rejected():
+    from arep.api.model_store import ModelStore
+
+    with pytest.raises(ValueError, match="Unsupported artefact URI scheme"):
+        ModelStore().fetch_python_sdk("ftp://somewhere/model.pkl")

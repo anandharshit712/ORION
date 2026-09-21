@@ -605,6 +605,9 @@ PYTHONPATH=. python scripts/ws_smoke.py
 # Coverage with the CI gate
 pytest --cov=arep --cov-report=term-missing --cov-fail-under=70
 
+# CI suite runner (exit 0 pass / 1 model failed / 2 harness could not answer)
+PYTHONPATH=. python -m arep.cli.run_suite --scenarios all --model emergency_brake     --runs-per-scenario 10 --output-dir ./results --format json
+
 # Start everything (from project root)
 ./start.sh        # Linux/Mac (bash)
 start.bat         # Windows (cmd.exe)
@@ -698,6 +701,28 @@ webhook base) and 1.5 (road topology, which unblocks ~35% of the scenario librar
 - **Multi-tenancy (P1.1)** — `organisations`, `api_keys` tables. JWT carries `org_id`+`role`. `OrgAuthMiddleware` resolves both JWT and API keys. `/api/orgs/me`, `/api/orgs/invite`, `/api/keys/` CRUD. All eval/batch/jobs/results/live-run routes scoped by `org_id`.
 - **Model submission (P1.2)** — `models` table + `ModelRepository`. `/api/models/upload` (multipart cloudpickle), `/api/models/register` (Docker), `/api/models/`, `/api/models/{id}` GET/DELETE. `models/resolver.py` dispatches built-in name → instance, UUID → `SubprocessModelRunner` or `HttpModelAdapter`. Org isolation enforced. **Cloudpickle path is gated per-org** — `organisations.allow_pickle_models` defaults FALSE; upload returns 403 and `resolve_model()` raises `PermissionError` until a superadmin enables it. `orion-sdk/` package: `OrionClient`, `upload_model()`, `orion` CLI (`models`, `runs`, `keys` commands).
 - **Async batch queue (P1.3)** — Celery + Redis. `arep/worker/celery_app.py` + `arep/worker/tasks.py` (`run_single_simulation`, `run_batch_simulations`). `POST /api/runs/batch` atomically deducts `num_runs` credits via `OrganisationRepository.deduct_credits()` (FOR UPDATE row lock), creates a `BatchJobRecord` (`status=queued`), fans out N tasks on the `simulation` queue, and returns 202 in <300 ms. Workers write `RunRecord` rows + bump `runs_completed`/`runs_failed`; the last task to finish triggers `BatchJobRepository.finalise_if_done()` which aggregates from per-run rows and flips status to `completed`. Failed tasks refund 1 credit via `OrganisationRepository.add_credits()`. `GET /api/runs/batch/{id}/status` exposes live progress. Tests run Celery in `task_always_eager` mode (no broker required) — see `tests/test_batch_queue.py`. Worker container + Flower UI defined in `infrastructure/docker-compose.yml` (`worker`, `flower` services). Broker URL via `ORION_REDIS_URL` env var (default `redis://localhost:6379/0`).
+
+### Phase 2–4 analysis, reporting and interop (implemented 2026-09-21)
+
+Modules that were `NotImplementedError` stubs and now work. All carry a stated subset — read
+the module docstring before assuming coverage.
+
+| Module | What it does | Stated limit |
+| --- | --- | --- |
+| `analysis/failure_clustering.py` | DBSCAN over the parameters behind failed runs | Parameters are *reconstructed* from each seed; needs a scenario with a `parameterization` block |
+| `analysis/regression_detector.py` | Model A/B, same seeds, strict thresholds | A regression outranks the win count — a candidate better on four scenarios and dangerous on the fifth does not ship |
+| `search/space.py`, `search/objective.py`, `search/optimizer.py` | CMA-ES + random-baseline adversarial search | Stops at the first collision; needs `arep[search]` |
+| `reporting/pdf_generator.py` | Jinja2 → HTML → PDF | `render_html()` works anywhere; PDF needs WeasyPrint's GTK libraries, absent on Windows |
+| `cli/run_suite.py` | CI entrypoint | Exit **0** pass / **1** model failed / **2** ORION could not answer — keep 1 and 2 distinct |
+| `maps/xodr_parser.py` | OpenDRIVE → `RoadGraph` | Line and arc geometry only; spirals and poly3 are skipped **and logged** |
+| `scenario/osc_importer.py`, `osc_exporter.py` | OpenSCENARIO 2.0 ↔ `ScenarioDefinition` | A line reader for the modelled subset, not a conforming parser. The round trip loses the parameterisation block |
+
+**The rule these share**: unsupported input is skipped *and reported*, never silently dropped.
+A scenario missing its hazard still runs and still produces a score, which is the dangerous
+failure — worse than refusing the file.
+
+Artefact fetching verifies the recorded SHA-256 before returning bytes that get unpickled
+(`api/model_store.py`). Storage is not a trust boundary.
 
 ### Deferred (Phase 2+, see `docs/ROADMAP.md`)
 
