@@ -73,28 +73,36 @@ safety = 0.50 · collision_penalty
 | `min_ttc_score` | `min(1.0, min_ttc / 10.0)` — TTC at or above 10 s scores 1.0 |
 | `critical_ttc_fraction` | fraction of timesteps with TTC ≤ 2.0 s |
 
-### Known approximation: TTC is optimistic under braking
+### How TTC is computed, and what it still approximates
 
-Time-to-collision (`arep/core/ttc.py`) is a **constant-velocity projection**. Both
-vehicles are extrapolated forward at their current speed, ignoring acceleration.
+Time-to-collision (`arep/core/ttc.py`) projects both vehicles forward using their
+current velocity **and** their current acceleration, solving
 
-This matters because braking is exactly when TTC is consulted. A decelerating ego is
-credited with closing speed it will not actually carry, so the reported TTC is an
-upper bound and `min_ttc` is **biased high** during any braking manoeuvre. Two
-consequences worth stating to a reviewer:
+```
+0.5 · a · t²  +  v · t  −  d  =  0
+```
 
-- A model that brakes early and one that brakes late look more similar than they
-  are, until the late one actually collides — at which point the collision term
-  dominates anyway.
-- TTC figures are comparable between models on the same scenario. They are not
-  calibrated times to impact and must not be quoted as absolute safety margins.
+along the line between them, where `v` is the closing speed and `a` the closing
+acceleration. Where the closing rate eases off enough that relative motion reverses
+before the gap is covered, the result is "no collision on this trajectory" rather
+than a number.
 
-The constant-acceleration upgrade is scheduled for Phase 2.1. The bias is toward
-*flattering* a model, never toward failing a safe one.
+Until Phase 2.1 this was a constant-velocity projection, `d / v`, which credited a
+braking ego with closing speed it was never going to carry. A 20 m/s approach to an
+obstacle 50 m away reported 2.5 s whether the ego was braking at 8 m/s² or not
+accelerating at all. Scores produced before that change are not comparable with
+scores after it.
 
-TTC also assumes straight-line motion and treats vehicles as points; physical
-overlap is handled separately by the collision detector, which does use vehicle
-dimensions.
+Two approximations remain, and a reviewer should know both:
+
+- **Acceleration is held constant over the projection.** A vehicle that brakes
+  harder a moment later closes sooner than predicted, so TTC still leans optimistic
+  during a developing manoeuvre — much less than before, but not zero.
+- **Steering is not projected.** A vehicle turning into or out of the path is
+  mispredicted; TTC is a straight-line measure.
+
+Vehicles are treated as points here. Physical overlap is the collision detector's
+job, and that one does use vehicle dimensions.
 
 ---
 
@@ -251,3 +259,4 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Lane 0 centred on the travel line | Previously every vehicle straddled a lane boundary |
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
+| 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |

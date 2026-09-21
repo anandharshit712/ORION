@@ -9,13 +9,13 @@ Computes safety scores from simulation records:
 
 Scoring: 1.0 = perfectly safe, 0.0 = worst possible.
 
-Known approximation (Phase 0.5, D-11): 50% of this score comes from TTC, and
-TTC is a constant-velocity projection, so it is optimistic under braking — it
-credits a decelerating ego with closing speed it will not carry. min_ttc is
-therefore biased high in exactly the manoeuvres the score exists to judge.
-The numbers rank models against each other on the same scenario; they are not
-calibrated times to impact. See arep/core/ttc.py and docs/METHODOLOGY.md.
-The constant-acceleration upgrade is Phase 2.1.
+TTC now projects under constant acceleration (Phase 2.1, closing D-11), so a
+braking ego is no longer credited with closing speed it will not carry. The
+residual approximation is smaller but real: acceleration is held constant over
+the projection, so a vehicle that brakes harder a moment later closes sooner
+than predicted, and steering is not projected at all. The numbers rank models
+against each other on the same scenario; they are still not calibrated times
+to impact. See arep/core/ttc.py and docs/METHODOLOGY.md.
 """
 
 from __future__ import annotations

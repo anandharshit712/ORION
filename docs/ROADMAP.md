@@ -137,7 +137,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-08 | ~~Celery `max_retries=0` — a transient failure kills the run and the customer eats it~~ | HIGH | 0.6 — **done** |
 | D-09 | ~~No coverage gate in CI; WS layer, admin routes, billing routes, partial-batch-refund untested~~ | HIGH | 0.6 — **done** (71.3%, gate at 70) |
 | D-10 | ~~Frontend: no error boundaries, no 404, `OrgProvider` written but never mounted, stub pages in sidebar~~ | MED | 0.6 — **done** |
-| D-11 | TTC constant-velocity approximation — **documented** in `docs/METHODOLOGY.md`, `core/ttc.py` and `evaluation/safety.py`; Pacejka coefficients flagged uncalibrated. Constant-acceleration fix still 2.1 | MED | 0.5 documented |
+| D-11 | ~~TTC constant-velocity approximation~~ — **closed 2026-09-21**: now a constant-acceleration projection (`core/ttc.py`). Pacejka coefficients remain flagged uncalibrated. | MED | 2.1 — **done** |
 | D-12 | ~~Weight transfer uses previous-step acceleration~~ | LOW | 0.5 — **done** |
 | D-13 | ~~SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev~~ | MED | 0.6 — **done** (CI job on Postgres + Alembic round trip) |
 
@@ -545,7 +545,7 @@ documented and reproducible.
 | D-08 | `max_retries=0`, no idempotency | 3 retries with backoff, refund once, idempotent on (batch, seed) |
 | D-09 | No coverage gate, six suites missing | 70% gate (at 71.3%), 430 tests |
 | D-10 | Dead OrgContext, nav to empty pages | Deleted, unready sections marked and disabled |
-| D-11 | TTC approximation undocumented | Documented at every surface; fix scheduled 2.1 |
+| D-11 | TTC approximation undocumented | Documented in 0.5; constant-acceleration fix landed in 2.1 |
 | D-12 | Load transfer used the previous step | Uses the current step |
 | D-13 | CI on SQLite only | Postgres job with Alembic round trip |
 

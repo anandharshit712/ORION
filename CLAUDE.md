@@ -324,10 +324,11 @@ within a scoring version.
   lane is tautological. Lane 0 is now centred on y=0 to match what scenarios mean by y=0.
 - ~~D-12 weight transfer off-by-one~~ — **closed.** Uses the current step's commanded
   acceleration; the achieved-value residual is documented in `docs/METHODOLOGY.md`.
-- **D-11 TTC constant-velocity** — documented, not fixed (that is Phase 2.1). It is
-  optimistic under braking, so `min_ttc` is biased high in exactly the manoeuvres the safety
-  score judges. Never quote TTC as an absolute safety margin. Stated in `core/ttc.py`,
-  `evaluation/safety.py` and the methodology doc.
+- ~~D-11 TTC constant-velocity~~ — **closed (Phase 2.1).** `core/ttc.py` solves
+  `0.5·a·t² + v·t − d = 0` along the closing line, so braking is accounted for and a hard
+  enough stop reports no collision rather than a number. Two approximations remain and are
+  documented: acceleration is held constant over the projection, and steering is not projected
+  at all. TTC still ranks models on a scenario; it is not a calibrated time to impact.
 - **Pacejka coefficients are uncalibrated** — plausible defaults, not fitted to a measured
   tire. Don't publish absolute handling claims from them, and don't tune them to make a
   scenario pass.
