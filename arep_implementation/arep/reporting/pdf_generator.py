@@ -31,18 +31,36 @@ class PDFGenerator:
     Requires: weasyprint, jinja2
     """
 
-    def __init__(self):
-        self._check_dependencies()
+    def __init__(self, require_pdf: bool = True):
+        """
+        Args:
+            require_pdf: check the PDF toolchain up front. Pass False to render
+                HTML on a machine without WeasyPrint's native GTK libraries —
+                the content is identical, and that is what the tests assert.
+        """
+        self._check_dependencies(require_pdf=require_pdf)
 
     @staticmethod
-    def _check_dependencies() -> None:
-        try:
-            import weasyprint  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "weasyprint is not installed. "
-                "Install with: pip install arep[reporting]"
-            )
+    def _check_dependencies(require_pdf: bool = True) -> None:
+        if require_pdf:
+            try:
+                import weasyprint  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "weasyprint is not installed. "
+                    "Install with: pip install arep[reporting]"
+                )
+            except OSError as exc:
+                # Installed, but its GTK/Pango libraries are missing — the
+                # usual state on Windows. Say which of the two it is, because
+                # "pip install" does not fix the second one.
+                raise ImportError(
+                    f"weasyprint is installed but cannot load its native "
+                    f"libraries ({exc}). On Windows install the GTK3 runtime; "
+                    f"on Debian/Ubuntu install libpango-1.0-0 and "
+                    f"libpangoft2-1.0-0. HTML rendering works without them: "
+                    f"PDFGenerator(require_pdf=False).render_html(...)"
+                ) from exc
         try:
             import jinja2  # noqa: F401
         except ImportError:
@@ -67,13 +85,12 @@ class PDFGenerator:
         Returns:
             PDF file contents as bytes.
 
-        TODO [P2]: Load batch_report.html template with Jinja2.
-        TODO [P2]: Render template with batch_data.
-        TODO [P2]: Convert rendered HTML to PDF with weasyprint.HTML(string=html).write_pdf().
-        TODO [P2]: Optionally write to output_path.
-        TODO [P2]: Return PDF bytes.
+        This is the artefact a customer forwards to their safety reviewer, so
+        it carries the caveats as well as the numbers — a report that lists
+        only strengths is marketing, and a reviewer who finds the omission
+        stops trusting the rest of it.
         """
-        raise NotImplementedError("PDFGenerator.render_batch_report not yet implemented [P2]")
+        return self._render("batch_report.html", {"batch": batch_data}, output_path)
 
     def render_comparison_report(
         self,
@@ -91,10 +108,56 @@ class PDFGenerator:
         Returns:
             PDF file contents as bytes.
 
-        TODO [P2]: Load comparison_report.html template with Jinja2.
-        TODO [P2]: Render and convert to PDF.
         """
-        raise NotImplementedError("PDFGenerator.render_comparison_report not yet implemented [P2]")
+        return self._render(
+            "comparison_report.html", {"comparison": comparison_data}, output_path,
+        )
+
+    # ── Internals ────────────────────────────────────────────────────
+
+    def render_html(self, template_name: str, context: dict) -> str:
+        """Render a report template to HTML.
+
+        Split from the PDF step on purpose. Every content bug lives here — a
+        missing figure, a mislabelled column, a caveat that did not make it
+        into the page — while the PDF step is one library call. Separating them
+        means the content is testable on any machine, including this one, where
+        WeasyPrint cannot load its GTK native libraries at all.
+        """
+        from jinja2 import (
+            Environment, FileSystemLoader, StrictUndefined, select_autoescape,
+        )
+
+        environment = Environment(
+            loader=FileSystemLoader(str(TEMPLATES_DIR)),
+            autoescape=select_autoescape(["html"]),
+            # StrictUndefined: a typo in a template key would otherwise render
+            # as a blank cell, and a safety report with a silently empty number
+            # is worse than one that fails to build.
+            undefined=StrictUndefined,
+        )
+        environment.globals["generated_at"] = _now_iso()
+        # base.html puts an organisation in the header. Defaulted rather than
+        # required, so a caller who omits it still gets a report; anything in
+        # the context wins.
+        environment.globals.setdefault("org_name", "ORION")
+
+        return environment.get_template(template_name).render(**context)
+
+    def _render(self, template_name: str, context: dict, output_path) -> bytes:
+        """Render a template to PDF bytes, optionally writing it out."""
+        import weasyprint
+
+        html = self.render_html(template_name, context)
+        pdf_bytes = weasyprint.HTML(string=html, base_url=str(TEMPLATES_DIR)).write_pdf()
+
+        if output_path is not None:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(pdf_bytes)
+            logger.info("Wrote report to %s (%d bytes)", path, len(pdf_bytes))
+
+        return pdf_bytes
 
     def _load_template(self, template_name: str) -> str:
         """Load and return a Jinja2 template string."""
@@ -102,3 +165,14 @@ class PDFGenerator:
         if not template_path.exists():
             raise FileNotFoundError(f"Report template not found: {template_path}")
         return template_path.read_text(encoding="utf-8")
+
+
+def _now_iso() -> str:
+    """Timestamp for the report footer.
+
+    Wall-clock is fine here and nowhere near the simulation: a report records
+    when it was produced, which is not part of any run.
+    """
+    import datetime
+
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
