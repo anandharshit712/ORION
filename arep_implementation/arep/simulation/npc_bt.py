@@ -522,6 +522,101 @@ class ErraticPedestrianBT(BaseBT):
         return _move_along_heading(obj, speed, dt)
 
 
+class JunctionYieldBT(BaseBT):
+    """
+    Approaches a junction and yields when the road graph says it must.
+
+    Until this existed, ``Junction.right_of_way`` was data nobody read: the
+    templates populated it, the graph exposed it, and every NPC drove through a
+    four-way stop at constant velocity. A scenario called "four way stop yield"
+    in which nothing yields is not testing what its name claims.
+
+    Behaviour:
+      - "priority" arm, or no junction ahead → carry on unchanged.
+      - "yield" or "controlled" arm → decelerate to a stop at the stop line,
+        hold while the ego is in or near the junction, then go.
+
+    Key parameters:
+      stop_distance   m    how far before the junction centre to stop (default 8)
+      decel           m/s² approach braking (default -3.0)
+      accel           m/s² pulling away after yielding (default 1.5)
+      conflict_radius m    how close the ego must be to count as conflicting
+    """
+
+    def tick(self, obj, behavior, world, rng, dt):
+        params = behavior["parameters"]
+        graph = getattr(world, "road_graph", None)
+        if graph is None:
+            # No topology: nothing to yield to. Scenarios on the flat road keep
+            # the behaviour they had.
+            return _const_vel(obj, dt)
+
+        stop_distance = float(params.get("stop_distance", 8.0))
+        decel = float(params.get("decel", -3.0))
+        accel = float(params.get("accel", 1.5))
+        conflict_radius = float(params.get("conflict_radius", 12.0))
+        cruise_speed = behavior.setdefault("_bt_data", {}).setdefault(
+            "cruise_speed", obj.velocity
+        )
+
+        junction = self._junction_ahead(obj, graph)
+        if junction is None:
+            return self._resume(obj, cruise_speed, accel, dt)
+
+        arm = self._arm_of(obj, graph)
+        priority = junction.right_of_way.get(arm, "yield") if arm else "yield"
+        if priority == "priority":
+            return _const_vel(obj, dt)
+
+        gap = obj.position.distance_to(junction.position) - stop_distance
+        ego_conflicting = (
+            world.ego_vehicle.position.distance_to(junction.position) <= conflict_radius
+        )
+
+        if gap <= 0.5 and ego_conflicting:
+            # At the line with the ego in the box: hold.
+            held = obj.copy()
+            held.velocity = 0.0
+            held.acceleration = 0.0
+            return held
+
+        if gap <= 0.5:
+            return self._resume(obj, cruise_speed, accel, dt)
+
+        # Brake so the stop lands on the line rather than wherever the fixed
+        # deceleration happens to run out: v² = 2·a·d.
+        needed = -(obj.velocity ** 2) / (2.0 * max(gap, 0.1))
+        return _apply_accel(obj, max(needed, decel), 0.0, cruise_speed, dt)
+
+    @staticmethod
+    def _junction_ahead(obj, graph, lookahead: float = 60.0):
+        """Nearest junction in front of the object, within lookahead metres."""
+        best, best_dist = None, lookahead
+        for junction in graph.junctions.values():
+            to_junction = junction.position - obj.position
+            distance = to_junction.norm()
+            if distance > best_dist or distance < 1e-6:
+                continue
+            # In front: positive projection onto the heading.
+            forward = (to_junction.x * math.cos(obj.heading)
+                       + to_junction.y * math.sin(obj.heading))
+            if forward <= 0:
+                continue
+            best, best_dist = junction, distance
+        return best
+
+    @staticmethod
+    def _arm_of(obj, graph):
+        segment = graph.get_ego_segment(obj.position)
+        return segment.segment_id if segment else None
+
+    @staticmethod
+    def _resume(obj, cruise_speed: float, accel: float, dt: float):
+        if obj.velocity >= cruise_speed - 1e-6:
+            return _const_vel(obj, dt)
+        return _apply_accel(obj, accel, 0.0, cruise_speed, dt)
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 _BT_REGISTRY: dict[str, BaseBT] = {
@@ -530,6 +625,7 @@ _BT_REGISTRY: dict[str, BaseBT] = {
     "adaptive_tailgate":    AdaptiveTailgateBT(),
     "cautious_pedestrian":  CautiousPedestrianBT(),
     "erratic_pedestrian":   ErraticPedestrianBT(),
+    "junction_yield":       JunctionYieldBT(),
 }
 
 

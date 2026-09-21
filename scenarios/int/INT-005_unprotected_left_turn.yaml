@@ -9,7 +9,7 @@ scenario:
 
 ego:
   initial:
-    x: 0.0
+    x: -50.0
     y: -1.75
     heading: 0.0
     velocity: 5.56    # 20 km/h, decelerating to turn
@@ -27,7 +27,7 @@ environment:
     speed_limit: 13.89
     template: four_way_intersection
     template_params:
-      arm_length: 100.0          # room to build up turn speed
+      arm_length: 140.0          # long enough to hold oncoming_v2 at x=120
       has_traffic_light: true
   weather:
     condition: clear

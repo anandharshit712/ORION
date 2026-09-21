@@ -9,7 +9,7 @@ scenario:
 
 ego:
   initial:
-    x: 0.0
+    x: -60.0
     y: -1.75
     heading: 0.0
     velocity: 8.33    # 30 km/h approaching the stop
@@ -38,8 +38,8 @@ traffic:
   - id: crossing_vehicle
     type: car
     initial:
-      x: 50.0    # at the intersection x-position
-      y: -20.0   # 20m south of the road
+      x: 0.0     # on the south arm, which meets the junction at the origin
+      y: -60.0   # timed to reach the junction as the ego does
       heading: 1.5708   # heading north (pi/2)
       velocity: 8.33    # 30 km/h
     behavior:

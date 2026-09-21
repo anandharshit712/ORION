@@ -324,3 +324,111 @@ def test_hesitation_probability_of_one_takes_the_hesitation_branch():
         states.add(behavior.get("_bt_state"))
 
     assert "hesitation" in states, f"never hesitated; saw {states}"
+
+
+# -- Junction yielding (Phase 2, closing the 1.5 gap) ---------------------
+
+def _junction_world(npc, ego_distance_from_junction=100.0):
+    """A four-way intersection with the ego some distance from the centre."""
+    from arep.core import road_templates
+
+    graph = road_templates.four_way_intersection()
+    ego = _vehicle(x=ego_distance_from_junction, y=0.0, velocity=10.0,
+                   object_id="ego")
+    world = _world(ego=ego, npc=npc)
+    world.road_graph = graph
+    return world, graph
+
+
+def test_a_yielding_npc_slows_on_approach():
+    """Junction.right_of_way was populated by every template and read by
+    nobody: NPCs drove through four-way stops at constant velocity."""
+    tree = npc_bt.get_bt("junction_yield")
+    behavior = _behavior(stop_distance=8.0)
+    npc = _vehicle(x=0.0, y=-40.0, velocity=12.0, heading=math.pi / 2)
+    rng = RandomManager(1)
+
+    for step in range(120):
+        world, _ = _junction_world(npc, ego_distance_from_junction=5.0)
+        npc = tree.tick(npc, behavior, world, rng, DT)
+
+    assert npc.velocity < 12.0, "approached a stop line without slowing"
+
+
+def test_a_yielding_npc_holds_while_the_ego_is_in_the_junction():
+    tree = npc_bt.get_bt("junction_yield")
+    behavior = _behavior(stop_distance=8.0)
+    npc = _vehicle(x=0.0, y=-20.0, velocity=10.0, heading=math.pi / 2)
+    rng = RandomManager(2)
+
+    for step in range(300):
+        world, _ = _junction_world(npc, ego_distance_from_junction=2.0)
+        npc = tree.tick(npc, behavior, world, rng, DT)
+
+    assert npc.velocity == pytest.approx(0.0, abs=0.3), "did not hold for the ego"
+    # And it stopped before the junction, not in it.
+    assert npc.position.y < -5.0, f"stopped inside the junction at y={npc.position.y}"
+
+
+def test_a_yielding_npc_proceeds_once_the_ego_is_clear():
+    tree = npc_bt.get_bt("junction_yield")
+    behavior = _behavior(stop_distance=8.0)
+    npc = _vehicle(x=0.0, y=-20.0, velocity=10.0, heading=math.pi / 2)
+    rng = RandomManager(3)
+
+    for _ in range(200):     # ego close: come to a stop
+        world, _ = _junction_world(npc, ego_distance_from_junction=2.0)
+        npc = tree.tick(npc, behavior, world, rng, DT)
+    stopped_at = npc.position.y
+
+    for _ in range(200):     # ego long gone
+        world, _ = _junction_world(npc, ego_distance_from_junction=400.0)
+        npc = tree.tick(npc, behavior, world, rng, DT)
+
+    assert npc.position.y > stopped_at, "never pulled away after the ego cleared"
+
+
+def test_a_priority_arm_does_not_yield():
+    """Yielding on the priority arm would be a different scenario entirely.
+
+    Uses t_junction, not four_way_intersection: the four-way template marks
+    every arm "controlled" (it is signalised), so it has no priority arm to
+    test against and the assertion would have been vacuous.
+    """
+    from arep.core import road_templates
+
+    tree = npc_bt.get_bt("junction_yield")
+    behavior = _behavior()
+    graph = road_templates.t_junction()
+
+    junction = next(iter(graph.junctions.values()))
+    priority_arms = [a for a, p in junction.right_of_way.items() if p == "priority"]
+    assert priority_arms, "t_junction is supposed to grant priority to its through road"
+
+    segment = graph.segments[priority_arms[0]]
+    start = segment.centerline[0]
+    npc = _vehicle(x=start.x, y=start.y, velocity=10.0,
+                   heading=segment.heading_start)
+
+    rng = RandomManager(4)
+    for _ in range(60):
+        world = _world(ego=_vehicle(x=0.0, y=0.0, velocity=5.0, object_id="ego"),
+                       npc=npc)
+        world.road_graph = graph
+        npc = tree.tick(npc, behavior, world, rng, DT)
+
+    assert npc.velocity == pytest.approx(10.0, abs=0.01), "a priority arm braked"
+
+
+def test_without_a_road_graph_it_just_cruises():
+    """Flat-road scenarios keep the behaviour they had."""
+    tree = npc_bt.get_bt("junction_yield")
+    behavior = _behavior()
+    npc = _vehicle(x=0.0, y=0.0, velocity=9.0)
+    rng = RandomManager(5)
+
+    for step in range(50):
+        npc = tree.tick(npc, behavior, _world(sim_time=step * DT, npc=npc), rng, DT)
+
+    assert npc.velocity == pytest.approx(9.0)
+    assert npc.position.x > 0.0

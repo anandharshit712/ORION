@@ -9,7 +9,7 @@ scenario:
 
 ego:
   initial:
-    x: 0.0
+    x: -60.0
     y: -1.75
     heading: 0.0
     velocity: 11.11   # 40 km/h approach
