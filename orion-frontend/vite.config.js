@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Phase 2: the frontend had no tests at all. jsdom rather than a browser —
+  // what is worth testing here is logic that fails silently (a CSRF header that
+  // stops being sent, an auth bootstrap that stops running), not pixels.
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.js',
+    include: ['src/**/*.test.{js,jsx}'],
+  },
   server: {
     port: 5173,
     proxy: {

@@ -474,6 +474,18 @@ React 18, Vite 5, React Router 6. No TypeScript — plain JSX.
 - 3D visualization uses `@react-three/fiber` + `@react-three/drei` — don't use raw Three.js imperative API in React components.
 - CSS co-located: `Component.jsx` + `Component.css` same folder. No CSS modules, no Tailwind.
 
+### Frontend tests (Phase 2)
+
+Vitest + Testing Library + jsdom. `npm test` from `orion-frontend/`, and it runs in CI
+alongside the production build.
+
+There were none before, so the rule is: **test what fails silently, not what looks wrong.**
+A broken layout is visible the moment anyone opens the page; a `credentials: 'include'` that
+stops being sent, a CSRF header that stops going out on writes, or an auth bootstrap that
+stops running all look like backend faults and cost hours. Those are covered
+(`src/services/api.test.js`, `src/context/AuthContext.test.jsx`), including a guard that
+`useAuth()` never grows a `token` field again.
+
 ### Adding a new API call
 
 Add to `src/services/api.js` following existing pattern, then call `api.myNewMethod(token)` in component.
@@ -546,6 +558,9 @@ python -m uvicorn arep.api.app:app --reload --port 8000
 
 # Start frontend (run from orion-frontend/)
 npm run dev
+
+# Frontend tests (from orion-frontend/)
+npm test
 
 # Run all tests
 pytest

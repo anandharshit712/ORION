@@ -103,6 +103,28 @@ jobs:
           path: arep_implementation/coverage.xml
           if-no-files-found: warn
 
+  # Frontend (Phase 2). There were no frontend tests at all until now, so a
+  # React regression was caught by someone looking at the page.
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: orion-frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: orion-frontend
+        run: npm ci
+      - name: Unit tests
+        working-directory: orion-frontend
+        run: npm test
+      - name: Production build
+        working-directory: orion-frontend
+        # A build failure is a real failure: the app ships as a bundle.
+        run: npm run build
+
   # The hard rules from CLAUDE.md, enforced mechanically rather than by review.
   hard-rules:
     runs-on: ubuntu-latest
