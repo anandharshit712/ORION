@@ -137,7 +137,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-08 | ~~Celery `max_retries=0` — a transient failure kills the run and the customer eats it~~ | HIGH | 0.6 — **done** |
 | D-09 | ~~No coverage gate in CI; WS layer, admin routes, billing routes, partial-batch-refund untested~~ | HIGH | 0.6 — **done** (71.3%, gate at 70) |
 | D-10 | ~~Frontend: no error boundaries, no 404, `OrgProvider` written but never mounted, stub pages in sidebar~~ | MED | 0.6 — **done** |
-| D-11 | ~~TTC constant-velocity approximation~~ — **closed 2026-09-21**: now a constant-acceleration projection (`core/ttc.py`). Pacejka coefficients remain flagged uncalibrated. | MED | 2.1 — **done** |
+| D-11 | ~~TTC constant-velocity approximation~~ — **closed 2026-09-21**: constant-acceleration projection in `core/ttc.py`. Pacejka coefficients remain flagged uncalibrated. | MED | 2.1 — **done** |
 | D-12 | ~~Weight transfer uses previous-step acceleration~~ | LOW | 0.5 — **done** |
 | D-13 | ~~SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev~~ | MED | 0.6 — **done** (CI job on Postgres + Alembic round trip) |
 
@@ -800,6 +800,28 @@ Before charging the first customer:
 ---
 
 # PHASE 2 — Evaluation Depth
+
+> **Status 2026-09-21.** 2.1 (TTC), 2.2 (failure clustering), 2.3 (adversarial search) and
+> 2.4 (regression detection + PDF reporting) are implemented, along with the Phase 3 CLI and
+> the Phase 4 OpenDRIVE/OpenSCENARIO interop. No `NotImplementedError` stub and no
+> `TODO [P*]` marker remains anywhere in `arep/`. 654 tests.
+>
+> Each module states its own subset in its docstring, and the shared rule is that unsupported
+> input is **skipped and reported**, never silently dropped — a scenario missing its hazard
+> still runs and still produces a score, which is worse than a refused file.
+>
+> What is still genuinely open:
+>
+> - **Statistical CIs are computed but not surfaced** to the API or dashboard (2.1 remainder).
+> - **Deterministic replay (2.5)** — the frame hash it depends on now exists for both live and
+>   batch runs, but nothing replays from it yet; `RunPage` is still a stub.
+> - **PDF rendering is unverified on Windows.** WeasyPrint cannot load its GTK libraries here,
+>   so `render_html()` is what the tests exercise; the PDF step runs in Linux CI.
+> - **The container runner is unverified against a live Docker daemon** — the composed
+>   `docker run` invocation is unit-tested, the execution path is not.
+> - **OSC2 round trips lose the parameterisation block**, by design, with a test pinning it.
+
+
 
 **Duration**: ~2.5 months
 **Goal**: make the evaluation output so much richer than competitors' that it becomes the
