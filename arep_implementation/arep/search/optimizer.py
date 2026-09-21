@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional
 
 
 from arep.search.space import SearchSpace
+import numpy as np
+
 from arep.search.objective import ObjectiveFunction, EvaluationRecord
 from arep.utils.logging_config import get_logger
 
@@ -72,16 +74,100 @@ class CMAESOptimizer:
 
     def run(self, objective: ObjectiveFunction) -> SearchResult:
         """
-        Run CMA-ES optimisation and return the best-found parameters.
+        Search for the parameter set that breaks the model.
 
-        TODO [P2]: Import cma library (raise ImportError with install hint if missing).
-        TODO [P2]: Initialise CMAEvolutionStrategy at space.midpoint() with sigma0.
-        TODO [P2]: Set options: popsize, seed, maxfevals=max_evals, verbose=-9.
-        TODO [P2]: Main loop: es.ask() → evaluate each solution → es.tell(solutions, -fitnesses).
-        TODO [P2]: Break early if falsification found.
-        TODO [P2]: Return SearchResult.
+        CMA-ES minimises, and the objective is written so that higher is worse
+        for the ego, so the sign is flipped on the way in. Getting that
+        backwards would produce a confident search for the *safest* scenario,
+        which is why the fitness function is unit-tested separately.
+
+        The search stops as soon as it finds a collision. Beyond that point it
+        would be refining how badly the model crashes, and a customer needs one
+        reproducible counter-example, not the worst possible one.
         """
-        raise NotImplementedError("CMAESOptimizer.run not yet implemented [P2]")
+        try:
+            import cma
+        except ImportError as exc:      # pragma: no cover - depends on extras
+            raise ImportError(
+                "Adversarial search needs the cma package: "
+                "pip install 'arep[search]'"
+            ) from exc
+
+        if self.space.n_dims == 0:
+            # Nothing to search. Returning an empty result beats running 200
+            # identical simulations and reporting the last one.
+            return SearchResult(
+                best_params={}, best_fitness=0.0, n_evals=0,
+                falsification_found=False, falsification_params=None,
+                optimizer_used="cma-es", converged=True,
+            )
+
+        if self.space.n_dims == 1:
+            # CMA-ES needs at least two dimensions to build a covariance.
+            # Falling back is better than raising: a one-parameter scenario is
+            # a legitimate thing to search, just not with this algorithm.
+            logger.info("Single-dimension space — using random search instead")
+            fallback = RandomSearchOptimizer(
+                self.space, n_samples=self.max_evals, seed=self.seed,
+            )
+            result = fallback.run(objective)
+            result.optimizer_used = "random (cma-es needs >= 2 dims)"
+            return result
+
+        lows, highs = self.strategy_bounds()
+        strategy = cma.CMAEvolutionStrategy(
+            list(self.space.midpoint()),
+            self.sigma0 * float((highs - lows).mean()),
+            {
+                "popsize": self.popsize,
+                "seed": self.seed + 1,   # cma rejects seed=0 as "use entropy"
+                "maxfevals": self.max_evals,
+                "bounds": [list(lows), list(highs)],
+                "verbose": -9,
+            },
+        )
+
+        evaluations = 0
+        while not strategy.stop() and evaluations < self.max_evals:
+            candidates = strategy.ask()
+            costs = []
+            for candidate in candidates:
+                # Seed by evaluation index so a repeat of this search replays
+                # the same simulations. A fixed seed would instead let the
+                # optimizer overfit one draw of the scenario randomness.
+                fitness = objective(candidate, seed=self.seed + evaluations)
+                evaluations += 1
+                costs.append(-fitness)
+                if objective.falsification_found:
+                    break
+
+            strategy.tell(candidates[:len(costs)], costs)
+
+            if objective.falsification_found:
+                logger.info("Falsification found after %d evaluations", evaluations)
+                break
+
+        return self._result(objective, evaluations, "cma-es",
+                            converged=bool(strategy.stop()))
+
+    def strategy_bounds(self):
+        """Box bounds as arrays, so a proposal cannot leave the declared space."""
+        return self.space.bounds
+
+    @staticmethod
+    def _result(objective, evaluations, optimizer_used, converged) -> SearchResult:
+        best = objective.best_record
+        falsifier = objective.falsification_record
+        return SearchResult(
+            best_params=best.params if best else {},
+            best_fitness=best.fitness if best else 0.0,
+            n_evals=evaluations,
+            falsification_found=objective.falsification_found,
+            falsification_params=falsifier.params if falsifier else None,
+            all_evaluations=objective.history,
+            optimizer_used=optimizer_used,
+            converged=converged,
+        )
 
 
 class RandomSearchOptimizer:
@@ -111,11 +197,22 @@ class RandomSearchOptimizer:
 
     def run(self, objective: ObjectiveFunction) -> SearchResult:
         """
-        Sample n_samples random points and return the best-found parameters.
+        Uniform sampling over the space.
 
-        TODO [P2]: Use np.random.default_rng(self.seed) for reproducibility.
-        TODO [P2]: Sample self.n_samples points via space.random_point(rng).
-        TODO [P2]: Evaluate each with objective(x, seed=i).
-        TODO [P2]: Return SearchResult with the best-found params.
+        The baseline that makes the CMA-ES number mean something: an
+        adversarial search that finds no more failures than random sampling is
+        not adversarial, it is just slower.
         """
-        raise NotImplementedError("RandomSearchOptimizer.run not yet implemented [P2]")
+        rng = np.random.default_rng(self.seed)
+
+        evaluations = 0
+        for index in range(self.n_samples):
+            objective(self.space.random_point(rng), seed=self.seed + index)
+            evaluations += 1
+            if objective.falsification_found:
+                logger.info("Falsification found after %d samples", evaluations)
+                break
+
+        return CMAESOptimizer._result(
+            objective, evaluations, "random", converged=True,
+        )

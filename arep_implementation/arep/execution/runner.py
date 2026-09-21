@@ -87,6 +87,23 @@ class EvaluationRunner:
             EvaluationResult for this run.
         """
         scenario, _ = self.parser.parse_file(scenario_path)
+        return self.run_scenario_definition(scenario, model, master_seed)
+
+    def run_scenario_definition(
+        self,
+        scenario,
+        model: ModelInterface,
+        master_seed: int = 42,
+    ) -> EvaluationResult:
+        """
+        Run an already-parsed scenario.
+
+        Split out of run_single so a caller holding a ScenarioDefinition can
+        run it directly — adversarial search builds one per evaluation and
+        would otherwise have to write it to a temporary file and parse it back.
+        Everything downstream is identical, so the search walks the same code
+        path a customer batch does rather than a parallel one that can drift.
+        """
         rng = RandomManager(master_seed)
 
         initial_world = self.scenario_executor.create_initial_world(scenario, rng)

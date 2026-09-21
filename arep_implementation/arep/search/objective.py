@@ -83,14 +83,52 @@ class ObjectiveFunction:
         Returns:
             Scalar fitness (higher = worse for ego).
 
-        TODO [P2]: Convert x to params_dict via self._space.to_params_dict(x).
-        TODO [P2]: Apply params_dict overrides to a copy of self._scenario via ScenarioParameterizer.
-        TODO [P2]: Run one simulation with the perturbed scenario and self._model.
-        TODO [P2]: Compute fitness from result metrics using the weights above.
-        TODO [P2]: Append EvaluationRecord to self._history.
-        TODO [P2]: Return fitness scalar.
+        The optimizer maximises this, so a higher value means a worse outcome
+        for the ego. Weights are collision-heavy on purpose: the search exists
+        to find crashes, not mildly uncomfortable drives.
+
+        Every evaluation is recorded, because the search itself is the
+        deliverable — a customer wants the parameter set that broke their
+        model, not just the knowledge that one exists.
         """
-        raise NotImplementedError("ObjectiveFunction.__call__ not yet implemented [P2]")
+        import copy
+
+        from arep.core.random_manager import RandomManager
+        from arep.execution.runner import EvaluationRunner
+        from arep.scenario.parameterizer import ScenarioParameterizer
+
+        params = self._space.to_params_dict(np.asarray(x, dtype=float))
+
+        # Replace the ranges with the concrete point under test, then run the
+        # ordinary path. Applying the parameterizer to a block that already
+        # holds scalars is a no-op for those keys, so the scenario reaching the
+        # engine is exactly the point the optimizer asked for.
+        scenario = copy.deepcopy(self._scenario)
+        scenario.parameterization = params
+        ScenarioParameterizer().apply(scenario, RandomManager(seed))
+
+        runner = EvaluationRunner()
+        result = runner.run_scenario_definition(scenario, self._model, seed)
+
+        fitness = self.compute_fitness(
+            collision_occurred=result.safety.collision_occurred,
+            min_ttc=result.safety.min_ttc,
+            safety_score=result.safety.safety_score,
+            compliance_score=result.compliance.compliance_score,
+        )
+
+        self._history.append(EvaluationRecord(
+            params=params,
+            fitness=fitness,
+            seed=seed,
+            collision_occurred=result.safety.collision_occurred,
+            min_ttc=result.safety.min_ttc,
+            safety_score=result.safety.safety_score,
+            compliance_score=result.compliance.compliance_score,
+            composite_score=result.composite_score,
+        ))
+        return fitness
+
 
     @property
     def history(self) -> List[EvaluationRecord]:

@@ -58,16 +58,20 @@ class SearchSpace:
         self._dimensions: List[SearchDimension] = []
         self._build()
 
+    # Dimensions are ordered by dotted path so the vector layout is stable.
+    # An optimizer resumed from a saved state would otherwise apply x[0] to a
+    # different parameter than the run that produced it.
     def _build(self) -> None:
-        """
-        Walk the scenario's parameterization block and extract all {min, max} pairs.
-
-        TODO [P2]: Recursively walk ScenarioDefinition.parameterization dict.
-        TODO [P2]: For each leaf that is a dict with "min" and "max" keys,
-                   create a SearchDimension with dotted path as name.
-        TODO [P2]: Append to self._dimensions.
-        """
-        raise NotImplementedError("SearchSpace._build not yet implemented [P2]")
+        """Extract every {min, max} pair from the parameterization block."""
+        self._dimensions = []
+        for path, leaf in sorted(_walk(self._scenario.parameterization)):
+            self._dimensions.append(SearchDimension(
+                name=path,
+                low=float(leaf["min"]),
+                high=float(leaf["max"]),
+                unit=str(leaf.get("unit", "")),
+            ))
+        logger.debug("Search space: %d dimensions", len(self._dimensions))
 
     @property
     def dimensions(self) -> List[SearchDimension]:
@@ -86,15 +90,26 @@ class SearchSpace:
 
     def to_params_dict(self, x: np.ndarray) -> Dict[str, Any]:
         """
-        Convert an optimizer vector x to a parameterizer-compatible override dict.
+        Convert an optimizer vector into a parameterization block.
 
-        The override dict has the same nested structure as the scenario's
-        parameterization block, with each {min, max} replaced by the
-        corresponding value from x.
+        Each {min, max} becomes a concrete number, keeping the nested shape the
+        parameterizer already understands — so the search feeds the ordinary
+        run path rather than a second one that could drift away from it.
 
-        TODO [P2]: Reconstruct nested dict from self._dimensions and x.
+        Values are clipped to their bounds. CMA-ES proposes points outside the
+        box routinely; letting one through would run a scenario the customer
+        never declared and score the model on it.
         """
-        raise NotImplementedError("SearchSpace.to_params_dict not yet implemented [P2]")
+        if len(x) != len(self._dimensions):
+            raise ValueError(
+                f"Expected {len(self._dimensions)} values, got {len(x)}"
+            )
+
+        params: Dict[str, Any] = {}
+        for value, dimension in zip(x, self._dimensions):
+            clipped = float(min(max(float(value), dimension.low), dimension.high))
+            _set_nested(params, dimension.name.split("."), clipped)
+        return params
 
     def midpoint(self) -> np.ndarray:
         """Return the midpoint of the search space (good CMA-ES starting point)."""
@@ -107,3 +122,28 @@ class SearchSpace:
 
     def __repr__(self) -> str:
         return f"SearchSpace({self.n_dims} dims: {[d.name for d in self._dimensions]})"
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+def _walk(node, prefix: str = ""):
+    """Yield (dotted path, {min, max} dict) for every range in the block.
+
+    A leaf is a dict carrying both "min" and "max"; anything else is a nesting
+    level. That is the same shape the parameterizer reads, so the search space
+    and the runtime cannot disagree about what is tunable.
+    """
+    if not isinstance(node, dict):
+        return
+    if "min" in node and "max" in node:
+        yield prefix, node
+        return
+    for key, value in node.items():
+        child = f"{prefix}.{key}" if prefix else str(key)
+        yield from _walk(value, child)
+
+
+def _set_nested(target: Dict[str, Any], path: List[str], value: float) -> None:
+    for key in path[:-1]:
+        target = target.setdefault(key, {})
+    target[path[-1]] = value
