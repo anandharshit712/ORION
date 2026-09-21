@@ -151,6 +151,21 @@ class SandboxConfig:
     max_open_files: int = 64              # RLIMIT_NOFILE
     require_network_namespace: bool = False  # True = refuse to run without kernel net isolation
 
+    # ── Docker submission path (Phase 2, D-01 step 2) ────────────────
+    # The container runtime to run customer images under. "" uses Docker's
+    # default (runc). Set to "runsc" for gVisor, which puts a user-space kernel
+    # between the model and the host — the isolation step D-01 was waiting for.
+    # Firecracker is reached the same way via a Docker runtime shim.
+    container_runtime: str = ""
+    container_memory: str = "512m"        # --memory
+    container_cpus: str = "1.0"           # --cpus
+    container_pids_limit: int = 128       # --pids-limit, caps fork bombs
+    container_start_timeout_s: float = 30.0   # wait for the model to answer /health
+    # Refuse to run a customer image at all unless a hardened runtime is
+    # configured. Off in dev (no gVisor on a laptop); turn it on in production
+    # and the API fails loudly rather than running customer code under runc.
+    require_hardened_runtime: bool = False
+
 
 @dataclass(frozen=True)
 class Config:
@@ -355,6 +370,13 @@ _ENV_MAP = {
     "ORION_SANDBOX_REQUIRE_NETNS": (
         "sandbox", "require_network_namespace",
         lambda v: v.lower() in ("1", "true", "yes"),
+    ),
+    "ORION_CONTAINER_RUNTIME": ("sandbox", "container_runtime", str),
+    "ORION_CONTAINER_MEMORY": ("sandbox", "container_memory", str),
+    "ORION_CONTAINER_CPUS": ("sandbox", "container_cpus", str),
+    "ORION_CONTAINER_PIDS_LIMIT": ("sandbox", "container_pids_limit", int),
+    "ORION_REQUIRE_HARDENED_RUNTIME": (
+        "sandbox", "require_hardened_runtime", _bool,
     ),
 }
 

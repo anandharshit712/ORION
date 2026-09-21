@@ -22,7 +22,6 @@ from typing import Optional
 from arep.api.model_store import get_model_store, SubmissionType
 from arep.database.connection import session_scope
 from arep.database.repository import ModelRepository, OrganisationRepository
-from arep.models.http_adapter import HttpModelAdapter
 from arep.models.interface import ModelInterface
 from arep.models.sandbox import SubprocessModelRunner
 from arep.utils.logging_config import get_logger
@@ -96,8 +95,18 @@ def resolve_model(
 
     if submission_type == SubmissionType.DOCKER.value:
         image, port = store.get_docker_image(artefact_uri)
-        # Caller is responsible for container lifecycle; we assume the
-        # container is already reachable on localhost:<port>.
-        return HttpModelAdapter(base_url=f"http://localhost:{port}")
+        # Phase 2, D-01 step 2. This used to return an HttpModelAdapter pointed
+        # at localhost:<port> with a comment saying the caller owned the
+        # container lifecycle — and no caller did. A registered Docker model
+        # therefore either failed to connect or talked to whatever happened to
+        # be listening on that port on the API host, which is worse. The path
+        # the pickle gate recommends as the safe one had no boundary at all.
+        #
+        # ContainerModelRunner starts the image with capabilities dropped, a
+        # read-only filesystem, memory/CPU/PID limits, loopback-only publishing
+        # and no inherited environment — and under gVisor when configured.
+        from arep.models.container import ContainerModelRunner
+
+        return ContainerModelRunner(image=image, port=port, org_id=org_id)
 
     raise RuntimeError(f"Unsupported submission_type: {submission_type}")

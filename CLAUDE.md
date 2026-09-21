@@ -160,7 +160,19 @@ hard wall-clock kill per call and per run.
 - A model that merely raises inside `predict()` is different — that yields
   `Action.emergency_brake()` for the tick and the run continues.
 - Always `close()` an out-of-process model. `EvaluationRunner._release_model()` does this in
-  a `finally`; if you add a new execution path, do the same or you leak a child process.
+  a `finally`; if you add a new execution path, do the same or you leak a child process —
+  or, on the Docker path, a container.
+- **The Docker path starts a real container (Phase 2, D-01 step 2).** `ContainerModelRunner`
+  (`models/container.py`) runs the customer image with `--cap-drop=ALL`,
+  `no-new-privileges`, `--read-only` plus a noexec tmpfs, memory/CPU/PID limits, the port
+  published on `127.0.0.1` only, and an empty `--env-file` so no `ORION_*` credential is
+  inherited. Set `ORION_CONTAINER_RUNTIME=runsc` for gVisor, and
+  `ORION_REQUIRE_HARDENED_RUNTIME=true` in production so the API refuses to run customer code
+  under plain runc. Before this, `resolve_model` returned an `HttpModelAdapter` aimed at
+  `localhost:<port>` and assumed something else had started a container — nothing had, so the
+  path the pickle gate recommends had no boundary at all.
+  **Not yet exercised against a live Docker daemon**: the command construction is unit-tested,
+  the execution path is not.
 - `Observation.to_dict()`/`from_dict()` is the wire format for out-of-process models. Extend
   both sides together, or the sandbox and HTTP adapters silently drop fields.
 
