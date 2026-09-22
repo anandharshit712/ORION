@@ -162,3 +162,85 @@ def test_content_hash_differs_between_scenarios():
     parser = ScenarioParser()
     hashes = {parser.parse_file(str(p))[1] for p in ALL}
     assert len(hashes) == len(ALL), "two scenarios hash identically"
+
+
+# ── Lane geometry ────────────────────────────────────────────────────────
+#
+# Added after the flat-road builder and RoadSegment.get_lane_centerline were
+# found to disagree about where lane 0 sits: the flat path put it on y=0, the
+# graph path on y=-1.75. 15 of the 21 production scenarios start the ego at
+# y=-1.75, so on the flat path they straddled the lane line for their entire
+# run and scored a lane-compliance fraction of exactly 0.0 — a scoring penalty
+# with no behavioural cause. Nothing caught it because the suite ran on the two
+# v1 fixtures in scenarios/basic/, which are the only ones that used y=0.
+
+
+def test_both_lane_builders_agree_on_where_lane_zero_is():
+    """The flat road and the road graph must lay out lanes identically.
+
+    A scenario must not sit on different geometry depending on whether it
+    happens to declare a `template`.
+    """
+    from arep.config import get_config
+    from arep.core.road_templates import highway_straight
+    from arep.scenario.executor import ScenarioExecutor
+
+    lanes, width = 2, 3.5
+    graph = highway_straight(lanes=lanes, lane_width=width, length=200.0)
+    graph_ys = sorted(
+        seg.get_lane_centerline(i)[0].y
+        for seg in graph.segments.values()
+        for i in range(seg.lane_count)
+    )
+
+    class _Road:
+        pass
+
+    road = _Road()
+    road.lanes, road.lane_width, road.speed_limit = lanes, width, 27.8
+
+    class _Scenario:
+        pass
+
+    scenario = _Scenario()
+    scenario.road = road
+    scenario.name = "lane-convention-check"
+
+    executor = ScenarioExecutor(get_config().simulation)
+    flat_ys = sorted(
+        lane.centerline_points[0].y
+        for lane in executor._create_lanes(scenario, road_graph=None)
+    )
+
+    assert flat_ys == pytest.approx(
+        graph_ys
+    ), f"flat road put lanes at {flat_ys}, road graph at {graph_ys}"
+
+
+@pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
+def test_every_scenario_starts_the_ego_inside_a_lane(path: Path):
+    """The ego must begin the run within its lane, body included.
+
+    This is the same body-edge test lane compliance scores with
+    (|offset| + half_width <= lane_width / 2), so a scenario failing here is one
+    that starts already out of lane and is scored down for the whole run.
+    """
+    from arep.config import get_config
+    from arep.core.random_manager import RandomManager
+    from arep.scenario.executor import ScenarioExecutor
+
+    scenario, _ = ScenarioParser().parse_file(str(path))
+    world = ScenarioExecutor(get_config().simulation).create_initial_world(
+        scenario,
+        RandomManager(42),
+    )
+
+    lane = world.get_current_lane()
+    assert lane is not None, "no lane under the ego at t=0"
+
+    offset = lane.get_signed_lateral_offset(world.ego_vehicle.position)
+    half_width = world.ego_vehicle.width / 2.0
+    assert abs(offset) + half_width <= lane.width / 2.0 + 1e-6, (
+        f"ego starts straddling the lane line: offset={offset:+.3f} m, "
+        f"half-width={half_width:.3f} m, lane width={lane.width:.3f} m"
+    )

@@ -27,7 +27,7 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 
 Supporting, non-governing: `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phase 0 (Security & Score Integrity) is complete** — see Section 13 for what each defect became. Current priority: Phase 1.4 (Stripe billing) and 1.5 (road topology). `docs/METHODOLOGY.md` now documents scoring and must be updated alongside any scoring change.
+**Phases 0 and 1 are complete** — see Section 13 for what each defect became. Current priority: **wiring the dashboard** (Phase 5.2) — six of seven sections still render `ComingSoon` while the APIs behind them exist, so nothing built in Phases 2–4 is reachable from a browser. Then the confidence intervals (2.1 remainder), then deterministic replay (2.5). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -274,8 +274,15 @@ environment:
       has_traffic_light: false
 ```
 
-- **Omitting `template` is supported and means the flat straight road.** Every scenario written
-  before 1.5 keeps the geometry it was scored on, so stored results stay comparable.
+- **Omitting `template` is supported and means the flat straight road.**
+- **Both lane builders use one formula**: lane `i` is centred at
+  `(i - (n-1)/2) * lane_width`, so a two-lane 3.5 m road has its lanes at y=-1.75 and y=+1.75
+  and the carriageway is centred on the origin. `_create_lanes` (flat) and
+  `RoadSegment.get_lane_centerline` (graph) must agree — declaring a `template` changes the
+  road's *shape*, never where lane 0 sits on a straight one. `test_scenario_library.py` pins
+  the two against each other, and asserts every scenario starts the ego inside its lane.
+  Ego at `y: -1.75` is lane 0 on a 2-lane road; that is what 15 of the production scenarios
+  use and it is the convention to follow in new ones.
 - `lanes`, `lane_width` and `speed_limit` from the road block are passed to the factory;
   `template_params` overrides them. An unknown template or an unknown parameter raises
   `ScenarioParseError` at build time — never a silent fallback to a straight road, which would
@@ -333,7 +340,14 @@ within a scoring version.
 - ~~D-05 lane compliance stub~~ — **closed.** `EgoSnapshot` records signed `lane_offset`,
   `lane_width` and `vehicle_half_width`; in-lane means the *body* is inside the line
   (`|offset| + half_width <= lane_width/2`), because a centre-point test against the nearest
-  lane is tautological. Lane 0 is now centred on y=0 to match what scenarios mean by y=0.
+  lane is tautological. Lane centres follow `(i - (n-1)/2) * lane_width` — see Section 6.
+  0.5 originally put lane 0 on y=0, on the premise that every scenario drives along y=0. That
+  held only for the two v1 fixtures in `scenarios/basic/`, which is what the suite ran; the 15
+  production scenarios start the ego at y=-1.75 and so straddled the lane line for their whole
+  run, scoring a lane-compliance fraction of exactly 0.0. Corrected, with a library-wide
+  invariant test. **Composite rose by exactly +0.100 on each of those 15** (measured against
+  `emergency_brake`); correctly-templated scenarios were unchanged. See the change log in
+  `docs/METHODOLOGY.md` — scores are only comparable within a scoring version.
 - ~~D-12 weight transfer off-by-one~~ — **closed.** Uses the current step's commanded
   acceleration; the achieved-value residual is documented in `docs/METHODOLOGY.md`.
 - ~~D-11 TTC constant-velocity~~ — **closed (Phase 2.1).** `core/ttc.py` solves
@@ -686,15 +700,28 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
    the simulation-purity rules in CI; frontend `OrgContext` deleted and unready nav disabled.
 
 **Phase 0 is complete** apart from 0.2 Step 2 (gVisor/Firecracker), which is gated on opening
-self-serve signup rather than on this phase. Next: Phase 1.4 (Stripe billing, on the verified
-webhook base) and 1.5 (road topology, which unblocks ~35% of the scenario library).
+self-serve signup rather than on this phase.
 
-### Phase 1 remainder (after Phase 0 exits)
+### Phase 1 — COMPLETE
 
 1. ~~**Stripe billing (Phase 1.4)**~~ — **DONE.** Checkout, top-up, portal, webhook handlers,
-   `GET /api/billing/plans`, and a live `BillingPage`. See Section 8. Still needs real Stripe
-   price IDs and a test-mode round trip against the live API.
-2. **Road topology engine (Phase 1.5)** — only flat 2-lane straight road exists. Blocks ~35% of scenario library (all INT-*, EMG-002, MLT-*). `core/road.py` and `core/road_templates.py` do not exist. Spec: `docs/ROADMAP.md` § 1.5.
+   `GET /api/billing/plans`, and a live `BillingPage`. See Section 8. `PLAN_PRICES` still holds
+   placeholder price IDs and no test-mode round trip has run against the live API, because
+   Stripe signup is invite-only in India and requires a registered company. **This blocks
+   nothing**: `billing_enabled` defaults to false, checkout/portal return 503, and credits are
+   granted by hand through `POST /api/admin/orgs/{id}/credits`. Picking a payment provider is a
+   business decision, not an engineering one — don't build a provider abstraction for a
+   provider nobody has chosen. The swap is ~4 call sites in `api/billing.py`; the
+   `webhook_events.provider` column is already generic.
+2. ~~**Road topology engine (Phase 1.5)**~~ — **DONE.** `core/road.py` (`RoadGraph`,
+   `RoadSegment`, `Junction`) and `core/road_templates.py` (six factories) exist and are wired
+   through `environment.road.template`. See Section 6.
+
+**All 21 scenarios execute.** Verified with `arep.cli.run_suite --scenarios all`: 18 pass
+against `emergency_brake`. The three that fail — EMG-002, LAT-003, MLT-007 — fail *correctly*:
+each needs evasive steering or gentle braking, and a brake-only model cannot pass them. Same
+category as `ConstantAction` failing the LON scenarios. Don't "fix" them by weakening the
+scenario.
 
 ### Done (P1.1 + P1.2 + P1.3)
 

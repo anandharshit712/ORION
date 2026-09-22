@@ -109,12 +109,36 @@ def test_a_scenario_without_a_template_gets_no_graph():
     assert _executor()._create_road_graph(scenario) is None
 
 
-def test_a_scenario_without_a_template_keeps_its_old_lanes():
+def test_a_scenario_without_a_template_gets_the_same_lanes_as_one_with():
+    """The flat road and the road graph must lay lanes out identically.
+
+    Declaring a `template` changes the road's *shape*, never where lane 0 sits
+    on a straight one. When the two builders disagreed, a scenario was scored
+    on different geometry depending on whether it happened to name a template:
+    the flat path put lane 0 on y=0, the graph path on y=-1.75, and the 15
+    production scenarios that start the ego at y=-1.75 scored a lane-compliance
+    fraction of exactly 0.0 on the flat path.
+    """
+    from arep.core.road_templates import highway_straight
+
     scenario = _scenario(BASIC)
     lanes = _executor()._create_lanes(scenario, None)
 
+    graph = highway_straight(
+        lanes=scenario.road.lanes,
+        lane_width=scenario.road.lane_width,
+        speed_limit=scenario.road.speed_limit,
+    )
+    expected = sorted(
+        seg.get_lane_centerline(i)[0].y
+        for seg in graph.segments.values()
+        for i in range(seg.lane_count)
+    )
+
     assert len(lanes) == scenario.road.lanes
-    assert lanes[0].centerline_points[0].y == 0.0  # lane 0 on the travel line
+    assert sorted(lane.centerline_points[0].y for lane in lanes) == pytest.approx(
+        expected
+    )
 
 
 def test_a_named_template_produces_a_graph():

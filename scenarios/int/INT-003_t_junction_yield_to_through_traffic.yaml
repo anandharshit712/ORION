@@ -12,7 +12,7 @@ scenario:
 
 ego:
   initial:
-    x: 0.0
+    x: 1.75     # centre of the south arm's northbound lane
     y: -55.0
     heading: 1.5708    # north, up the minor arm toward the junction
     velocity: 8.33     # 30 km/h on approach
@@ -78,8 +78,11 @@ parameterization:
   ego_velocity:
     min: 6.94      # 25 km/h
     max: 9.72      # 35 km/h
-  ego_x_jitter:
-    min: -4.0
-    max: 4.0
+  # No ego_x_jitter here, for the same reason MLT-003 omits it: the ego climbs
+  # the south arm heading north, so x is the *lateral* axis on this scenario and
+  # a +/-4 m shift is wider than the 3.5 m lane. It started the ego straddling
+  # the lane line — and sometimes in the oncoming lane — before the run began.
+  # Arrival time at the junction is varied through ego_velocity instead, which
+  # is what actually makes the gap a decision.
 
 master_seed: 3003
