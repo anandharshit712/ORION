@@ -19,6 +19,8 @@ import hashlib
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from typing import Callable, Union
+
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
@@ -80,6 +82,7 @@ def principal_key(request: Request) -> str:
 # slowapi accepts a zero-arg callable, and a test (or an ops env-var change and
 # reload_config()) then takes effect without re-importing the route module.
 
+
 def login_limit() -> str:
     """Per-IP limit on POST /api/auth/login — the credential-stuffing control."""
     return get_config().api.rate_limit_login
@@ -90,7 +93,7 @@ def signup_limit() -> str:
     return get_config().api.rate_limit_signup
 
 
-def _default_limits() -> list[str]:
+def _default_limits() -> list[Union[str, Callable[..., str]]]:
     cfg = get_config().api
     if not cfg.rate_limit_enabled or not cfg.rate_limit_default:
         return []
@@ -104,11 +107,13 @@ limiter = Limiter(
     default_limits=_default_limits(),
     storage_uri=_cfg.rate_limit_storage_uri,
     enabled=_cfg.rate_limit_enabled,
-    headers_enabled=True,   # X-RateLimit-* on responses, so clients can back off
+    headers_enabled=True,  # X-RateLimit-* on responses, so clients can back off
 )
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+def rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
     """429 in the platform's error shape: {"detail": "..."}.
 
     slowapi's built-in handler returns {"error": ...}, which would make this the
@@ -116,7 +121,10 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
     """
     logger.warning(
         "Rate limit hit: %s %s by %s (limit %s)",
-        request.method, request.url.path, principal_key(request), exc.detail,
+        request.method,
+        request.url.path,
+        principal_key(request),
+        exc.detail,
     )
     response = JSONResponse(
         status_code=429,

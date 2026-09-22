@@ -21,7 +21,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-WHITELISTED_ORIGIN = "http://localhost:5173"   # the Vite dev server; see APIConfig
+WHITELISTED_ORIGIN = "http://localhost:5173"  # the Vite dev server; see APIConfig
 FOREIGN_ORIGIN = "https://evil.example"
 API_CSP = "default-src 'none'; frame-ancestors 'none'"
 
@@ -34,6 +34,7 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
@@ -71,6 +72,7 @@ def live_limiter():
 
 
 # -- CORS (D-03) ----------------------------------------------------------
+
 
 def test_whitelisted_origin_gets_cors_grant(client):
     r = client.options(
@@ -111,6 +113,7 @@ def test_wildcard_origin_is_never_echoed(client):
 
 # -- Security headers (D-03) ----------------------------------------------
 
+
 def test_security_headers_present_on_api_response(client):
     r = client.get("/health")
     assert r.headers["X-Content-Type-Options"] == "nosniff"
@@ -148,6 +151,7 @@ def test_hsts_present_when_proxy_reports_https(client):
 
 # -- Rate limiting (D-03) -------------------------------------------------
 
+
 def test_sixth_login_in_a_minute_is_rejected(client, live_limiter):
     """The D-03 acceptance criterion: login is 5/minute per IP.
 
@@ -165,7 +169,9 @@ def test_sixth_login_in_a_minute_is_rejected(client, live_limiter):
         # Assert the exact status, not "not 429": an earlier version of this test
         # accepted anything other than 429 and so passed while the endpoint was
         # returning 500 on every call with the limiter enabled.
-        assert r.status_code == 401, f"attempt {attempt + 1} gave {r.status_code}: {r.text[:200]}"
+        assert (
+            r.status_code == 401
+        ), f"attempt {attempt + 1} gave {r.status_code}: {r.text[:200]}"
 
     r = client.post("/api/auth/login", json=payload)
     assert r.status_code == 429
@@ -202,27 +208,37 @@ def test_rate_limited_routes_still_work_when_under_the_limit(client, live_limite
     every call while the limiter was on. TestClient tests that only asserted
     "not 429" sailed past it; a real request against uvicorn did not.
     """
-    r = client.post("/api/auth/signup", json={
-        "email": "under-limit@example.com",
-        "username": "underlimit",
-        "password": "correct-horse-battery",
-        "org_name": "Under Limit Org",
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": "under-limit@example.com",
+            "username": "underlimit",
+            "password": "correct-horse-battery",
+            "org_name": "Under Limit Org",
+        },
+    )
     assert r.status_code == 201, f"signup broke under the limiter: {r.text[:300]}"
 
-    r = client.post("/api/auth/login", json={
-        "identifier": "under-limit@example.com",
-        "password": "correct-horse-battery",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": "under-limit@example.com",
+            "password": "correct-horse-battery",
+        },
+    )
     assert r.status_code == 200, f"login broke under the limiter: {r.text[:300]}"
     assert "access_token" in r.json()
 
 
 def test_rate_limit_headers_reach_the_client(client, live_limiter):
     """headers_enabled is only worth its complexity if the headers arrive."""
-    r = client.post("/api/auth/login", json={
-        "identifier": "nobody@example.com", "password": "wrong-password",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": "nobody@example.com",
+            "password": "wrong-password",
+        },
+    )
     assert r.status_code == 401
     assert "x-ratelimit-limit" in {k.lower() for k in r.headers}
 
@@ -247,6 +263,7 @@ def test_limiter_disabled_by_config_lets_everything_through(client):
 
 
 # -- Rate-limit bucketing -------------------------------------------------
+
 
 def _fake_request(headers: dict, ip: str = "10.0.0.1", **state):
     """Minimal stand-in for a Starlette Request, enough for the key functions."""
@@ -285,7 +302,9 @@ def test_invalid_tokens_are_bucketed_by_credential_hash():
     from arep.api.ratelimit import principal_key
 
     secret = "sk-orion-not-a-real-key"
-    key = principal_key(_fake_request({"Authorization": f"Bearer {secret}"}, org_id=None))
+    key = principal_key(
+        _fake_request({"Authorization": f"Bearer {secret}"}, org_id=None)
+    )
     assert key.startswith("cred:")
     assert secret not in key
 
@@ -303,13 +322,14 @@ def test_forwarded_for_is_ignored_unless_the_proxy_is_trusted():
     os.environ["ORION_TRUST_PROXY_HEADERS"] = "true"
     try:
         reload_config()
-        assert client_ip(req) == "1.2.3.4"   # leftmost entry = the original client
+        assert client_ip(req) == "1.2.3.4"  # leftmost entry = the original client
     finally:
         del os.environ["ORION_TRUST_PROXY_HEADERS"]
         reload_config()
 
 
 # -- CORS configuration validation (D-03) ---------------------------------
+
 
 @pytest.fixture
 def clean_config():
@@ -357,10 +377,15 @@ def test_explicit_whitelist_accepted_outside_dev(clean_config):
     from arep.config.validate import resolve_cors_origins
 
     os.environ["ORION_ENV"] = "production"
-    os.environ["ORION_ALLOWED_ORIGINS"] = "https://app.example.com, https://admin.example.com"
+    os.environ["ORION_ALLOWED_ORIGINS"] = (
+        "https://app.example.com, https://admin.example.com"
+    )
     reload_config()
 
-    assert resolve_cors_origins() == ["https://app.example.com", "https://admin.example.com"]
+    assert resolve_cors_origins() == [
+        "https://app.example.com",
+        "https://admin.example.com",
+    ]
 
 
 def test_wildcard_tolerated_in_dev(clean_config):

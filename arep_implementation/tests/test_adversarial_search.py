@@ -23,13 +23,14 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.models.examples.example_models import (      # noqa: E402
-    ConstantActionModel, EmergencyBrakeModel,
+from arep.models.examples.example_models import (  # noqa: E402
+    ConstantActionModel,
+    EmergencyBrakeModel,
 )
-from arep.scenario.parser import ScenarioParser        # noqa: E402
-from arep.search.objective import ObjectiveFunction    # noqa: E402
+from arep.scenario.parser import ScenarioParser  # noqa: E402
+from arep.search.objective import ObjectiveFunction  # noqa: E402
 from arep.search.optimizer import CMAESOptimizer, RandomSearchOptimizer  # noqa: E402
-from arep.search.space import SearchSpace              # noqa: E402
+from arep.search.space import SearchSpace  # noqa: E402
 
 PARAMETERISED = "../scenarios/lon/LON-003_emergency_stop.yaml"
 FLAT = "scenarios/basic/straight_road_lead_vehicle.yaml"
@@ -42,13 +43,14 @@ def _space(path=PARAMETERISED):
 
 # -- The search space -----------------------------------------------------
 
+
 def test_every_declared_range_becomes_a_dimension():
     _, space = _space()
     names = [d.name for d in space.dimensions]
     assert "ego_velocity" in names
-    assert any(n.startswith("npc_overrides.") for n in names), (
-        "nested NPC overrides must be searchable too"
-    )
+    assert any(
+        n.startswith("npc_overrides.") for n in names
+    ), "nested NPC overrides must be searchable too"
     assert space.n_dims == len(names)
 
 
@@ -80,9 +82,9 @@ def test_a_vector_round_trips_into_a_parameterization_block():
     params = space.to_params_dict(space.midpoint())
 
     assert isinstance(params["ego_velocity"], float)
-    assert isinstance(params["npc_overrides"]["lead_vehicle"], dict), (
-        "nesting must survive, or the parameterizer will not find the overrides"
-    )
+    assert isinstance(
+        params["npc_overrides"]["lead_vehicle"], dict
+    ), "nesting must survive, or the parameterizer will not find the overrides"
 
 
 def test_out_of_bounds_proposals_are_clipped():
@@ -107,6 +109,7 @@ def test_a_wrong_length_vector_is_refused():
 
 # -- The fitness landscape ------------------------------------------------
 
+
 def test_a_collision_scores_far_above_a_clean_run():
     safe = ObjectiveFunction.compute_fitness(False, 10.0, 1.0, 1.0)
     crash = ObjectiveFunction.compute_fitness(True, 0.0, 0.0, 0.5)
@@ -130,6 +133,7 @@ def test_a_worse_safety_score_scores_higher():
 
 
 # -- Running a search -----------------------------------------------------
+
 
 def test_random_search_finds_the_counter_example_for_a_model_that_never_brakes():
     """ConstantAction drives into a braking lead vehicle. If the search cannot
@@ -162,9 +166,13 @@ def test_the_counter_example_is_reproducible():
     ScenarioParameterizer().apply(replay, RandomManager(record.seed))
 
     rerun = EvaluationRunner().run_scenario_definition(
-        replay, ConstantActionModel(throttle=0.4), record.seed,
+        replay,
+        ConstantActionModel(throttle=0.4),
+        record.seed,
     )
-    assert rerun.safety.collision_occurred, "the reported counter-example did not reproduce"
+    assert (
+        rerun.safety.collision_occurred
+    ), "the reported counter-example did not reproduce"
 
 
 def test_cma_es_runs_and_records_every_evaluation():
@@ -209,7 +217,9 @@ def test_the_same_seed_reproduces_the_same_search():
     scenario, space = _space()
 
     def search():
-        objective = ObjectiveFunction(scenario, ConstantActionModel(throttle=0.3), space)
+        objective = ObjectiveFunction(
+            scenario, ConstantActionModel(throttle=0.3), space
+        )
         result = RandomSearchOptimizer(space, n_samples=6, seed=11).run(objective)
         return [round(r.fitness, 9) for r in result.all_evaluations]
 

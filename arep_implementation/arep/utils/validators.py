@@ -29,9 +29,7 @@ def validate_range(
         ValueError: If value is out of range.
     """
     if not (min_val <= value <= max_val):
-        raise ValueError(
-            f"{name} must be in [{min_val}, {max_val}], got {value}"
-        )
+        raise ValueError(f"{name} must be in [{min_val}, {max_val}], got {value}")
     return value
 
 
@@ -105,8 +103,7 @@ def validate_type(value: Any, expected_type: type, name: str = "value") -> Any:
     """
     if not isinstance(value, expected_type):
         raise TypeError(
-            f"{name} must be {expected_type.__name__}, "
-            f"got {type(value).__name__}"
+            f"{name} must be {expected_type.__name__}, " f"got {type(value).__name__}"
         )
     return value
 

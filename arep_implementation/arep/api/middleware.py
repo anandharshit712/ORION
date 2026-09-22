@@ -21,7 +21,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from arep.api.auth import (
-    CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, decode_access_token,
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    decode_access_token,
 )
 from arep.database.connection import get_session
 from arep.database.models import UserRecord
@@ -42,18 +45,16 @@ PUBLIC_PATHS = {
     "/api/auth/signup",
     "/api/auth/register",
     "/api/auth/me",  # uses JWT dep directly — handled by route
-    "/api/auth/logout",          # clearing cookies you may not have is a no-op
+    "/api/auth/logout",  # clearing cookies you may not have is a no-op
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
     "/api/auth/verify-email",
     "/api/auth/resend-verification",
-    "/api/billing/plans",        # published prices; the pricing page needs them
+    "/api/billing/plans",  # published prices; the pricing page needs them
 }
 
 # Path prefixes that bypass middleware (WebSocket auth handled separately)
-PUBLIC_PREFIXES = (
-    "/ws/",
-)
+PUBLIC_PREFIXES = ("/ws/",)
 
 # Methods that do not change state, and so need no CSRF token (RFC 9110).
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
@@ -135,8 +136,10 @@ class OrgAuthMiddleware(BaseHTTPMiddleware):
         if from_cookie and request.method not in SAFE_METHODS:
             csrf_cookie = request.cookies.get(CSRF_COOKIE)
             csrf_header = request.headers.get(CSRF_HEADER)
-            if not csrf_cookie or not csrf_header or not secrets.compare_digest(
-                csrf_cookie, csrf_header
+            if (
+                not csrf_cookie
+                or not csrf_header
+                or not secrets.compare_digest(csrf_cookie, csrf_header)
             ):
                 logger.warning(
                     "CSRF check failed for %s %s", request.method, request.url.path
@@ -233,6 +236,7 @@ def require_role(*allowed_roles: str):
 
     Superadmin always passes regardless of allowed_roles.
     """
+
     def _check(request: Request):
         role = getattr(request.state, "role", None)
         if role == SUPERADMIN_ROLE:
@@ -242,11 +246,13 @@ def require_role(*allowed_roles: str):
                 status_code=403,
                 detail=f"Requires one of: {allowed_roles}. Your role: {role}",
             )
+
     return _check
 
 
 def require_superadmin():
     """Dependency factory that restricts a route to superadmins only."""
+
     def _check(request: Request):
         role = getattr(request.state, "role", None)
         if role != SUPERADMIN_ROLE:
@@ -254,6 +260,7 @@ def require_superadmin():
                 status_code=403,
                 detail="Requires superadmin role",
             )
+
     return _check
 
 
@@ -283,6 +290,7 @@ def require_plan(*allowed_plans: str):
                 )
         finally:
             session.close()
+
     return _check
 
 

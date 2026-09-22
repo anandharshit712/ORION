@@ -29,13 +29,17 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 
 from arep.database.connection import session_scope
 from arep.database.repository import (
-    BatchJobRepository, OrganisationRepository,
-    RunRepository, ScenarioRepository,
+    BatchJobRepository,
+    OrganisationRepository,
+    RunRepository,
+    ScenarioRepository,
 )
 from arep.execution.runner import EvaluationRunner
 from arep.models.examples.example_models import (
-    ConstantActionModel, EmergencyBrakeModel,
-    SimpleLaneKeepModel, RandomModel,
+    ConstantActionModel,
+    EmergencyBrakeModel,
+    SimpleLaneKeepModel,
+    RandomModel,
 )
 from arep.models.resolver import resolve_model
 from arep.scenario.parser import ScenarioParser
@@ -56,7 +60,10 @@ _BUILTIN_MODELS = {
 
 
 def _fail_run(
-    batch_id: int, seed: int, org_id: Optional[str], exc: BaseException,
+    batch_id: int,
+    seed: int,
+    org_id: Optional[str],
+    exc: BaseException,
 ) -> None:
     """Record a run as failed and refund its credit. Terminal path only, once.
 
@@ -75,7 +82,8 @@ def _fail_run(
         if not RunRepository(db).claim_failure(batch_id, seed, str(exc)):
             logger.info(
                 "failure already recorded for batch=%s seed=%s — not counting twice",
-                batch_id, seed,
+                batch_id,
+                seed,
             )
             return
 
@@ -107,9 +115,9 @@ def _refund_credit(org_id: Optional[str]) -> None:
 # fail the same way every time, and retrying them three times just bills three
 # times the compute before the same answer.
 TRANSIENT_ERRORS = (
-    OperationalError,          # includes disconnects and pool timeouts
+    OperationalError,  # includes disconnects and pool timeouts
     DBAPIError,
-    ConnectionError,           # builtin; redis.ConnectionError subclasses it
+    ConnectionError,  # builtin; redis.ConnectionError subclasses it
     TimeoutError,
 )
 
@@ -140,7 +148,10 @@ def execute_single_run(
     """
     logger.info(
         "[run_single_simulation] batch=%s scenario=%s model=%s seed=%d",
-        batch_id, scenario_path, model_name, seed,
+        batch_id,
+        scenario_path,
+        model_name,
+        seed,
     )
 
     # Idempotency (D-08). acks_late means Celery redelivers this message if the
@@ -152,7 +163,8 @@ def execute_single_run(
         if RunRepository(db).get_by_batch_and_seed(batch_id, seed) is not None:
             logger.info(
                 "run already recorded, skipping redelivery batch=%s seed=%d",
-                batch_id, seed,
+                batch_id,
+                seed,
             )
             return {"batch_id": batch_id, "seed": seed, "skipped": "already_recorded"}
 
@@ -165,15 +177,21 @@ def execute_single_run(
             countdown = RETRY_BACKOFF_SECONDS[task.request.retries]
             logger.warning(
                 "transient failure batch=%s seed=%d, retry %d/%d in %ds: %s",
-                batch_id, seed, task.request.retries + 1, MAX_RETRIES,
-                countdown, exc,
+                batch_id,
+                seed,
+                task.request.retries + 1,
+                MAX_RETRIES,
+                countdown,
+                exc,
             )
             # No refund and no counter bump here: the run is still in flight.
             # Refunding on every attempt would hand back one credit per retry.
             raise task.retry(exc=exc, countdown=countdown)
 
         logger.exception(
-            "transient failure exhausted retries batch=%s seed=%d", batch_id, seed,
+            "transient failure exhausted retries batch=%s seed=%d",
+            batch_id,
+            seed,
         )
         _fail_run(batch_id, seed, org_id, exc)
         raise
@@ -186,7 +204,10 @@ def execute_single_run(
 
     with session_scope() as db:
         RunRepository(db).save_result(
-            scenario_id, result, batch_job_id=batch_id, org_id=org_id,
+            scenario_id,
+            result,
+            batch_job_id=batch_id,
+            org_id=org_id,
         )
         batch_repo = BatchJobRepository(db)
         batch_repo.increment_completed(batch_id)
@@ -242,6 +263,7 @@ def run_batch_simulations(
     with session_scope() as db:
         scenario_repo = ScenarioRepository(db)
         from pathlib import Path
+
         scenario_rec = scenario_repo.upsert(
             name=scenario_def.name,
             version=scenario_def.version,

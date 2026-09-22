@@ -33,6 +33,7 @@ logger = get_logger("search.optimizer")
 @dataclass
 class SearchResult:
     """Complete result of an adversarial search run."""
+
     best_params: Dict[str, Any]
     best_fitness: float
     n_evals: int
@@ -87,7 +88,7 @@ class CMAESOptimizer:
         """
         try:
             import cma
-        except ImportError as exc:      # pragma: no cover - depends on extras
+        except ImportError as exc:  # pragma: no cover - depends on extras
             raise ImportError(
                 "Adversarial search needs the cma package: "
                 "pip install 'arep[search]'"
@@ -97,9 +98,13 @@ class CMAESOptimizer:
             # Nothing to search. Returning an empty result beats running 200
             # identical simulations and reporting the last one.
             return SearchResult(
-                best_params={}, best_fitness=0.0, n_evals=0,
-                falsification_found=False, falsification_params=None,
-                optimizer_used="cma-es", converged=True,
+                best_params={},
+                best_fitness=0.0,
+                n_evals=0,
+                falsification_found=False,
+                falsification_params=None,
+                optimizer_used="cma-es",
+                converged=True,
             )
 
         if self.space.n_dims == 1:
@@ -108,7 +113,9 @@ class CMAESOptimizer:
             # a legitimate thing to search, just not with this algorithm.
             logger.info("Single-dimension space — using random search instead")
             fallback = RandomSearchOptimizer(
-                self.space, n_samples=self.max_evals, seed=self.seed,
+                self.space,
+                n_samples=self.max_evals,
+                seed=self.seed,
             )
             result = fallback.run(objective)
             result.optimizer_used = "random (cma-es needs >= 2 dims)"
@@ -120,7 +127,7 @@ class CMAESOptimizer:
             self.sigma0 * float((highs - lows).mean()),
             {
                 "popsize": self.popsize,
-                "seed": self.seed + 1,   # cma rejects seed=0 as "use entropy"
+                "seed": self.seed + 1,  # cma rejects seed=0 as "use entropy"
                 "maxfevals": self.max_evals,
                 "bounds": [list(lows), list(highs)],
                 "verbose": -9,
@@ -141,14 +148,15 @@ class CMAESOptimizer:
                 if objective.falsification_found:
                     break
 
-            strategy.tell(candidates[:len(costs)], costs)
+            strategy.tell(candidates[: len(costs)], costs)
 
             if objective.falsification_found:
                 logger.info("Falsification found after %d evaluations", evaluations)
                 break
 
-        return self._result(objective, evaluations, "cma-es",
-                            converged=bool(strategy.stop()))
+        return self._result(
+            objective, evaluations, "cma-es", converged=bool(strategy.stop())
+        )
 
     def strategy_bounds(self):
         """Box bounds as arrays, so a proposal cannot leave the declared space."""
@@ -214,5 +222,8 @@ class RandomSearchOptimizer:
                 break
 
         return CMAESOptimizer._result(
-            objective, evaluations, "random", converged=True,
+            objective,
+            evaluations,
+            "random",
+            converged=True,
         )

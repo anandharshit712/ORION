@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-
 # ── Enums ────────────────────────────────────────────────────────────────
+
 
 class RoadType(Enum):
     HIGHWAY = "highway"
@@ -38,9 +38,11 @@ class EventType(Enum):
 
 # ── Component dataclasses ────────────────────────────────────────────────
 
+
 @dataclass
 class VehicleInitialCondition:
     """Initial conditions for a vehicle."""
+
     x: float = 0.0
     y: float = 0.0
     heading: float = 0.0
@@ -52,6 +54,7 @@ class VehicleInitialCondition:
 @dataclass
 class VehicleConstraints:
     """Physical constraints for the ego vehicle."""
+
     max_velocity: float = 30.0
     max_acceleration: float = 3.0
     max_deceleration: float = 8.0
@@ -61,6 +64,7 @@ class VehicleConstraints:
 @dataclass
 class RoadConfiguration:
     """Road environment configuration."""
+
     road_type: str = "highway"
     lanes: int = 2
     lane_width: float = 3.5
@@ -83,6 +87,7 @@ class RoadConfiguration:
 @dataclass
 class WeatherConfiguration:
     """Weather and visibility configuration."""
+
     condition: str = "clear"
     visibility: float = 1000.0
 
@@ -90,6 +95,7 @@ class WeatherConfiguration:
 @dataclass
 class TrafficObjectBehavior:
     """Behavior specification for a traffic object."""
+
     type: str = "constant_velocity"  # constant_velocity, scripted, follow_lane
     parameters: Dict[str, Any] = field(default_factory=dict)
 
@@ -97,19 +103,17 @@ class TrafficObjectBehavior:
 @dataclass
 class TrafficObjectDefinition:
     """Complete definition of a traffic object."""
+
     id: str = ""
     type: str = "car"
-    initial: VehicleInitialCondition = field(
-        default_factory=VehicleInitialCondition
-    )
-    behavior: TrafficObjectBehavior = field(
-        default_factory=TrafficObjectBehavior
-    )
+    initial: VehicleInitialCondition = field(default_factory=VehicleInitialCondition)
+    behavior: TrafficObjectBehavior = field(default_factory=TrafficObjectBehavior)
 
 
 @dataclass
 class ScenarioEvent:
     """Timed event during simulation."""
+
     type: str = ""
     trigger_time: float = 0.0
     parameters: Dict[str, Any] = field(default_factory=dict)
@@ -118,6 +122,7 @@ class ScenarioEvent:
 @dataclass
 class ScenarioTermination:
     """Termination conditions for the scenario."""
+
     conditions: List[str] = field(
         default_factory=lambda: ["collision", "off_road", "timeout"]
     )
@@ -126,6 +131,7 @@ class ScenarioTermination:
 
 # ── Master ScenarioDefinition ───────────────────────────────────────────
 
+
 @dataclass
 class ScenarioDefinition:
     """
@@ -133,6 +139,7 @@ class ScenarioDefinition:
 
     This is the master data structure loaded from YAML.
     """
+
     # Metadata
     name: str = "unnamed"
     version: str = "1.0"
@@ -143,26 +150,20 @@ class ScenarioDefinition:
     ego_initial: VehicleInitialCondition = field(
         default_factory=VehicleInitialCondition
     )
-    ego_constraints: VehicleConstraints = field(
-        default_factory=VehicleConstraints
-    )
+    ego_constraints: VehicleConstraints = field(default_factory=VehicleConstraints)
 
     # Environment
     road: RoadConfiguration = field(default_factory=RoadConfiguration)
     weather: WeatherConfiguration = field(default_factory=WeatherConfiguration)
 
     # Traffic
-    traffic_objects: List[TrafficObjectDefinition] = field(
-        default_factory=list
-    )
+    traffic_objects: List[TrafficObjectDefinition] = field(default_factory=list)
 
     # Events
     events: List[ScenarioEvent] = field(default_factory=list)
 
     # Termination
-    termination: ScenarioTermination = field(
-        default_factory=ScenarioTermination
-    )
+    termination: ScenarioTermination = field(default_factory=ScenarioTermination)
 
     # Seed (optional override)
     master_seed: Optional[int] = None

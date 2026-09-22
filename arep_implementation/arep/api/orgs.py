@@ -20,13 +20,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from arep.api.auth import (
-    hash_password, get_request_principal, require_verified_email,
+    hash_password,
+    get_request_principal,
+    require_verified_email,
 )
 from arep.api.middleware import generate_api_key, require_role
 from arep.database.connection import session_scope
 from arep.database.models import UserRecord
 from arep.database.repository import (
-    ApiKeyRepository, OrganisationRepository,
+    ApiKeyRepository,
+    OrganisationRepository,
 )
 from arep.utils.logging_config import get_logger
 
@@ -37,6 +40,7 @@ keys_router = APIRouter(prefix="/api/keys", tags=["API Keys"])
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
+
 
 class OrgDetailsResponse(BaseModel):
     id: str
@@ -63,7 +67,7 @@ class InvitedUserResponse(BaseModel):
     email: str
     username: str
     role: str
-    org_id: str
+    org_id: Optional[str]
 
     class Config:
         from_attributes = True
@@ -91,6 +95,7 @@ class ApiKeyCreateResponse(ApiKeyResponse):
 
 # ── Org routes ───────────────────────────────────────────────────────────
 
+
 @orgs_router.get("/me", response_model=OrgDetailsResponse)
 def get_my_org(request: Request):
     org_id, _, _ = get_request_principal(request)
@@ -114,9 +119,13 @@ def invite_user(req: InviteRequest, request: Request):
         raise HTTPException(400, "Password cannot be longer than 72 characters")
 
     with session_scope() as session:
-        existing = session.query(UserRecord).filter(
-            (UserRecord.email == req.email) | (UserRecord.username == req.username)
-        ).first()
+        existing = (
+            session.query(UserRecord)
+            .filter(
+                (UserRecord.email == req.email) | (UserRecord.username == req.username)
+            )
+            .first()
+        )
         if existing:
             raise HTTPException(409, "Email or username already registered")
 
@@ -134,14 +143,20 @@ def invite_user(req: InviteRequest, request: Request):
         )
         session.add(user)
         session.flush()
-        logger.info("Invited user=%s role=%s into org=%s", user.username, user.role, org.id)
+        logger.info(
+            "Invited user=%s role=%s into org=%s", user.username, user.role, org.id
+        )
         return InvitedUserResponse(
-            id=user.id, email=user.email, username=user.username,
-            role=user.role, org_id=user.org_id,
+            id=user.id,
+            email=user.email,
+            username=user.username,
+            role=user.role,
+            org_id=user.org_id,
         )
 
 
 # ── API key routes ───────────────────────────────────────────────────────
+
 
 @keys_router.get("/", response_model=List[ApiKeyResponse])
 def list_api_keys(request: Request):
@@ -155,7 +170,10 @@ def list_api_keys(request: Request):
     "/",
     response_model=ApiKeyCreateResponse,
     status_code=201,
-    dependencies=[Depends(require_role("owner", "admin", "member")), Depends(require_verified_email)],
+    dependencies=[
+        Depends(require_role("owner", "admin", "member")),
+        Depends(require_verified_email),
+    ],
 )
 def create_api_key(req: ApiKeyCreateRequest, request: Request):
     """Create an API key. Plaintext returned ONCE — store it securely."""
@@ -164,11 +182,16 @@ def create_api_key(req: ApiKeyCreateRequest, request: Request):
     with session_scope() as session:
         repo = ApiKeyRepository(session)
         record = repo.create(
-            org_id=org_id, user_id=user_id, key_hash=key_hash,
-            key_prefix=key_prefix, label=req.label,
+            org_id=org_id,
+            user_id=user_id,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            label=req.label,
         )
         session.flush()
-        logger.info("Created API key prefix=%s org=%s user=%s", key_prefix, org_id, user_id)
+        logger.info(
+            "Created API key prefix=%s org=%s user=%s", key_prefix, org_id, user_id
+        )
         return ApiKeyCreateResponse(
             id=record.id,
             label=record.label,

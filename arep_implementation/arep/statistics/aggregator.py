@@ -22,6 +22,7 @@ from arep.evaluation.composite import EvaluationResult
 @dataclass
 class AggregatedMetrics:
     """Aggregated metrics across multiple runs."""
+
     num_runs: int = 0
 
     # Composite
@@ -141,13 +142,13 @@ class StatisticalAggregator:
         if se < 1e-15:
             return mean, mean
 
-        ci = stats.t.interval(
-            self.confidence_level, df=n - 1, loc=mean, scale=se
-        )
+        ci = stats.t.interval(self.confidence_level, df=n - 1, loc=mean, scale=se)
         return float(ci[0]), float(ci[1])
 
     def _wilson_ci(
-        self, successes: int, total: int,
+        self,
+        successes: int,
+        total: int,
     ) -> tuple[float, float]:
         """
         Wilson score confidence interval for a proportion.

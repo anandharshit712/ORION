@@ -7,35 +7,37 @@ Configuration is immutable after loading.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 import os
 
 import yaml
 
 from arep.utils.exceptions import ConfigurationError
 
-
 # ── Dataclasses ──────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class SimulationConfig:
     """Core simulation parameters."""
-    timestep: float = 0.02               # seconds (50 Hz)
-    max_duration: float = 60.0           # seconds
-    max_steps: int = 3000                # max_duration / timestep
-    vehicle_length: float = 4.5          # meters
-    vehicle_width: float = 2.0           # meters
-    wheelbase: float = 2.7              # meters
-    max_velocity: float = 35.0           # m/s (~126 km/h)
-    max_acceleration: float = 3.0        # m/s²
-    max_deceleration: float = 8.0        # m/s²
-    max_steering_angle: float = 0.5      # radians
-    collision_tolerance: float = 1e-6    # metres overlap threshold
+
+    timestep: float = 0.02  # seconds (50 Hz)
+    max_duration: float = 60.0  # seconds
+    max_steps: int = 3000  # max_duration / timestep
+    vehicle_length: float = 4.5  # meters
+    vehicle_width: float = 2.0  # meters
+    wheelbase: float = 2.7  # meters
+    max_velocity: float = 35.0  # m/s (~126 km/h)
+    max_acceleration: float = 3.0  # m/s²
+    max_deceleration: float = 8.0  # m/s²
+    max_steering_angle: float = 0.5  # radians
+    collision_tolerance: float = 1e-6  # metres overlap threshold
 
 
 @dataclass(frozen=True)
 class ExecutionConfig:
     """Batch execution parameters."""
+
     num_workers: int = 4
     model_timeout_ms: int = 50
     default_num_runs: int = 100
@@ -45,6 +47,7 @@ class ExecutionConfig:
 @dataclass(frozen=True)
 class DatabaseConfig:
     """Database connection parameters."""
+
     url: str = "sqlite:///arep.db"
     echo: bool = False
     pool_size: int = 5
@@ -53,6 +56,7 @@ class DatabaseConfig:
 @dataclass(frozen=True)
 class PathConfig:
     """File system paths."""
+
     scenarios_dir: str = "scenarios"
     results_dir: str = "results"
     logs_dir: str = "logs"
@@ -67,6 +71,7 @@ class APIConfig:
     D-03), not performance tuning. ``cors_origins`` must be an explicit
     whitelist outside dev — ``validate_startup()`` refuses to boot on ``*``.
     """
+
     host: str = "0.0.0.0"
     port: int = 8000
     cors_origins: tuple = ("http://localhost:5173", "http://localhost:3000")
@@ -74,9 +79,9 @@ class APIConfig:
 
     # Rate limiting (slowapi). Empty string disables a specific limit.
     rate_limit_enabled: bool = True
-    rate_limit_login: str = "5/minute"       # per IP — credential stuffing
-    rate_limit_signup: str = "3/hour"        # per IP — account-farm abuse
-    rate_limit_default: str = "120/minute"   # per principal — global API budget
+    rate_limit_login: str = "5/minute"  # per IP — credential stuffing
+    rate_limit_signup: str = "3/hour"  # per IP — account-farm abuse
+    rate_limit_default: str = "120/minute"  # per principal — global API budget
     # "memory://" is per-process: with >1 uvicorn worker each worker keeps its
     # own counters, so the effective limit is N x the configured one. Point this
     # at the Redis the worker queue already uses to make limits global.
@@ -90,29 +95,30 @@ class APIConfig:
 @dataclass(frozen=True)
 class PhysicsConfig:
     """Enhanced physics parameters (Level 3)."""
-    mode: str = "kinematic"              # "kinematic" or "dynamic"
-    vehicle_mass: float = 1500.0         # kg
-    yaw_inertia: float = 2500.0          # kg·m²
-    cg_height: float = 0.5              # meters (center of gravity)
-    track_width: float = 1.6            # meters
-    front_weight_ratio: float = 0.55    # fraction on front axle
-    drag_coefficient: float = 0.3       # aerodynamic Cd
-    frontal_area: float = 2.2           # m²
-    rolling_resistance: float = 0.015   # Crr
-    surface_friction: float = 1.0       # 1.0=dry, 0.5=wet, 0.2=ice
+
+    mode: str = "kinematic"  # "kinematic" or "dynamic"
+    vehicle_mass: float = 1500.0  # kg
+    yaw_inertia: float = 2500.0  # kg·m²
+    cg_height: float = 0.5  # meters (center of gravity)
+    track_width: float = 1.6  # meters
+    front_weight_ratio: float = 0.55  # fraction on front axle
+    drag_coefficient: float = 0.3  # aerodynamic Cd
+    frontal_area: float = 2.2  # m²
+    rolling_resistance: float = 0.015  # Crr
+    surface_friction: float = 1.0  # 1.0=dry, 0.5=wet, 0.2=ice
 
 
 @dataclass(frozen=True)
 class RLConfig:
     """Reinforcement learning environment parameters (Level 3)."""
+
     max_episode_steps: int = 3000
-    reward_preset: str = "balanced"      # balanced, safety_first, speed_demon
+    reward_preset: str = "balanced"  # balanced, safety_first, speed_demon
     curriculum_enabled: bool = False
     guardian_enabled: bool = False
     guardian_ttc_threshold: float = 0.5  # seconds
     domain_randomization: bool = False
-    render_mode: str = ""                # "", "human", "rgb_array"
-
+    render_mode: str = ""  # "", "human", "rgb_array"
 
 
 @dataclass(frozen=True)
@@ -128,11 +134,12 @@ class BillingConfig:
 
     To go live: set billing_enabled: true in config and fill in Stripe credentials.
     """
-    billing_enabled: bool = False        # flip to True when Stripe is ready
-    beta_credits: int = 1000             # credits granted to new orgs in beta mode
-    stripe_secret_key: str = ""          # STRIPE_SECRET_KEY env var preferred
-    stripe_webhook_secret: str = ""      # STRIPE_WEBHOOK_SECRET env var preferred
-    stripe_publishable_key: str = ""     # sent to frontend
+
+    billing_enabled: bool = False  # flip to True when Stripe is ready
+    beta_credits: int = 1000  # credits granted to new orgs in beta mode
+    stripe_secret_key: str = ""  # STRIPE_SECRET_KEY env var preferred
+    stripe_webhook_secret: str = ""  # STRIPE_WEBHOOK_SECRET env var preferred
+    stripe_publishable_key: str = ""  # sent to frontend
 
 
 @dataclass(frozen=True)
@@ -143,13 +150,18 @@ class SandboxConfig:
     These are security limits, not performance tuning. Raising them widens the
     blast radius of a hostile model artefact. See docs/ROADMAP.md section 0.2.
     """
-    predict_timeout_s: float = 5.0        # hard wall-clock per predict()/reset() call
-    total_wallclock_s: float = 300.0      # hard wall-clock budget for a whole run
-    cpu_seconds: int = 60                 # RLIMIT_CPU for the model process (POSIX)
+
+    predict_timeout_s: float = 5.0  # hard wall-clock per predict()/reset() call
+    total_wallclock_s: float = 300.0  # hard wall-clock budget for a whole run
+    cpu_seconds: int = 60  # RLIMIT_CPU for the model process (POSIX)
     memory_bytes: int = 512 * 1024 * 1024  # RLIMIT_AS
-    max_file_bytes: int = 64 * 1024 * 1024  # RLIMIT_FSIZE - model may write to its tmpdir only
-    max_open_files: int = 64              # RLIMIT_NOFILE
-    require_network_namespace: bool = False  # True = refuse to run without kernel net isolation
+    max_file_bytes: int = (
+        64 * 1024 * 1024
+    )  # RLIMIT_FSIZE - model may write to its tmpdir only
+    max_open_files: int = 64  # RLIMIT_NOFILE
+    require_network_namespace: bool = (
+        False  # True = refuse to run without kernel net isolation
+    )
 
     # ── Docker submission path (Phase 2, D-01 step 2) ────────────────
     # The container runtime to run customer images under. "" uses Docker's
@@ -157,10 +169,10 @@ class SandboxConfig:
     # between the model and the host — the isolation step D-01 was waiting for.
     # Firecracker is reached the same way via a Docker runtime shim.
     container_runtime: str = ""
-    container_memory: str = "512m"        # --memory
-    container_cpus: str = "1.0"           # --cpus
-    container_pids_limit: int = 128       # --pids-limit, caps fork bombs
-    container_start_timeout_s: float = 30.0   # wait for the model to answer /health
+    container_memory: str = "512m"  # --memory
+    container_cpus: str = "1.0"  # --cpus
+    container_pids_limit: int = 128  # --pids-limit, caps fork bombs
+    container_start_timeout_s: float = 30.0  # wait for the model to answer /health
     # Refuse to run a customer image at all unless a hardened runtime is
     # configured. Off in dev (no gVisor on a laptop); turn it on in production
     # and the API fails loudly rather than running customer code under runc.
@@ -170,6 +182,7 @@ class SandboxConfig:
 @dataclass(frozen=True)
 class Config:
     """Root configuration for the entire AREP platform."""
+
     env: str = "development"
     debug: bool = False
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
@@ -214,34 +227,61 @@ def load_config(
     env = env or os.environ.get("AREP_ENV", "development")
 
     # Start with defaults
-    sim_kwargs = {}
-    exec_kwargs = {}
-    db_kwargs = {}
-    path_kwargs = {}
-    api_kwargs = {}
-    phys_kwargs = {}
-    rl_kwargs = {}
-    billing_kwargs = {}
-    sandbox_kwargs = {}
-    root_kwargs = {"env": env}
+    sim_kwargs: dict[str, Any] = {}
+    exec_kwargs: dict[str, Any] = {}
+    db_kwargs: dict[str, Any] = {}
+    path_kwargs: dict[str, Any] = {}
+    api_kwargs: dict[str, Any] = {}
+    phys_kwargs: dict[str, Any] = {}
+    rl_kwargs: dict[str, Any] = {}
+    billing_kwargs: dict[str, Any] = {}
+    sandbox_kwargs: dict[str, Any] = {}
+    root_kwargs: dict[str, Any] = {"env": env}
 
     # --- Tier 3: default.yaml ---
     if config_dir:
-        _apply_yaml(Path(config_dir) / "default.yaml",
-                     sim_kwargs, exec_kwargs, db_kwargs,
-                     path_kwargs, api_kwargs, phys_kwargs,
-                     rl_kwargs, billing_kwargs, sandbox_kwargs, root_kwargs)
+        _apply_yaml(
+            Path(config_dir) / "default.yaml",
+            sim_kwargs,
+            exec_kwargs,
+            db_kwargs,
+            path_kwargs,
+            api_kwargs,
+            phys_kwargs,
+            rl_kwargs,
+            billing_kwargs,
+            sandbox_kwargs,
+            root_kwargs,
+        )
 
         # --- Tier 2: env-specific YAML ---
-        _apply_yaml(Path(config_dir) / f"{env}.yaml",
-                     sim_kwargs, exec_kwargs, db_kwargs,
-                     path_kwargs, api_kwargs, phys_kwargs,
-                     rl_kwargs, billing_kwargs, sandbox_kwargs, root_kwargs)
+        _apply_yaml(
+            Path(config_dir) / f"{env}.yaml",
+            sim_kwargs,
+            exec_kwargs,
+            db_kwargs,
+            path_kwargs,
+            api_kwargs,
+            phys_kwargs,
+            rl_kwargs,
+            billing_kwargs,
+            sandbox_kwargs,
+            root_kwargs,
+        )
 
     # --- Tier 1: environment variables ---
-    _apply_env_vars(sim_kwargs, exec_kwargs, db_kwargs,
-                    path_kwargs, api_kwargs, phys_kwargs,
-                    rl_kwargs, billing_kwargs, sandbox_kwargs, root_kwargs)
+    _apply_env_vars(
+        sim_kwargs,
+        exec_kwargs,
+        db_kwargs,
+        path_kwargs,
+        api_kwargs,
+        phys_kwargs,
+        rl_kwargs,
+        billing_kwargs,
+        sandbox_kwargs,
+        root_kwargs,
+    )
 
     _config = Config(
         simulation=SimulationConfig(**sim_kwargs),
@@ -280,11 +320,19 @@ def reload_config(**kwargs) -> Config:
 
 # ── Private helpers ──────────────────────────────────────────────────────
 
+
 def _apply_yaml(
     filepath: Path,
-    sim: dict, exe: dict, db: dict,
-    paths: dict, api: dict, phys: dict,
-    rl: dict, billing: dict, sandbox: dict, root: dict,
+    sim: dict,
+    exe: dict,
+    db: dict,
+    paths: dict,
+    api: dict,
+    phys: dict,
+    rl: dict,
+    billing: dict,
+    sandbox: dict,
+    root: dict,
 ) -> None:
     """Merge values from a YAML file into kwargs dicts."""
     if not filepath.exists():
@@ -333,7 +381,7 @@ def _csv_tuple(v: str) -> tuple:
     return tuple(item.strip() for item in v.split(",") if item.strip())
 
 
-_ENV_MAP = {
+_ENV_MAP: dict[str, tuple[str, str, Callable[[str], Any]]] = {
     # AREP_TIMESTEP → simulation.timestep (float)
     "AREP_TIMESTEP": ("sim", "timestep", float),
     "AREP_MAX_DURATION": ("sim", "max_duration", float),
@@ -360,7 +408,11 @@ _ENV_MAP = {
     "STRIPE_SECRET_KEY": ("billing", "stripe_secret_key", str),
     "STRIPE_WEBHOOK_SECRET": ("billing", "stripe_webhook_secret", str),
     "STRIPE_PUBLISHABLE_KEY": ("billing", "stripe_publishable_key", str),
-    "AREP_BILLING_ENABLED": ("billing", "billing_enabled", lambda v: v.lower() in ("1", "true", "yes")),
+    "AREP_BILLING_ENABLED": (
+        "billing",
+        "billing_enabled",
+        lambda v: v.lower() in ("1", "true", "yes"),
+    ),
     "AREP_BETA_CREDITS": ("billing", "beta_credits", int),
     # Sandbox limits (Phase 0.2) — ops tunables, never secrets
     "ORION_SANDBOX_PREDICT_TIMEOUT_S": ("sandbox", "predict_timeout_s", float),
@@ -368,7 +420,8 @@ _ENV_MAP = {
     "ORION_SANDBOX_CPU_SECONDS": ("sandbox", "cpu_seconds", int),
     "ORION_SANDBOX_MEMORY_BYTES": ("sandbox", "memory_bytes", int),
     "ORION_SANDBOX_REQUIRE_NETNS": (
-        "sandbox", "require_network_namespace",
+        "sandbox",
+        "require_network_namespace",
         lambda v: v.lower() in ("1", "true", "yes"),
     ),
     "ORION_CONTAINER_RUNTIME": ("sandbox", "container_runtime", str),
@@ -376,20 +429,38 @@ _ENV_MAP = {
     "ORION_CONTAINER_CPUS": ("sandbox", "container_cpus", str),
     "ORION_CONTAINER_PIDS_LIMIT": ("sandbox", "container_pids_limit", int),
     "ORION_REQUIRE_HARDENED_RUNTIME": (
-        "sandbox", "require_hardened_runtime", _bool,
+        "sandbox",
+        "require_hardened_runtime",
+        _bool,
     ),
 }
 
 
 def _apply_env_vars(
-    sim: dict, exe: dict, db: dict,
-    paths: dict, api: dict, phys: dict,
-    rl: dict, billing: dict, sandbox: dict, root: dict,
+    sim: dict,
+    exe: dict,
+    db: dict,
+    paths: dict,
+    api: dict,
+    phys: dict,
+    rl: dict,
+    billing: dict,
+    sandbox: dict,
+    root: dict,
 ) -> None:
     """Override config values from environment variables."""
-    buckets = {"sim": sim, "exe": exe, "db": db,
-               "paths": paths, "api": api, "phys": phys,
-               "rl": rl, "billing": billing, "sandbox": sandbox, "root": root}
+    buckets = {
+        "sim": sim,
+        "exe": exe,
+        "db": db,
+        "paths": paths,
+        "api": api,
+        "phys": phys,
+        "rl": rl,
+        "billing": billing,
+        "sandbox": sandbox,
+        "root": root,
+    }
 
     for env_var, (bucket, key, converter) in _ENV_MAP.items():
         value = os.environ.get(env_var)
@@ -397,6 +468,4 @@ def _apply_env_vars(
             try:
                 buckets[bucket][key] = converter(value)
             except (ValueError, TypeError) as e:
-                raise ConfigurationError(
-                    f"Invalid value for {env_var}={value!r}: {e}"
-                )
+                raise ConfigurationError(f"Invalid value for {env_var}={value!r}: {e}")

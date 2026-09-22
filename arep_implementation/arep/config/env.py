@@ -4,6 +4,7 @@ Environment / settings loader.
 Loads .env at the project root on import (idempotent — safe in tests too).
 Provides a single Settings dataclass read once at startup.
 """
+
 from __future__ import annotations
 
 import os
@@ -18,7 +19,7 @@ from dotenv import load_dotenv
 _HERE = Path(__file__).resolve()
 for candidate in (
     _HERE.parent.parent.parent.parent.parent / ".env",  # workspace root
-    _HERE.parent.parent.parent.parent / ".env",         # arep_implementation/
+    _HERE.parent.parent.parent.parent / ".env",  # arep_implementation/
 ):
     if candidate.is_file():
         load_dotenv(candidate, override=False)
@@ -65,12 +66,20 @@ def get_settings() -> Settings:
         smtp_from=os.environ.get("SMTP_FROM", "").strip(),
         smtp_from_name=os.environ.get("SMTP_FROM_NAME", "ORION").strip(),
         smtp_use_tls=_bool("SMTP_USE_TLS", True),
-        public_url=os.environ.get("ORION_PUBLIC_URL", "http://localhost:5173").rstrip("/"),
-        reset_token_ttl_minutes=int(os.environ.get("RESET_TOKEN_TTL_MINUTES", "15") or "15"),
-        reset_rate_limit_per_hour=int(os.environ.get("RESET_RATE_LIMIT_PER_HOUR", "5") or "5"),
+        public_url=os.environ.get("ORION_PUBLIC_URL", "http://localhost:5173").rstrip(
+            "/"
+        ),
+        reset_token_ttl_minutes=int(
+            os.environ.get("RESET_TOKEN_TTL_MINUTES", "15") or "15"
+        ),
+        reset_rate_limit_per_hour=int(
+            os.environ.get("RESET_RATE_LIMIT_PER_HOUR", "5") or "5"
+        ),
         verification_token_ttl_hours=int(
-            os.environ.get("VERIFICATION_TOKEN_TTL_HOURS", "24") or "24"),
+            os.environ.get("VERIFICATION_TOKEN_TTL_HOURS", "24") or "24"
+        ),
         verification_resend_per_hour=int(
-            os.environ.get("VERIFICATION_RESEND_PER_HOUR", "3") or "3"),
+            os.environ.get("VERIFICATION_RESEND_PER_HOUR", "3") or "3"
+        ),
         redis_url=os.environ.get("ORION_REDIS_URL", "redis://localhost:6379/0"),
     )

@@ -40,11 +40,13 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
 
     from arep.worker.celery_app import celery_app
+
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = False
 
@@ -71,10 +73,16 @@ def clean_cookies(client):
 
 def _account(client, slug: str) -> dict:
     email = f"{slug}@example.com"
-    r = client.post("/api/auth/signup", json={
-        "email": email, "username": slug, "password": PASSWORD,
-        "org_name": f"{slug} org", "org_slug": slug,
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": slug,
+            "password": PASSWORD,
+            "org_name": f"{slug} org",
+            "org_slug": slug,
+        },
+    )
     assert r.status_code == 201, r.text
     verify_email_for(email)
     client.cookies.clear()
@@ -89,6 +97,7 @@ def _account(client, slug: str) -> dict:
 @pytest.fixture
 def org(client):
     import uuid
+
     return _account(client, f"bill{uuid.uuid4().hex[:8]}")
 
 
@@ -126,12 +135,15 @@ def fake_stripe(monkeypatch):
         api_key=None,
         Customer=types.SimpleNamespace(create=customer_create),
         checkout=types.SimpleNamespace(
-            Session=types.SimpleNamespace(create=checkout_create)),
+            Session=types.SimpleNamespace(create=checkout_create)
+        ),
         billing_portal=types.SimpleNamespace(
-            Session=types.SimpleNamespace(create=portal_create)),
+            Session=types.SimpleNamespace(create=portal_create)
+        ),
     )
 
     from arep.api import billing
+
     monkeypatch.setattr(billing, "_stripe", lambda: stub)
     return calls
 
@@ -152,13 +164,14 @@ def _set_plan(org_id: str, plan: str, credits: int) -> None:
 
 # -- Usage ----------------------------------------------------------------
 
+
 def test_usage_reports_plan_and_credits(client, org):
     r = client.get("/api/billing/usage", headers=org["headers"])
     assert r.status_code == 200
     body = r.json()
     assert body["plan"]
     assert "run_credits" in body
-    assert body["billing_active"] is False       # beta by default
+    assert body["billing_active"] is False  # beta by default
 
 
 def test_usage_requires_auth(client):
@@ -175,24 +188,39 @@ def test_usage_reports_unlimited_without_a_negative_number(client, org):
 
 # -- Beta mode refuses rather than half-works -----------------------------
 
+
 def test_checkout_is_503_in_beta(client, org):
-    r = client.post("/api/billing/checkout", headers=org["headers"], json={
-        "plan": "starter", "success_url": "https://x/ok", "cancel_url": "https://x/no",
-    })
+    r = client.post(
+        "/api/billing/checkout",
+        headers=org["headers"],
+        json={
+            "plan": "starter",
+            "success_url": "https://x/ok",
+            "cancel_url": "https://x/no",
+        },
+    )
     assert r.status_code == 503
 
 
 def test_portal_is_503_in_beta(client, org):
-    assert client.get("/api/billing/portal",
-                      headers=org["headers"]).status_code == 503
+    assert client.get("/api/billing/portal", headers=org["headers"]).status_code == 503
 
 
 # -- Checkout -------------------------------------------------------------
 
-def test_checkout_creates_a_customer_then_a_session(client, org, live_billing, fake_stripe):
-    r = client.post("/api/billing/checkout", headers=org["headers"], json={
-        "plan": "starter", "success_url": "https://x/ok", "cancel_url": "https://x/no",
-    })
+
+def test_checkout_creates_a_customer_then_a_session(
+    client, org, live_billing, fake_stripe
+):
+    r = client.post(
+        "/api/billing/checkout",
+        headers=org["headers"],
+        json={
+            "plan": "starter",
+            "success_url": "https://x/ok",
+            "cancel_url": "https://x/no",
+        },
+    )
     assert r.status_code == 200, r.text
     assert r.json()["checkout_url"].startswith("https://checkout.stripe.test")
 
@@ -203,28 +231,47 @@ def test_checkout_creates_a_customer_then_a_session(client, org, live_billing, f
     assert session_kwargs["metadata"]["plan"] == "starter"
 
 
-def test_the_customer_is_created_once_and_reused(client, org, live_billing, fake_stripe):
+def test_the_customer_is_created_once_and_reused(
+    client, org, live_billing, fake_stripe
+):
     """A second Stripe customer for one org splits their billing history."""
-    body = {"plan": "starter", "success_url": "https://x/ok", "cancel_url": "https://x/no"}
+    body = {
+        "plan": "starter",
+        "success_url": "https://x/ok",
+        "cancel_url": "https://x/no",
+    }
     client.post("/api/billing/checkout", headers=org["headers"], json=body)
     client.post("/api/billing/checkout", headers=org["headers"], json=body)
     assert len(fake_stripe["customers"]) == 1
 
 
 def test_checkout_rejects_an_unknown_plan(client, org, live_billing, fake_stripe):
-    r = client.post("/api/billing/checkout", headers=org["headers"], json={
-        "plan": "platinum", "success_url": "https://x/ok", "cancel_url": "https://x/no",
-    })
+    r = client.post(
+        "/api/billing/checkout",
+        headers=org["headers"],
+        json={
+            "plan": "platinum",
+            "success_url": "https://x/ok",
+            "cancel_url": "https://x/no",
+        },
+    )
     assert r.status_code == 400
 
 
-def test_checkout_rejects_plans_with_no_self_serve_price(client, org, live_billing,
-                                                         fake_stripe):
+def test_checkout_rejects_plans_with_no_self_serve_price(
+    client, org, live_billing, fake_stripe
+):
     """free needs no checkout; enterprise is negotiated."""
     for plan in ("free", "enterprise"):
-        r = client.post("/api/billing/checkout", headers=org["headers"], json={
-            "plan": plan, "success_url": "https://x/ok", "cancel_url": "https://x/no",
-        })
+        r = client.post(
+            "/api/billing/checkout",
+            headers=org["headers"],
+            json={
+                "plan": plan,
+                "success_url": "https://x/ok",
+                "cancel_url": "https://x/no",
+            },
+        )
         assert r.status_code == 400, plan
 
 
@@ -235,9 +282,15 @@ def test_portal_refuses_before_any_subscription(client, org, live_billing, fake_
 
 
 def test_portal_works_once_a_customer_exists(client, org, live_billing, fake_stripe):
-    client.post("/api/billing/checkout", headers=org["headers"], json={
-        "plan": "starter", "success_url": "https://x/ok", "cancel_url": "https://x/no",
-    })
+    client.post(
+        "/api/billing/checkout",
+        headers=org["headers"],
+        json={
+            "plan": "starter",
+            "success_url": "https://x/ok",
+            "cancel_url": "https://x/no",
+        },
+    )
     r = client.get("/api/billing/portal", headers=org["headers"])
     assert r.status_code == 200
     assert r.json()["checkout_url"].startswith("https://portal.stripe.test")
@@ -245,26 +298,37 @@ def test_portal_works_once_a_customer_exists(client, org, live_billing, fake_str
 
 # -- Webhooks -------------------------------------------------------------
 
+
 def _signature(payload: bytes, secret: str = WEBHOOK_SECRET) -> str:
     ts = int(time.time())
-    digest = hmac.new(secret.encode(), f"{ts}.".encode() + payload,
-                      hashlib.sha256).hexdigest()
+    digest = hmac.new(
+        secret.encode(), f"{ts}.".encode() + payload, hashlib.sha256
+    ).hexdigest()
     return f"t={ts},v1={digest}"
 
 
 def _event(event_id: str, event_type: str, obj: dict) -> bytes:
-    return json.dumps({
-        "id": event_id, "object": "event", "api_version": "2024-06-20",
-        "created": int(time.time()), "type": event_type,
-        "data": {"object": obj},
-    }).encode()
+    return json.dumps(
+        {
+            "id": event_id,
+            "object": "event",
+            "api_version": "2024-06-20",
+            "created": int(time.time()),
+            "type": event_type,
+            "data": {"object": obj},
+        }
+    ).encode()
 
 
 def _post_event(client, payload: bytes):
-    return client.post("/api/billing/webhook", content=payload, headers={
-        "Content-Type": "application/json",
-        "stripe-signature": _signature(payload),
-    })
+    return client.post(
+        "/api/billing/webhook",
+        content=payload,
+        headers={
+            "Content-Type": "application/json",
+            "stripe-signature": _signature(payload),
+        },
+    )
 
 
 def _stripe_customer_for(org_id: str) -> str:
@@ -283,20 +347,28 @@ def test_invoice_paid_grants_the_plan_credits(client, org, live_billing):
     _set_plan(org["org_id"], "starter", 0)
     customer = _stripe_customer_for(org["org_id"])
 
-    r = _post_event(client, _event("evt_inv_1", "invoice.paid",
-                                   {"id": "in_1", "object": "invoice",
-                                    "customer": customer}))
+    r = _post_event(
+        client,
+        _event(
+            "evt_inv_1",
+            "invoice.paid",
+            {"id": "in_1", "object": "invoice", "customer": customer},
+        ),
+    )
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "handled"
-    assert _credits(client, org) == 500          # starter allocation
+    assert _credits(client, org) == 500  # starter allocation
 
 
 def test_a_replayed_invoice_does_not_double_credits(client, org, live_billing):
     """The 0.3 idempotency ledger, now guarding real money."""
     _set_plan(org["org_id"], "starter", 0)
     customer = _stripe_customer_for(org["org_id"])
-    payload = _event("evt_inv_replay", "invoice.paid",
-                     {"id": "in_2", "object": "invoice", "customer": customer})
+    payload = _event(
+        "evt_inv_replay",
+        "invoice.paid",
+        {"id": "in_2", "object": "invoice", "customer": customer},
+    )
 
     assert _post_event(client, payload).status_code == 200
     after_first = _credits(client, org)
@@ -311,25 +383,45 @@ def test_a_topup_invoice_grants_the_packs_bought(client, org, live_billing):
     _set_plan(org["org_id"], "free", 0)
     customer = _stripe_customer_for(org["org_id"])
 
-    r = _post_event(client, _event("evt_topup_1", "invoice.paid", {
-        "id": "in_3", "object": "invoice", "customer": customer,
-        "metadata": {"topup_credits": "300"},
-    }))
+    r = _post_event(
+        client,
+        _event(
+            "evt_topup_1",
+            "invoice.paid",
+            {
+                "id": "in_3",
+                "object": "invoice",
+                "customer": customer,
+                "metadata": {"topup_credits": "300"},
+            },
+        ),
+    )
     assert r.status_code == 200
     assert _credits(client, org) == 300
 
 
-def test_subscription_updated_changes_the_plan_but_not_credits(client, org, live_billing):
+def test_subscription_updated_changes_the_plan_but_not_credits(
+    client, org, live_billing
+):
     """Otherwise every card update would hand out a free month."""
     _set_plan(org["org_id"], "free", 42)
     customer = _stripe_customer_for(org["org_id"])
 
-    r = _post_event(client, _event("evt_sub_1", "customer.subscription.updated", {
-        "id": "sub_1", "object": "subscription", "customer": customer,
-        "status": "active",
-        "current_period_end": int(time.time()) + 30 * 86400,
-        "metadata": {"plan": "pro"},
-    }))
+    r = _post_event(
+        client,
+        _event(
+            "evt_sub_1",
+            "customer.subscription.updated",
+            {
+                "id": "sub_1",
+                "object": "subscription",
+                "customer": customer,
+                "status": "active",
+                "current_period_end": int(time.time()) + 30 * 86400,
+                "metadata": {"plan": "pro"},
+            },
+        ),
+    )
     assert r.status_code == 200
 
     body = client.get("/api/billing/usage", headers=org["headers"]).json()
@@ -339,16 +431,26 @@ def test_subscription_updated_changes_the_plan_but_not_credits(client, org, live
     assert _credits(client, org) == 42, "a plan change must not grant credits"
 
 
-def test_subscription_deleted_drops_to_free_and_keeps_paid_credits(client, org,
-                                                                   live_billing):
+def test_subscription_deleted_drops_to_free_and_keeps_paid_credits(
+    client, org, live_billing
+):
     """Credits were paid for; confiscating them takes back delivered value."""
     _set_plan(org["org_id"], "pro", 250)
     customer = _stripe_customer_for(org["org_id"])
 
-    r = _post_event(client, _event("evt_sub_del", "customer.subscription.deleted", {
-        "id": "sub_2", "object": "subscription", "customer": customer,
-        "status": "canceled",
-    }))
+    r = _post_event(
+        client,
+        _event(
+            "evt_sub_del",
+            "customer.subscription.deleted",
+            {
+                "id": "sub_2",
+                "object": "subscription",
+                "customer": customer,
+                "status": "canceled",
+            },
+        ),
+    )
     assert r.status_code == 200
 
     body = client.get("/api/billing/usage", headers=org["headers"]).json()
@@ -358,39 +460,63 @@ def test_subscription_deleted_drops_to_free_and_keeps_paid_credits(client, org,
 
 def test_an_unhandled_event_type_is_accepted_not_errored(client, org, live_billing):
     """Stripe sends far more types than we subscribe to."""
-    r = _post_event(client, _event("evt_other", "charge.succeeded",
-                                   {"id": "ch_1", "object": "charge"}))
+    r = _post_event(
+        client,
+        _event("evt_other", "charge.succeeded", {"id": "ch_1", "object": "charge"}),
+    )
     assert r.status_code == 200
     assert r.json()["status"] == "ignored"
 
 
 def test_an_event_for_an_unknown_customer_is_not_an_error(client, live_billing):
     """A webhook for an org that was deleted must not wedge Stripe's retries."""
-    r = _post_event(client, _event("evt_unknown", "invoice.paid", {
-        "id": "in_x", "object": "invoice", "customer": "cus_does_not_exist",
-    }))
+    r = _post_event(
+        client,
+        _event(
+            "evt_unknown",
+            "invoice.paid",
+            {
+                "id": "in_x",
+                "object": "invoice",
+                "customer": "cus_does_not_exist",
+            },
+        ),
+    )
     assert r.status_code == 200
 
 
 # -- Credit enforcement ---------------------------------------------------
 
+
 def test_a_free_org_with_no_credits_gets_402_on_batch(client, org):
     """The acceptance criterion."""
     _set_plan(org["org_id"], "free", 0)
 
-    r = client.post("/api/runs/batch", headers=org["headers"], json={
-        "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
-        "model_name": "EmergencyBrake", "num_runs": 1, "master_seed": 1,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=org["headers"],
+        json={
+            "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
+            "model_name": "EmergencyBrake",
+            "num_runs": 1,
+            "master_seed": 1,
+        },
+    )
     assert r.status_code == 402
 
 
 def test_an_org_cannot_start_more_runs_than_it_has_credits(client, org):
     _set_plan(org["org_id"], "free", 2)
-    r = client.post("/api/runs/batch", headers=org["headers"], json={
-        "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
-        "model_name": "EmergencyBrake", "num_runs": 5, "master_seed": 2,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=org["headers"],
+        json={
+            "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
+            "model_name": "EmergencyBrake",
+            "num_runs": 5,
+            "master_seed": 2,
+        },
+    )
     assert r.status_code == 402
     assert _credits(client, org) == 2, "a refused batch must not spend anything"
 
@@ -400,14 +526,22 @@ def test_unlimited_credits_can_actually_run(client, org):
     it as "less than any amount" and refused every run."""
     _set_plan(org["org_id"], "enterprise", -1)
 
-    r = client.post("/api/runs/batch", headers=org["headers"], json={
-        "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
-        "model_name": "EmergencyBrake", "num_runs": 2, "master_seed": 3,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=org["headers"],
+        json={
+            "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
+            "model_name": "EmergencyBrake",
+            "num_runs": 2,
+            "master_seed": 3,
+        },
+    )
     assert r.status_code == 202, r.text
 
     from arep.database.connection import session_scope
     from arep.database.repository import OrganisationRepository
+
     with session_scope() as session:
-        assert OrganisationRepository(session).get_by_id(
-            org["org_id"]).run_credits == -1, "unlimited must stay unlimited"
+        assert (
+            OrganisationRepository(session).get_by_id(org["org_id"]).run_credits == -1
+        ), "unlimited must stay unlimited"

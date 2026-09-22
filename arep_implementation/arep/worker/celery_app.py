@@ -22,9 +22,7 @@ import os
 try:
     from celery import Celery
 except ImportError:
-    raise ImportError(
-        "Celery is not installed. Install with: pip install arep[worker]"
-    )
+    raise ImportError("Celery is not installed. Install with: pip install arep[worker]")
 
 from arep.utils.logging_config import get_logger
 
@@ -44,19 +42,15 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-
     # Timezone
     timezone="UTC",
     enable_utc=True,
-
     # Reliability
-    task_acks_late=True,              # re-queue on worker crash
+    task_acks_late=True,  # re-queue on worker crash
     task_reject_on_worker_lost=True,
-    worker_prefetch_multiplier=1,     # one task at a time per worker process
-
+    worker_prefetch_multiplier=1,  # one task at a time per worker process
     # Result expiry (keep results for 24 hours)
     result_expires=86400,
-
     # Route all simulation tasks to the 'simulation' queue
     task_routes={
         "arep.worker.tasks.run_single_simulation": {"queue": "simulation"},

@@ -4,6 +4,7 @@ Revision ID: 002
 Revises: 001
 Create Date: 2026-04-26
 """
+
 from __future__ import annotations
 from typing import Sequence, Union
 from alembic import op
@@ -30,7 +31,13 @@ def upgrade() -> None:
     op.create_table(
         "api_keys",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("org_id", sa.String(36), sa.ForeignKey("organisations.id"), nullable=False, index=True),
+        sa.Column(
+            "org_id",
+            sa.String(36),
+            sa.ForeignKey("organisations.id"),
+            nullable=False,
+            index=True,
+        ),
         sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id"), nullable=False),
         sa.Column("key_hash", sa.String(128), nullable=False, unique=True, index=True),
         sa.Column("key_prefix", sa.String(16), nullable=False),
@@ -51,8 +58,20 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime, nullable=False),
     )
     # Extend users for multi-tenancy
-    op.add_column("users", sa.Column("org_id", sa.String(36), sa.ForeignKey("organisations.id"), nullable=True, index=True))
-    op.add_column("users", sa.Column("role", sa.String(32), nullable=False, server_default="member"))
+    op.add_column(
+        "users",
+        sa.Column(
+            "org_id",
+            sa.String(36),
+            sa.ForeignKey("organisations.id"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    op.add_column(
+        "users",
+        sa.Column("role", sa.String(32), nullable=False, server_default="member"),
+    )
 
 
 def downgrade() -> None:

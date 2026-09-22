@@ -18,11 +18,12 @@ from arep.evaluation.collector import SimulationRecord
 @dataclass
 class ReactivityResult:
     """Reactivity metric results."""
-    brake_response_time: float        # seconds (inf if no response needed)
-    steering_response_time: float     # seconds
-    response_adequate: bool           # did the model avoid the hazard?
-    deceleration_magnitude: float     # m/s² max braking applied
-    reactivity_score: float           # composite [0, 1]
+
+    brake_response_time: float  # seconds (inf if no response needed)
+    steering_response_time: float  # seconds
+    response_adequate: bool  # did the model avoid the hazard?
+    deceleration_magnitude: float  # m/s² max braking applied
+    reactivity_score: float  # composite [0, 1]
 
 
 class ReactivityMetrics:
@@ -42,10 +43,10 @@ class ReactivityMetrics:
     STEERING_WEIGHT = 0.20
     ADEQUACY_WEIGHT = 0.40
 
-    TTC_TRIGGER = 5.0              # seconds — start measuring response when TTC drops below this
-    IDEAL_RESPONSE_TIME = 0.3       # seconds — ideal human reaction time
-    MAX_RESPONSE_TIME = 2.0         # seconds — above this → score = 0
-    BRAKE_THRESHOLD = 0.1           # brake value to count as "braking"
+    TTC_TRIGGER = 5.0  # seconds — start measuring response when TTC drops below this
+    IDEAL_RESPONSE_TIME = 0.3  # seconds — ideal human reaction time
+    MAX_RESPONSE_TIME = 2.0  # seconds — above this → score = 0
+    BRAKE_THRESHOLD = 0.1  # brake value to count as "braking"
 
     def compute(self, record: SimulationRecord) -> ReactivityResult:
         """
@@ -91,14 +92,14 @@ class ReactivityMetrics:
         brake_response = float("inf")
         for i in range(trigger_idx, min(len(actions), len(snapshots))):
             if actions[i].brake >= self.BRAKE_THRESHOLD:
-                brake_response = (
-                    snapshots[i].sim_time - snapshots[trigger_idx].sim_time
-                )
+                brake_response = snapshots[i].sim_time - snapshots[trigger_idx].sim_time
                 break
 
         # ── Steering response time ───────────────────────────────────
         steering_response = float("inf")
-        base_steering = actions[trigger_idx].steering if trigger_idx < len(actions) else 0.0
+        base_steering = (
+            actions[trigger_idx].steering if trigger_idx < len(actions) else 0.0
+        )
         for i in range(trigger_idx, len(actions)):
             if abs(actions[i].steering - base_steering) > 0.1:
                 if i < len(snapshots):

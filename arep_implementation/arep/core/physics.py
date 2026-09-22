@@ -23,7 +23,7 @@ Dynamic equations (new):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -31,22 +31,24 @@ from arep.core.state import VehicleState, Vector2D
 from arep.core.action import Action
 from arep.utils.validators import clamp
 
-
 # ── Physics Mode ─────────────────────────────────────────────────────────
+
 
 class PhysicsMode(Enum):
     """Physics simulation mode."""
-    KINEMATIC = "kinematic"   # Original bicycle model — fast, simple
-    DYNAMIC = "dynamic"       # Enhanced with tire model, mass, friction
+
+    KINEMATIC = "kinematic"  # Original bicycle model — fast, simple
+    DYNAMIC = "dynamic"  # Enhanced with tire model, mass, friction
 
 
 class SurfaceType(Enum):
     """Road surface types with associated friction coefficients."""
-    DRY_ASPHALT = "dry"       # μ ≈ 1.0
-    WET_ASPHALT = "wet"       # μ ≈ 0.5
-    ICE = "ice"               # μ ≈ 0.2
-    GRAVEL = "gravel"         # μ ≈ 0.6
-    CUSTOM = "custom"         # User-specified μ
+
+    DRY_ASPHALT = "dry"  # μ ≈ 1.0
+    WET_ASPHALT = "wet"  # μ ≈ 0.5
+    ICE = "ice"  # μ ≈ 0.2
+    GRAVEL = "gravel"  # μ ≈ 0.6
+    CUSTOM = "custom"  # User-specified μ
 
     def get_friction(self) -> float:
         """Default friction coefficient for this surface."""
@@ -60,6 +62,7 @@ class SurfaceType(Enum):
 
 
 # ── Pacejka Tire Model ──────────────────────────────────────────────────
+
 
 @dataclass
 class PacejkaParams:
@@ -75,13 +78,15 @@ class PacejkaParams:
       E = curvature factor (controls shape near peak)
       α = slip angle (radians) or slip ratio (dimensionless)
     """
-    B: float = 10.0     # Stiffness factor
-    C: float = 1.9      # Shape factor (lateral) — 1.9 for typical car tires
-    D: float = 1.0      # Peak factor (normalized — multiplied by μ·N at runtime)
-    E: float = 0.97     # Curvature factor
 
-    def compute_force(self, slip: float, normal_load: float,
-                      friction: float = 1.0) -> float:
+    B: float = 10.0  # Stiffness factor
+    C: float = 1.9  # Shape factor (lateral) — 1.9 for typical car tires
+    D: float = 1.0  # Peak factor (normalized — multiplied by μ·N at runtime)
+    E: float = 0.97  # Curvature factor
+
+    def compute_force(
+        self, slip: float, normal_load: float, friction: float = 1.0
+    ) -> float:
         """
         Compute tire force using Pacejka Magic Formula.
 
@@ -102,6 +107,7 @@ class PacejkaParams:
 
 # ── Dynamic Vehicle Parameters ──────────────────────────────────────────
 
+
 @dataclass
 class DynamicVehicleParams:
     """
@@ -110,15 +116,16 @@ class DynamicVehicleParams:
     These extend the basic kinematic parameters with mass, inertia,
     and aerodynamic properties.
     """
-    mass: float = 1500.0             # kg
-    yaw_inertia: float = 2500.0      # kg·m² (moment of inertia about Z axis)
-    cg_height: float = 0.5           # m (center of gravity height)
-    track_width: float = 1.6         # m (distance between left/right wheels)
-    front_weight_ratio: float = 0.55 # fraction of weight on front axle
-    drag_coefficient: float = 0.3    # aerodynamic Cd
-    frontal_area: float = 2.2        # m² (frontal cross-section)
+
+    mass: float = 1500.0  # kg
+    yaw_inertia: float = 2500.0  # kg·m² (moment of inertia about Z axis)
+    cg_height: float = 0.5  # m (center of gravity height)
+    track_width: float = 1.6  # m (distance between left/right wheels)
+    front_weight_ratio: float = 0.55  # fraction of weight on front axle
+    drag_coefficient: float = 0.3  # aerodynamic Cd
+    frontal_area: float = 2.2  # m² (frontal cross-section)
     rolling_resistance: float = 0.015  # rolling resistance coefficient
-    air_density: float = 1.225       # kg/m³
+    air_density: float = 1.225  # kg/m³
 
     # Tire parameters.
     #
@@ -133,16 +140,14 @@ class DynamicVehicleParams:
     # Do not publish an absolute handling claim from these numbers, and do not
     # tune them to make a scenario pass — that changes every stored baseline.
     # docs/METHODOLOGY.md states this limitation for the customer's reviewer.
-    front_tire: PacejkaParams = None
-    rear_tire: PacejkaParams = None
-
-    def __post_init__(self):
-        if self.front_tire is None:
-            # Front tires: higher stiffness, slightly less peak
-            self.front_tire = PacejkaParams(B=12.0, C=1.9, D=1.0, E=0.97)
-        if self.rear_tire is None:
-            # Rear tires: lower stiffness, higher peak
-            self.rear_tire = PacejkaParams(B=10.0, C=1.9, D=1.0, E=0.97)
+    # Front tires: higher stiffness, slightly less peak.
+    front_tire: PacejkaParams = field(
+        default_factory=lambda: PacejkaParams(B=12.0, C=1.9, D=1.0, E=0.97)
+    )
+    # Rear tires: lower stiffness, higher peak.
+    rear_tire: PacejkaParams = field(
+        default_factory=lambda: PacejkaParams(B=10.0, C=1.9, D=1.0, E=0.97)
+    )
 
 
 # ── Main Physics Engine ─────────────────────────────────────────────────
@@ -269,9 +274,7 @@ class VehiclePhysics:
         if abs(v) > 1e-6:
             dtheta = (v / self.wheelbase) * math.tan(steering_angle) * dt
             new_theta = theta + dtheta
-            new_state.heading = math.atan2(
-                math.sin(new_theta), math.cos(new_theta)
-            )
+            new_state.heading = math.atan2(math.sin(new_theta), math.cos(new_theta))
 
         # Velocity update
         new_v = v + acceleration * dt
@@ -336,9 +339,7 @@ class VehiclePhysics:
         # first order and is right in the regime that matters, where the tires
         # are not saturated. The residual error appears only while sliding, and
         # is documented in docs/METHODOLOGY.md rather than silently absorbed.
-        weight_transfer_long = (
-            p.mass * driver_accel * p.cg_height / self.wheelbase
-        )
+        weight_transfer_long = p.mass * driver_accel * p.cg_height / self.wheelbase
         F_front_normal = max(F_front_static - weight_transfer_long, 100.0)
         F_rear_normal = max(F_rear_static + weight_transfer_long, 100.0)
 
@@ -347,12 +348,8 @@ class VehiclePhysics:
         #    Rear:  α_r = −atan2(v_y − ω·l_r, v_x)
         #    In body frame: v_x = v (longitudinal), v_y ≈ 0 for small angles
         if v > 0.5:  # Avoid division instabilities at very low speed
-            alpha_front = steering_angle - math.atan2(
-                omega * self._lf, v
-            )
-            alpha_rear = -math.atan2(
-                -omega * self._lr, v
-            )
+            alpha_front = steering_angle - math.atan2(omega * self._lf, v)
+            alpha_rear = -math.atan2(-omega * self._lr, v)
         else:
             # At very low speed, use simplified geometry
             alpha_front = 0.0
@@ -392,8 +389,7 @@ class VehiclePhysics:
 
         # Yaw dynamics: torque = F_lat_front · l_f · cos(δ) - F_lat_rear · l_r
         yaw_torque = (
-            F_lat_front * self._lf * math.cos(steering_angle)
-            - F_lat_rear * self._lr
+            F_lat_front * self._lf * math.cos(steering_angle) - F_lat_rear * self._lr
         )
         alpha_yaw = yaw_torque / p.yaw_inertia  # angular acceleration
 
@@ -455,8 +451,15 @@ class VehiclePhysics:
         p = self.params
         effective_decel = (
             self.surface_friction * self.max_deceleration
-            + (0.5 * p.air_density * p.drag_coefficient
-               * p.frontal_area * velocity * velocity) / p.mass
+            + (
+                0.5
+                * p.air_density
+                * p.drag_coefficient
+                * p.frontal_area
+                * velocity
+                * velocity
+            )
+            / p.mass
             + p.rolling_resistance * GRAVITY
         )
         effective_decel = max(effective_decel, 0.1)
@@ -486,9 +489,7 @@ class VehiclePhysics:
             state.position.y + state.velocity * math.sin(state.heading) * time_horizon,
         )
 
-    def get_tire_forces(
-        self, state: VehicleState, action: Action
-    ) -> dict:
+    def get_tire_forces(self, state: VehicleState, action: Action) -> dict:
         """
         Diagnostic: compute current tire forces without stepping.
 

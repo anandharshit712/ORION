@@ -42,30 +42,30 @@ billing_router = APIRouter(prefix="/api/billing", tags=["Billing"])
 
 # Plan definitions
 PLAN_CREDITS: dict[str, int] = {
-    "beta":        -1,
-    "free":        50,
-    "starter":    500,
-    "pro":      3_000,
-    "enterprise":  -1,
+    "beta": -1,
+    "free": 50,
+    "starter": 500,
+    "pro": 3_000,
+    "enterprise": -1,
 }
 
 PLAN_PRICES: dict[str, Optional[str]] = {
-    "free":       None,
-    "starter":    "price_starter_monthly",   # TODO: real Stripe price ID
-    "pro":        "price_pro_monthly",        # TODO: real Stripe price ID
+    "free": None,
+    "starter": "price_starter_monthly",  # TODO: real Stripe price ID
+    "pro": "price_pro_monthly",  # TODO: real Stripe price ID
     "enterprise": None,
 }
 
 PLAN_MONTHLY_USD: dict[str, Optional[int]] = {
-    "free":       0,
-    "starter":   49,
-    "pro":      199,
-    "enterprise": None,   # negotiated
+    "free": 0,
+    "starter": 49,
+    "pro": 199,
+    "enterprise": None,  # negotiated
 }
 
-TOPUP_PRICE_ID   = "price_topup_100_runs"    # TODO: real Stripe price ID
-TOPUP_CREDITS    = 100
-TOPUP_AMOUNT_USD = 10_00                     # $10.00 in cents
+TOPUP_PRICE_ID = "price_topup_100_runs"  # TODO: real Stripe price ID
+TOPUP_CREDITS = 100
+TOPUP_AMOUNT_USD = 10_00  # $10.00 in cents
 
 
 def _billing_disabled_error() -> HTTPException:
@@ -132,7 +132,7 @@ def list_plans():
             self_serve=PLAN_PRICES.get(name) is not None,
         )
         for name, credits in PLAN_CREDITS.items()
-        if name != "beta"          # internal state, not a purchasable plan
+        if name != "beta"  # internal state, not a purchasable plan
     ]
 
 
@@ -148,7 +148,7 @@ def get_billing_status(request: Request):
             raise HTTPException(status_code=404, detail="Organisation not found")
         plan = org.plan if org.plan else "beta"
         credits = org.run_credits
-        unlimited = (credits == -1)
+        unlimited = credits == -1
         period_end = org.current_period_end
         status = org.subscription_status
 
@@ -337,7 +337,7 @@ def verify_stripe_signature(payload: bytes, signature_header: Optional[str]):
 
     try:
         return stripe.Webhook.construct_event(payload, signature_header, secret)
-    except ValueError as exc:                        # unparseable body
+    except ValueError as exc:  # unparseable body
         logger.warning("Stripe webhook payload rejected: %s", exc)
         raise HTTPException(status_code=400, detail="Invalid webhook payload")
     except stripe.error.SignatureVerificationError as exc:
@@ -383,12 +383,17 @@ async def stripe_webhook(
     event_type = getattr(event, "type", None)
     if not event_id:
         raise HTTPException(status_code=400, detail="Webhook event has no id")
+    if not event_type:
+        raise HTTPException(status_code=400, detail="Webhook event has no type")
 
     with session_scope() as session:
         repo = WebhookEventRepository(session)
         if not repo.claim(event_id, provider="stripe", event_type=event_type):
-            logger.info("Stripe webhook %s (%s) already processed -- replay ignored",
-                        event_id, event_type)
+            logger.info(
+                "Stripe webhook %s (%s) already processed -- replay ignored",
+                event_id,
+                event_type,
+            )
             return {"status": "duplicate", "event_id": event_id}
 
         if not cfg.billing.billing_enabled:
@@ -399,8 +404,11 @@ async def stripe_webhook(
             # Stripe's retry window is hours, so nothing pending here survives
             # to the day billing goes live.
             repo.mark_processed(event_id)
-            logger.info("Stripe webhook %s (%s) verified in beta mode -- no action",
-                        event_id, event_type)
+            logger.info(
+                "Stripe webhook %s (%s) verified in beta mode -- no action",
+                event_id,
+                event_type,
+            )
             return {"status": "beta_noop", "event_id": event_id}
 
     handler = _EVENT_HANDLERS.get(event_type)
@@ -430,6 +438,7 @@ async def stripe_webhook(
 
 
 # ── Webhook handlers (Phase 1.4) ─────────────────────────────────────────
+
 
 def _metadata_value(obj, key: str) -> Optional[str]:
     """Read one metadata key off a Stripe object.
@@ -466,7 +475,9 @@ def _org_for_event(obj) -> Optional[str]:
     if not customer_id:
         return None
     with session_scope() as session:
-        org = OrganisationRepository(session).get_by_stripe_customer_id(str(customer_id))
+        org = OrganisationRepository(session).get_by_stripe_customer_id(
+            str(customer_id)
+        )
         return org.id if org else None
 
 
@@ -544,7 +555,9 @@ def _handle_subscription_updated(event) -> None:
 
     plan = _plan_from_subscription(subscription)
     if plan is None:
-        logger.warning("subscription.updated for org=%s with an unrecognised price", org_id)
+        logger.warning(
+            "subscription.updated for org=%s with an unrecognised price", org_id
+        )
         return
 
     with session_scope() as session:
@@ -601,9 +614,11 @@ def deduct_credits(org_id: str, amount: int) -> None:
                 status_code=402,
                 detail=(
                     f"Insufficient run credits (tried to use {amount}). "
-                    + ("Contact the admin to top up your beta credit pool."
-                       if not live else
-                       "Please top up via /api/billing/topup.")
+                    + (
+                        "Contact the admin to top up your beta credit pool."
+                        if not live
+                        else "Please top up via /api/billing/topup."
+                    )
                 ),
             )
 

@@ -27,8 +27,8 @@ from arep.core.state import Vector2D
 from arep.core.physics import SurfaceType
 from arep.core.road import RoadGraph, RoadSegment, Junction
 
-
 # ── Internal helpers ──────────────────────────────────────────────────────
+
 
 def _straight_centerline(
     start: Vector2D,
@@ -41,8 +41,7 @@ def _straight_centerline(
     dy = math.sin(heading)
     n = max(2, int(length / step) + 1)
     return [
-        Vector2D(start.x + dx * i * step, start.y + dy * i * step)
-        for i in range(n)
+        Vector2D(start.x + dx * i * step, start.y + dy * i * step) for i in range(n)
     ]
 
 
@@ -59,25 +58,30 @@ def _arc_centerline(
     a = angle_start
     direction = 1.0 if angle_end >= angle_start else -1.0
     while direction * (angle_end - a) > 0:
-        points.append(Vector2D(
-            center.x + radius * math.cos(a),
-            center.y + radius * math.sin(a),
-        ))
+        points.append(
+            Vector2D(
+                center.x + radius * math.cos(a),
+                center.y + radius * math.sin(a),
+            )
+        )
         a += direction * step_rad
-    points.append(Vector2D(
-        center.x + radius * math.cos(angle_end),
-        center.y + radius * math.sin(angle_end),
-    ))
+    points.append(
+        Vector2D(
+            center.x + radius * math.cos(angle_end),
+            center.y + radius * math.sin(angle_end),
+        )
+    )
     return points
 
 
 # ── Public factory functions ──────────────────────────────────────────────
 
+
 def highway_straight(
     lanes: int = 2,
     length: float = 300.0,
     lane_width: float = 3.5,
-    speed_limit: float = 27.78,           # 100 km/h in m/s
+    speed_limit: float = 27.78,  # 100 km/h in m/s
     surface: SurfaceType = SurfaceType.DRY_ASPHALT,
 ) -> RoadGraph:
     """
@@ -106,7 +110,7 @@ def urban_straight(
     lanes: int = 2,
     length: float = 200.0,
     lane_width: float = 3.0,
-    speed_limit: float = 13.89,           # 50 km/h in m/s
+    speed_limit: float = 13.89,  # 50 km/h in m/s
     surface: SurfaceType = SurfaceType.DRY_ASPHALT,
 ) -> RoadGraph:
     """Urban straight road — lower speed limit, narrower lanes."""
@@ -149,9 +153,39 @@ def t_junction(
     )
 
     segments = {
-        "south_arm": RoadSegment("south_arm", "intersection_arm", south_cl, lanes, lane_width, speed_limit, surface, math.pi / 2, math.pi / 2),
-        "west_arm":  RoadSegment("west_arm",  "intersection_arm", west_cl,  lanes, lane_width, speed_limit, surface, 0.0, 0.0),
-        "east_arm":  RoadSegment("east_arm",  "intersection_arm", east_cl,  lanes, lane_width, speed_limit, surface, 0.0, 0.0),
+        "south_arm": RoadSegment(
+            "south_arm",
+            "intersection_arm",
+            south_cl,
+            lanes,
+            lane_width,
+            speed_limit,
+            surface,
+            math.pi / 2,
+            math.pi / 2,
+        ),
+        "west_arm": RoadSegment(
+            "west_arm",
+            "intersection_arm",
+            west_cl,
+            lanes,
+            lane_width,
+            speed_limit,
+            surface,
+            0.0,
+            0.0,
+        ),
+        "east_arm": RoadSegment(
+            "east_arm",
+            "intersection_arm",
+            east_cl,
+            lanes,
+            lane_width,
+            speed_limit,
+            surface,
+            0.0,
+            0.0,
+        ),
     }
     junction = Junction(
         junction_id="jct_main",
@@ -189,18 +223,25 @@ def four_way_intersection(
     jct_pos = Vector2D(0.0, 0.0)
 
     arm_defs = {
-        "south_arm": (Vector2D(0.0, -arm_length), math.pi / 2,  math.pi / 2),
-        "north_arm": (Vector2D(0.0, 0.0),          math.pi / 2,  math.pi / 2),
-        "west_arm":  (Vector2D(-arm_length, 0.0),  0.0,          0.0),
-        "east_arm":  (Vector2D(0.0, 0.0),           0.0,          0.0),
+        "south_arm": (Vector2D(0.0, -arm_length), math.pi / 2, math.pi / 2),
+        "north_arm": (Vector2D(0.0, 0.0), math.pi / 2, math.pi / 2),
+        "west_arm": (Vector2D(-arm_length, 0.0), 0.0, 0.0),
+        "east_arm": (Vector2D(0.0, 0.0), 0.0, 0.0),
     }
 
     segments = {}
     for arm_id, (start, h_start, h_end) in arm_defs.items():
         cl = _straight_centerline(start, heading=h_start, length=arm_length)
         segments[arm_id] = RoadSegment(
-            arm_id, "intersection_arm", cl, lanes, lane_width,
-            speed_limit, surface, h_start, h_end,
+            arm_id,
+            "intersection_arm",
+            cl,
+            lanes,
+            lane_width,
+            speed_limit,
+            surface,
+            h_start,
+            h_end,
         )
 
     junction = Junction(
@@ -220,7 +261,7 @@ def highway_onramp(
     merge_point: float = 250.0,
     lanes: int = 3,
     lane_width: float = 3.75,
-    speed_limit: float = 33.33,           # 120 km/h
+    speed_limit: float = 33.33,  # 120 km/h
     surface: SurfaceType = SurfaceType.DRY_ASPHALT,
 ) -> RoadGraph:
     """
@@ -229,16 +270,40 @@ def highway_onramp(
     Ego is on the main carriageway. An NPC may spawn on the ramp.
     The merge point is where the ramp lane joins the main road.
     """
-    main_cl = _straight_centerline(Vector2D(-50.0, 0.0), heading=0.0, length=main_length + 50)
+    main_cl = _straight_centerline(
+        Vector2D(-50.0, 0.0), heading=0.0, length=main_length + 50
+    )
     # Ramp approaches at ~15° angle from the right
     ramp_angle = math.radians(15)
-    ramp_start = Vector2D(merge_point - ramp_length * math.cos(ramp_angle),
-                           -(ramp_length * math.sin(ramp_angle)))
+    ramp_start = Vector2D(
+        merge_point - ramp_length * math.cos(ramp_angle),
+        -(ramp_length * math.sin(ramp_angle)),
+    )
     ramp_cl = _straight_centerline(ramp_start, heading=ramp_angle, length=ramp_length)
 
     segments = {
-        "main":  RoadSegment("main",  "straight",       main_cl, lanes,     lane_width, speed_limit, surface, 0.0, 0.0),
-        "ramp":  RoadSegment("ramp",  "ramp",           ramp_cl, 1,         lane_width, speed_limit * 0.75, surface, ramp_angle, 0.0),
+        "main": RoadSegment(
+            "main",
+            "straight",
+            main_cl,
+            lanes,
+            lane_width,
+            speed_limit,
+            surface,
+            0.0,
+            0.0,
+        ),
+        "ramp": RoadSegment(
+            "ramp",
+            "ramp",
+            ramp_cl,
+            1,
+            lane_width,
+            speed_limit * 0.75,
+            surface,
+            ramp_angle,
+            0.0,
+        ),
     }
     junction = Junction(
         junction_id="merge_point",
@@ -256,7 +321,7 @@ def roundabout(
     arm_count: int = 4,
     arm_length: float = 60.0,
     lane_width: float = 3.5,
-    speed_limit: float = 8.33,            # 30 km/h
+    speed_limit: float = 8.33,  # 30 km/h
     surface: SurfaceType = SurfaceType.DRY_ASPHALT,
 ) -> RoadGraph:
     """
@@ -276,8 +341,15 @@ def roundabout(
         step_deg=2.0,
     )
     segments["circle"] = RoadSegment(
-        "circle", "curve", circle_cl, 1, lane_width,
-        speed_limit, surface, 0.0, 2 * math.pi,
+        "circle",
+        "curve",
+        circle_cl,
+        1,
+        lane_width,
+        speed_limit,
+        surface,
+        0.0,
+        2 * math.pi,
     )
 
     # Arms
@@ -296,8 +368,13 @@ def roundabout(
         arm_id = f"arm_{i}"
         arm_ids.append(arm_id)
         segments[arm_id] = RoadSegment(
-            arm_id, "intersection_arm", cl, 1, lane_width,
-            speed_limit, surface,
+            arm_id,
+            "intersection_arm",
+            cl,
+            1,
+            lane_width,
+            speed_limit,
+            surface,
             heading_start=math.atan2(arm_toward_center.y, arm_toward_center.x),
             heading_end=math.atan2(arm_toward_center.y, arm_toward_center.x),
         )

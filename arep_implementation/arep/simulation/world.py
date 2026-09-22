@@ -13,8 +13,11 @@ from typing import List, Optional
 
 from arep.config import SimulationConfig
 from arep.core.state import (
-    WorldState, VehicleState, Vector2D,
-    TrafficLightInfo, LaneInfo,
+    WorldState,
+    VehicleState,
+    Vector2D,
+    TrafficLightInfo,
+    LaneInfo,
 )
 from arep.core.random_manager import RandomManager
 from arep.simulation import npc_bt
@@ -91,7 +94,14 @@ class WorldManager:
 
         for obj in world.dynamic_objects:
             behavior = world.npc_behaviors.get(obj.object_id)
-            btype = behavior["type"] if behavior else "constant_velocity"
+            if behavior is None:
+                # No registered behaviour means constant velocity. Handled up
+                # front so the branches below can rely on `behavior` being a
+                # dict rather than re-deriving that from the value of `btype`.
+                updated_objects.append(self._update_constant_velocity(obj, dt))
+                continue
+
+            btype = behavior["type"]
 
             if btype in ("reactive_vehicle", "reactive_pedestrian"):
                 bt = npc_bt.get_bt(behavior["bt_type"])
@@ -341,10 +351,14 @@ class WorldManager:
             return 0.0
 
         # Relative closing speed along the line connecting them
-        rel_vx = ego.velocity * math.cos(ego.heading) - obj.velocity * math.cos(obj.heading)
-        rel_vy = ego.velocity * math.sin(ego.heading) - obj.velocity * math.sin(obj.heading)
+        rel_vx = ego.velocity * math.cos(ego.heading) - obj.velocity * math.cos(
+            obj.heading
+        )
+        rel_vy = ego.velocity * math.sin(ego.heading) - obj.velocity * math.sin(
+            obj.heading
+        )
         rel_v = math.sqrt(rel_vx * rel_vx + rel_vy * rel_vy)
 
         if rel_v < 1e-6:
-            return None   # not closing
+            return None  # not closing
         return gap / rel_v

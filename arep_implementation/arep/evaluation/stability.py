@@ -22,11 +22,12 @@ from arep.evaluation.collector import SimulationRecord
 @dataclass
 class StabilityResult:
     """Stability metric results."""
-    acceleration_std: float       # m/s² standard deviation
-    mean_jerk: float              # m/s³
-    max_jerk: float               # m/s³
-    steering_std: float           # steering change std dev
-    stability_score: float        # composite [0, 1]
+
+    acceleration_std: float  # m/s² standard deviation
+    mean_jerk: float  # m/s³
+    max_jerk: float  # m/s³
+    steering_std: float  # steering change std dev
+    stability_score: float  # composite [0, 1]
 
 
 class StabilityMetrics:
@@ -45,7 +46,7 @@ class StabilityMetrics:
 
     # Normalization thresholds
     ACCEL_STD_THRESHOLD = 3.0  # m/s² (above this → score = 0)
-    JERK_THRESHOLD = 10.0      # m/s³
+    JERK_THRESHOLD = 10.0  # m/s³
     STEERING_STD_THRESHOLD = 0.5
 
     def compute(self, record: SimulationRecord) -> StabilityResult:
@@ -64,7 +65,8 @@ class StabilityMetrics:
         if len(snapshots) < 2:
             return StabilityResult(
                 acceleration_std=0.0,
-                mean_jerk=0.0, max_jerk=0.0,
+                mean_jerk=0.0,
+                max_jerk=0.0,
                 steering_std=0.0,
                 stability_score=1.0,
             )
@@ -93,9 +95,7 @@ class StabilityMetrics:
             steering_std = float(np.std(steering_changes))
         else:
             steering_std = 0.0
-        steering_score = max(
-            0.0, 1.0 - steering_std / self.STEERING_STD_THRESHOLD
-        )
+        steering_score = max(0.0, 1.0 - steering_std / self.STEERING_STD_THRESHOLD)
 
         # ── Composite ────────────────────────────────────────────────
         stability_score = (

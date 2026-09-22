@@ -35,49 +35,48 @@ class TestKinematicBackwardCompatibility(unittest.TestCase):
 
     def test_straight_line_motion(self):
         """Driving straight should increase x, not change y or heading."""
-        state = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=10.
-        )
-        action = Action(steering=0., throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.0, throttle=0.5, brake=0.0)
         new = self.physics.update(state, action)
 
-        self.assertGreater(new.position.x, 0.)
-        self.assertAlmostEqual(new.position.y, 0., places=10)
-        self.assertAlmostEqual(new.heading, 0., places=10)
+        self.assertGreater(new.position.x, 0.0)
+        self.assertAlmostEqual(new.position.y, 0.0, places=10)
+        self.assertAlmostEqual(new.heading, 0.0, places=10)
 
     def test_velocity_update(self):
         """Velocity should change by acceleration × dt."""
-        state = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=10.)
-        action = Action(steering=0., throttle=1.0, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.0, throttle=1.0, brake=0.0)
         new = self.physics.update(state, action)
 
         expected_accel = action.get_acceleration(
             self.config.max_acceleration, self.config.max_deceleration
         )
-        expected_v = 10. + expected_accel * self.config.timestep
+        expected_v = 10.0 + expected_accel * self.config.timestep
         self.assertAlmostEqual(new.velocity, expected_v, places=10)
 
     def test_braking(self):
         """Braking should reduce velocity."""
-        state = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=10.)
-        action = Action(steering=0., throttle=0., brake=1.0)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.0, throttle=0.0, brake=1.0)
         new = self.physics.update(state, action)
-        self.assertLess(new.velocity, 10.)
+        self.assertLess(new.velocity, 10.0)
 
     def test_velocity_never_negative(self):
         """Velocity should be clamped at zero, not go negative."""
-        state = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=0.1)
-        action = Action(steering=0., throttle=0., brake=1.0)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=0.1)
+        action = Action(steering=0.0, throttle=0.0, brake=1.0)
         new = self.physics.update(state, action)
-        self.assertGreaterEqual(new.velocity, 0.)
+        self.assertGreaterEqual(new.velocity, 0.0)
 
     def test_max_velocity_clamped(self):
         """Velocity should not exceed max_velocity."""
         state = VehicleState(
-            position=Vector2D(0., 0.), heading=0.,
-            velocity=self.config.max_velocity - 0.01
+            position=Vector2D(0.0, 0.0),
+            heading=0.0,
+            velocity=self.config.max_velocity - 0.01,
         )
-        action = Action(steering=0., throttle=1.0, brake=0.)
+        action = Action(steering=0.0, throttle=1.0, brake=0.0)
 
         # Step many times
         for _ in range(100):
@@ -87,17 +86,17 @@ class TestKinematicBackwardCompatibility(unittest.TestCase):
 
     def test_steering_changes_heading(self):
         """Non-zero steering with velocity should change heading."""
-        state = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=10.)
-        action = Action(steering=0.5, throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.5, throttle=0.5, brake=0.0)
         new = self.physics.update(state, action)
-        self.assertNotAlmostEqual(new.heading, 0.)
+        self.assertNotAlmostEqual(new.heading, 0.0)
 
     def test_heading_wrapping(self):
         """Heading should stay in [-π, π]."""
         state = VehicleState(
-            position=Vector2D(0., 0.), heading=math.pi - 0.01, velocity=10.
+            position=Vector2D(0.0, 0.0), heading=math.pi - 0.01, velocity=10.0
         )
-        action = Action(steering=1.0, throttle=0.5, brake=0.)
+        action = Action(steering=1.0, throttle=0.5, brake=0.0)
 
         for _ in range(50):
             state = self.physics.update(state, action)
@@ -107,7 +106,7 @@ class TestKinematicBackwardCompatibility(unittest.TestCase):
 
     def test_determinism(self):
         """Same inputs must always produce same outputs."""
-        state = VehicleState(position=Vector2D(10., 5.), heading=0.3, velocity=15.)
+        state = VehicleState(position=Vector2D(10.0, 5.0), heading=0.3, velocity=15.0)
         action = Action(steering=0.3, throttle=0.6, brake=0.1)
 
         r1 = self.physics.update(state, action)
@@ -123,24 +122,24 @@ class TestPacejkaTireModel(unittest.TestCase):
     """Test the Pacejka Magic Formula implementation."""
 
     def setUp(self):
-        self.tire = PacejkaParams(B=10., C=1.9, D=1.0, E=0.97)
+        self.tire = PacejkaParams(B=10.0, C=1.9, D=1.0, E=0.97)
 
     def test_zero_slip_zero_force(self):
         """Zero slip angle should produce zero force."""
-        F = self.tire.compute_force(0., 5000., 1.0)
-        self.assertAlmostEqual(F, 0., places=5)
+        F = self.tire.compute_force(0.0, 5000.0, 1.0)
+        self.assertAlmostEqual(F, 0.0, places=5)
 
     def test_force_increases_with_slip(self):
         """Small slip increase should increase force."""
-        F1 = self.tire.compute_force(0.01, 5000., 1.0)
-        F2 = self.tire.compute_force(0.05, 5000., 1.0)
+        F1 = self.tire.compute_force(0.01, 5000.0, 1.0)
+        F2 = self.tire.compute_force(0.05, 5000.0, 1.0)
         self.assertGreater(abs(F2), abs(F1))
 
     def test_force_saturates(self):
         """Force should saturate (not grow indefinitely) at large slip."""
-        F_small = abs(self.tire.compute_force(0.05, 5000., 1.0))
-        F_large = abs(self.tire.compute_force(0.5, 5000., 1.0))
-        F_very_large = abs(self.tire.compute_force(1.0, 5000., 1.0))
+        F_small = abs(self.tire.compute_force(0.05, 5000.0, 1.0))
+        F_large = abs(self.tire.compute_force(0.5, 5000.0, 1.0))
+        F_very_large = abs(self.tire.compute_force(1.0, 5000.0, 1.0))
 
         # Force should grow then flatten — not linear
         growth_1 = F_large - F_small
@@ -149,8 +148,8 @@ class TestPacejkaTireModel(unittest.TestCase):
 
     def test_friction_scales_force(self):
         """Lower friction should reduce peak force proportionally."""
-        F_dry = abs(self.tire.compute_force(0.1, 5000., 1.0))
-        F_wet = abs(self.tire.compute_force(0.1, 5000., 0.5))
+        F_dry = abs(self.tire.compute_force(0.1, 5000.0, 1.0))
+        F_wet = abs(self.tire.compute_force(0.1, 5000.0, 0.5))
 
         # Wet should be approximately half of dry
         ratio = F_wet / F_dry
@@ -158,16 +157,16 @@ class TestPacejkaTireModel(unittest.TestCase):
 
     def test_normal_load_scales_force(self):
         """Higher normal load should increase force."""
-        F_light = abs(self.tire.compute_force(0.1, 3000., 1.0))
-        F_heavy = abs(self.tire.compute_force(0.1, 6000., 1.0))
+        F_light = abs(self.tire.compute_force(0.1, 3000.0, 1.0))
+        F_heavy = abs(self.tire.compute_force(0.1, 6000.0, 1.0))
         self.assertGreater(F_heavy, F_light)
 
     def test_sign_of_force(self):
         """Force direction should match slip direction."""
-        F_pos = self.tire.compute_force(0.1, 5000., 1.0)
-        F_neg = self.tire.compute_force(-0.1, 5000., 1.0)
-        self.assertGreater(F_pos, 0.)
-        self.assertLess(F_neg, 0.)
+        F_pos = self.tire.compute_force(0.1, 5000.0, 1.0)
+        F_neg = self.tire.compute_force(-0.1, 5000.0, 1.0)
+        self.assertGreater(F_pos, 0.0)
+        self.assertLess(F_neg, 0.0)
 
 
 class TestDynamicMode(unittest.TestCase):
@@ -175,55 +174,47 @@ class TestDynamicMode(unittest.TestCase):
 
     def setUp(self):
         self.config = SimulationConfig()
-        self.physics = VehiclePhysics(
-            self.config, mode=PhysicsMode.DYNAMIC
-        )
+        self.physics = VehiclePhysics(self.config, mode=PhysicsMode.DYNAMIC)
 
     def test_straight_line_dynamic(self):
         """Dynamic mode should also move forward when driving straight."""
-        state = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=10.
-        )
-        action = Action(steering=0., throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.0, throttle=0.5, brake=0.0)
         new = self.physics.update(state, action)
 
-        self.assertGreater(new.position.x, 0.)
+        self.assertGreater(new.position.x, 0.0)
         # Small lateral deviation is acceptable due to dynamics
-        self.assertAlmostEqual(new.position.y, 0., places=3)
+        self.assertAlmostEqual(new.position.y, 0.0, places=3)
 
     def test_braking_on_ice_longer_distance(self):
         """Braking on ice should take longer than on dry asphalt."""
         # No VehicleState needed: compute_stopping_distance takes a speed.
-        phys_dry = VehiclePhysics(
-            self.config, mode=PhysicsMode.DYNAMIC
-        )
+        phys_dry = VehiclePhysics(self.config, mode=PhysicsMode.DYNAMIC)
         phys_dry.set_surface(SurfaceType.DRY_ASPHALT)
 
-        phys_ice = VehiclePhysics(
-            self.config, mode=PhysicsMode.DYNAMIC
-        )
+        phys_ice = VehiclePhysics(self.config, mode=PhysicsMode.DYNAMIC)
         phys_ice.set_surface(SurfaceType.ICE)
 
-        d_dry = phys_dry.compute_stopping_distance(20.)
-        d_ice = phys_ice.compute_stopping_distance(20.)
+        d_dry = phys_dry.compute_stopping_distance(20.0)
+        d_ice = phys_ice.compute_stopping_distance(20.0)
 
         self.assertGreater(d_ice, d_dry)
 
     def test_aerodynamic_drag_at_high_speed(self):
         """At high speed, drag should reduce acceleration vs low speed."""
         state_slow = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=5.
+            position=Vector2D(0.0, 0.0), heading=0.0, velocity=5.0
         )
         state_fast = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=30.
+            position=Vector2D(0.0, 0.0), heading=0.0, velocity=30.0
         )
-        action = Action(steering=0., throttle=1.0, brake=0.)
+        action = Action(steering=0.0, throttle=1.0, brake=0.0)
 
         new_slow = self.physics.update(state_slow, action)
         new_fast = self.physics.update(state_fast, action)
 
-        accel_slow = new_slow.velocity - 5.
-        accel_fast = new_fast.velocity - 30.
+        accel_slow = new_slow.velocity - 5.0
+        accel_fast = new_fast.velocity - 30.0
 
         # Fast car should have less acceleration due to drag
         self.assertGreater(accel_slow, accel_fast)
@@ -231,10 +222,11 @@ class TestDynamicMode(unittest.TestCase):
     def test_velocity_clamped_dynamic(self):
         """Velocity should not exceed max in dynamic mode."""
         state = VehicleState(
-            position=Vector2D(0., 0.), heading=0.,
-            velocity=self.config.max_velocity - 0.01
+            position=Vector2D(0.0, 0.0),
+            heading=0.0,
+            velocity=self.config.max_velocity - 0.01,
         )
-        action = Action(steering=0., throttle=1.0, brake=0.)
+        action = Action(steering=0.0, throttle=1.0, brake=0.0)
 
         for _ in range(100):
             state = self.physics.update(state, action)
@@ -243,9 +235,7 @@ class TestDynamicMode(unittest.TestCase):
 
     def test_determinism_dynamic(self):
         """Dynamic mode must also be deterministic."""
-        state = VehicleState(
-            position=Vector2D(10., 5.), heading=0.3, velocity=15.
-        )
+        state = VehicleState(position=Vector2D(10.0, 5.0), heading=0.3, velocity=15.0)
         action = Action(steering=0.3, throttle=0.6, brake=0.1)
 
         phys1 = VehiclePhysics(self.config, mode=PhysicsMode.DYNAMIC)
@@ -261,23 +251,21 @@ class TestDynamicMode(unittest.TestCase):
 
     def test_steering_causes_heading_change_dynamic(self):
         """Steering in dynamic mode should induce yaw change."""
-        state = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=15.
-        )
-        action = Action(steering=0.5, throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=15.0)
+        action = Action(steering=0.5, throttle=0.5, brake=0.0)
 
         # Run several steps to build up yaw rate
         for _ in range(10):
             state = self.physics.update(state, action)
 
-        self.assertNotAlmostEqual(state.heading, 0.)
+        self.assertNotAlmostEqual(state.heading, 0.0)
 
     def test_heading_wrapping_dynamic(self):
         """Heading should stay in [-π, π] in dynamic mode."""
         state = VehicleState(
-            position=Vector2D(0., 0.), heading=math.pi - 0.01, velocity=10.
+            position=Vector2D(0.0, 0.0), heading=math.pi - 0.01, velocity=10.0
         )
-        action = Action(steering=1.0, throttle=0.5, brake=0.)
+        action = Action(steering=1.0, throttle=0.5, brake=0.0)
 
         for _ in range(100):
             state = self.physics.update(state, action)
@@ -287,20 +275,18 @@ class TestDynamicMode(unittest.TestCase):
 
     def test_reset_dynamic_state(self):
         """Resetting dynamic state should clear yaw rate."""
-        state = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=15.
-        )
-        action = Action(steering=0.8, throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=15.0)
+        action = Action(steering=0.8, throttle=0.5, brake=0.0)
 
         # Build up yaw rate
         for _ in range(20):
             state = self.physics.update(state, action)
 
-        self.assertNotEqual(self.physics._yaw_rate, 0.)
+        self.assertNotEqual(self.physics._yaw_rate, 0.0)
 
         # Reset
         self.physics.reset_dynamic_state()
-        self.assertEqual(self.physics._yaw_rate, 0.)
+        self.assertEqual(self.physics._yaw_rate, 0.0)
 
 
 class TestSurfaceTypes(unittest.TestCase):
@@ -341,8 +327,8 @@ class TestTireForceDiagnostics(unittest.TestCase):
     def test_kinematic_returns_no_forces(self):
         config = SimulationConfig()
         physics = VehiclePhysics(config, mode=PhysicsMode.KINEMATIC)
-        state = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=10.)
-        action = Action(steering=0., throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.0, throttle=0.5, brake=0.0)
 
         forces = physics.get_tire_forces(state, action)
         self.assertEqual(forces["mode"], "kinematic")
@@ -351,8 +337,8 @@ class TestTireForceDiagnostics(unittest.TestCase):
     def test_dynamic_returns_forces(self):
         config = SimulationConfig()
         physics = VehiclePhysics(config, mode=PhysicsMode.DYNAMIC)
-        state = VehicleState(position=Vector2D(0., 0.), heading=0., velocity=10.)
-        action = Action(steering=0.1, throttle=0.5, brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.1, throttle=0.5, brake=0.0)
 
         forces = physics.get_tire_forces(state, action)
         self.assertEqual(forces["mode"], "dynamic")
@@ -370,8 +356,8 @@ class TestStoppingDistanceComparison(unittest.TestCase):
         config = SimulationConfig()
         physics = VehiclePhysics(config, mode=PhysicsMode.KINEMATIC)
 
-        v = 20.
-        expected = v * v / (2. * config.max_deceleration)
+        v = 20.0
+        expected = v * v / (2.0 * config.max_deceleration)
         actual = physics.compute_stopping_distance(v)
         self.assertAlmostEqual(actual, expected, places=5)
 
@@ -382,8 +368,8 @@ class TestStoppingDistanceComparison(unittest.TestCase):
         phys_d = VehiclePhysics(config, mode=PhysicsMode.DYNAMIC)
         phys_d.set_surface(SurfaceType.DRY_ASPHALT)
 
-        d_k = phys_k.compute_stopping_distance(20.)
-        d_d = phys_d.compute_stopping_distance(20.)
+        d_k = phys_k.compute_stopping_distance(20.0)
+        d_d = phys_d.compute_stopping_distance(20.0)
 
         # Dynamic with drag should be shorter or comparable
         self.assertLess(d_d, d_k * 1.1)  # Within 10% or less
@@ -392,8 +378,8 @@ class TestStoppingDistanceComparison(unittest.TestCase):
         config = SimulationConfig()
         for mode in (PhysicsMode.KINEMATIC, PhysicsMode.DYNAMIC):
             physics = VehiclePhysics(config, mode=mode)
-            self.assertEqual(physics.compute_stopping_distance(0.), 0.)
-            self.assertEqual(physics.compute_time_to_stop(0.), 0.)
+            self.assertEqual(physics.compute_stopping_distance(0.0), 0.0)
+            self.assertEqual(physics.compute_time_to_stop(0.0), 0.0)
 
 
 class TestMultiStepConsistency(unittest.TestCase):
@@ -403,10 +389,8 @@ class TestMultiStepConsistency(unittest.TestCase):
         """With no throttle, drag and rolling should eventually stop the car."""
         config = SimulationConfig()
         physics = VehiclePhysics(config, mode=PhysicsMode.DYNAMIC)
-        state = VehicleState(
-            position=Vector2D(0., 0.), heading=0., velocity=10.
-        )
-        action = Action(steering=0., throttle=0., brake=0.)
+        state = VehicleState(position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0)
+        action = Action(steering=0.0, throttle=0.0, brake=0.0)
 
         # Coast for 30 seconds (1500 steps)
         for _ in range(1500):
@@ -428,17 +412,18 @@ class TestMultiStepConsistency(unittest.TestCase):
                 physics.reset_dynamic_state()
 
             state = VehicleState(
-                position=Vector2D(0., 0.), heading=0., velocity=15.
+                position=Vector2D(0.0, 0.0), heading=0.0, velocity=15.0
             )
-            action = Action(steering=0., throttle=0.5, brake=0.)
+            action = Action(steering=0.0, throttle=0.5, brake=0.0)
 
             for _ in range(100):
                 state = physics.update(state, action)
 
             # 100 steps × 0.02s = 2 seconds at ~15 m/s = ~30m
             self.assertGreater(
-                state.position.x, 20.,
-                f"Mode {mode.value}: insufficient forward progress"
+                state.position.x,
+                20.0,
+                f"Mode {mode.value}: insufficient forward progress",
             )
 
 

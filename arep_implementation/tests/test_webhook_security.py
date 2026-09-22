@@ -33,6 +33,7 @@ def db_path():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{path}")
@@ -106,14 +107,18 @@ def _event(event_id: str, event_type: str = "invoice.paid") -> bytes:
     converting the payload, and a fixture without it fails inside the library
     rather than in our code.
     """
-    return json.dumps({
-        "id": event_id,
-        "object": "event",
-        "api_version": "2024-06-20",
-        "created": int(time.time()),
-        "type": event_type,
-        "data": {"object": {"id": "in_test", "object": "invoice", "amount_paid": 4900}},
-    }).encode()
+    return json.dumps(
+        {
+            "id": event_id,
+            "object": "event",
+            "api_version": "2024-06-20",
+            "created": int(time.time()),
+            "type": event_type,
+            "data": {
+                "object": {"id": "in_test", "object": "invoice", "amount_paid": 4900}
+            },
+        }
+    ).encode()
 
 
 def _post(client, payload: bytes, signature: str | None):
@@ -124,6 +129,7 @@ def _post(client, payload: bytes, signature: str | None):
 
 
 # -- Signature verification -----------------------------------------------
+
 
 def test_valid_signature_is_accepted(signed_client):
     payload = _event("evt_valid_001")
@@ -157,7 +163,9 @@ def test_tampered_payload_is_rejected(signed_client):
 def test_stale_timestamp_is_rejected(signed_client):
     """Stripe's tolerance window — a captured request cannot be replayed later."""
     payload = _event("evt_stale_001")
-    old = _stripe_signature(payload, WEBHOOK_SECRET, timestamp=int(time.time()) - 86_400)
+    old = _stripe_signature(
+        payload, WEBHOOK_SECRET, timestamp=int(time.time()) - 86_400
+    )
     r = _post(signed_client, payload, old)
     assert r.status_code == 400
 
@@ -170,6 +178,7 @@ def test_garbage_body_with_valid_signature_is_rejected(signed_client):
 
 
 # -- Replay suppression (the acceptance criterion) ------------------------
+
 
 def test_replayed_event_id_is_a_noop(signed_client):
     """The D-03 acceptance criterion.
@@ -219,6 +228,7 @@ def test_event_is_recorded_in_the_ledger(signed_client):
 
 # -- The ledger's crash semantics -----------------------------------------
 
+
 def test_unfinished_events_stay_claimable(db_path):
     """A handler that died mid-flight must not swallow the retry.
 
@@ -231,8 +241,8 @@ def test_unfinished_events_stay_claimable(db_path):
 
     with session_scope() as session:
         repo = WebhookEventRepository(session)
-        assert repo.claim("evt_crash_001") is True      # first delivery
-        assert repo.claim("evt_crash_001") is True      # retry after a crash
+        assert repo.claim("evt_crash_001") is True  # first delivery
+        assert repo.claim("evt_crash_001") is True  # retry after a crash
 
     with session_scope() as session:
         repo = WebhookEventRepository(session)
@@ -240,7 +250,7 @@ def test_unfinished_events_stay_claimable(db_path):
 
     with session_scope() as session:
         repo = WebhookEventRepository(session)
-        assert repo.claim("evt_crash_001") is False     # now it is settled
+        assert repo.claim("evt_crash_001") is False  # now it is settled
 
 
 def test_mark_processed_stamps_a_time(db_path):
@@ -284,6 +294,7 @@ def test_provider_is_recorded_but_is_not_part_of_the_key(db_path):
 
 
 # -- Beta behaviour -------------------------------------------------------
+
 
 def test_beta_without_a_secret_still_accepts_and_drops(unsigned_client):
     """Local development must not require Stripe setup to boot."""

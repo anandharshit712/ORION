@@ -25,10 +25,11 @@ logger = get_logger("search.space")
 @dataclass
 class SearchDimension:
     """One bounded dimension in the search space."""
-    name: str             # e.g. "lead_vehicle.initial_x"
-    low: float            # minimum value (inclusive)
-    high: float           # maximum value (inclusive)
-    unit: str = ""        # e.g. "m", "m/s", "s" — for display only
+
+    name: str  # e.g. "lead_vehicle.initial_x"
+    low: float  # minimum value (inclusive)
+    high: float  # maximum value (inclusive)
+    unit: str = ""  # e.g. "m", "m/s", "s" — for display only
 
     @property
     def range(self) -> float:
@@ -65,12 +66,14 @@ class SearchSpace:
         """Extract every {min, max} pair from the parameterization block."""
         self._dimensions = []
         for path, leaf in sorted(_walk(self._scenario.parameterization)):
-            self._dimensions.append(SearchDimension(
-                name=path,
-                low=float(leaf["min"]),
-                high=float(leaf["max"]),
-                unit=str(leaf.get("unit", "")),
-            ))
+            self._dimensions.append(
+                SearchDimension(
+                    name=path,
+                    low=float(leaf["min"]),
+                    high=float(leaf["max"]),
+                    unit=str(leaf.get("unit", "")),
+                )
+            )
         logger.debug("Search space: %d dimensions", len(self._dimensions))
 
     @property
@@ -101,9 +104,7 @@ class SearchSpace:
         never declared and score the model on it.
         """
         if len(x) != len(self._dimensions):
-            raise ValueError(
-                f"Expected {len(self._dimensions)} values, got {len(x)}"
-            )
+            raise ValueError(f"Expected {len(self._dimensions)} values, got {len(x)}")
 
         params: Dict[str, Any] = {}
         for value, dimension in zip(x, self._dimensions):
@@ -125,6 +126,7 @@ class SearchSpace:
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
 
 def _walk(node, prefix: str = ""):
     """Yield (dotted path, {min, max} dict) for every range in the block.

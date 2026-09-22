@@ -44,9 +44,9 @@ COLLISION_RATE_LIMIT = 0.01
 # ── Built-in model name → class mapping ──────────────────────────────────
 BUILTIN_MODELS = {
     "emergency_brake": "arep.models.examples.example_models.EmergencyBrakeModel",
-    "constant":        "arep.models.examples.example_models.ConstantActionModel",
-    "lane_keep":       "arep.models.examples.example_models.SimpleLaneKeepModel",
-    "random":          "arep.models.examples.example_models.RandomModel",
+    "constant": "arep.models.examples.example_models.ConstantActionModel",
+    "lane_keep": "arep.models.examples.example_models.SimpleLaneKeepModel",
+    "random": "arep.models.examples.example_models.RandomModel",
 }
 
 # ── Scenario category → file pattern ─────────────────────────────────────
@@ -191,18 +191,20 @@ def run_suite(
         # A scenario passes on collision rate, not on composite score. A model
         # can be uncomfortable and safe; it cannot be comfortable and crash.
         collision_rate = float(getattr(aggregated, "collision_rate", 0.0))
-        scenarios.append({
-            "scenario": path.stem,
-            "path": str(path),
-            "runs": runs_per_scenario,
-            "composite_mean": round(float(aggregated.composite_mean), 4),
-            "safety_mean": round(float(aggregated.safety_mean), 4),
-            "compliance_mean": round(float(aggregated.compliance_mean), 4),
-            "stability_mean": round(float(aggregated.stability_mean), 4),
-            "reactivity_mean": round(float(aggregated.reactivity_mean), 4),
-            "collision_rate": round(collision_rate, 4),
-            "passed": collision_rate < COLLISION_RATE_LIMIT,
-        })
+        scenarios.append(
+            {
+                "scenario": path.stem,
+                "path": str(path),
+                "runs": runs_per_scenario,
+                "composite_mean": round(float(aggregated.composite_mean), 4),
+                "safety_mean": round(float(aggregated.safety_mean), 4),
+                "compliance_mean": round(float(aggregated.compliance_mean), 4),
+                "stability_mean": round(float(aggregated.stability_mean), 4),
+                "reactivity_mean": round(float(aggregated.reactivity_mean), 4),
+                "collision_rate": round(collision_rate, 4),
+                "passed": collision_rate < COLLISION_RATE_LIMIT,
+            }
+        )
 
     passed = sum(1 for s in scenarios if s["passed"])
     return {
@@ -266,7 +268,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     logger.info(
         "ORION Suite Runner starting — scenarios=%s, model=%s",
-        args.scenarios, args.model,
+        args.scenarios,
+        args.model,
     )
 
     try:
@@ -280,9 +283,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         report = run_suite(
-            scenario_paths, model, args.runs_per_scenario, args.seed,
+            scenario_paths,
+            model,
+            args.runs_per_scenario,
+            args.seed,
         )
-    except Exception as exc:                      # pragma: no cover - defensive
+    except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Suite run failed")
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR

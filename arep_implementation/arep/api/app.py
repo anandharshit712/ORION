@@ -27,8 +27,13 @@ from arep.api.ratelimit import limiter, rate_limit_exceeded_handler
 from arep.api.models_routes import models_api_router
 from arep.api.orgs import keys_router, orgs_router
 from arep.api.routes import (
-    health_router, models_router, scenarios_router,
-    evaluate_router, jobs_router, results_router, runs_router,
+    health_router,
+    models_router,
+    scenarios_router,
+    evaluate_router,
+    jobs_router,
+    results_router,
+    runs_router,
 )
 from arep.api.ws import ws_router
 from arep.config.validate import resolve_cors_origins, validate_startup
@@ -66,7 +71,13 @@ def create_app() -> FastAPI:
     # Rate limiting (D-03). The limiter must be on app.state: slowapi resolves
     # it from there, both in the decorator and in the middleware.
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    # Starlette types a handler as taking Exception; slowapi ships one narrowed
+    # to RateLimitExceeded. The registration pairs the two correctly at runtime
+    # -- only the declared signatures disagree. `warn_unused_ignores` will flag
+    # this line if slowapi ever widens it.
+    app.add_exception_handler(
+        RateLimitExceeded, rate_limit_exceeded_handler  # type: ignore[arg-type]
+    )
 
     # Starlette runs middleware in REVERSE order of registration, so this block
     # reads bottom-up: CORS first (preflight answered without auth), then
@@ -116,6 +127,7 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "arep.api.app:app",
         host="0.0.0.0",

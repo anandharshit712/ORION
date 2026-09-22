@@ -27,6 +27,7 @@ logger = get_logger("api.sim_registry")
 
 # ── LiveRun ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class LiveRun:
     """
@@ -36,12 +37,13 @@ class LiveRun:
     producer calls ``publish(frame)`` each tick. When the run ends
     (naturally or by error) a ``None`` sentinel is pushed to each queue.
     """
+
     run_id: str
     scenario_path: str
     scenario_name: str
     model_name: str
     master_seed: int
-    status: str                       # "running" | "complete" | "failed" | "cancelled"
+    status: str  # "running" | "complete" | "failed" | "cancelled"
     started_at: str
     org_id: Optional[str] = None
     user_id: Optional[int] = None
@@ -127,6 +129,7 @@ class LiveRun:
 
 # ── Registry ─────────────────────────────────────────────────────────────
 
+
 class SimulationRegistry:
     """Thread-safe (asyncio-safe) registry of live runs."""
 
@@ -163,6 +166,7 @@ def get_registry() -> SimulationRegistry:
 
 
 # ── Starter helper ───────────────────────────────────────────────────────
+
 
 async def start_run(
     scenario_path: str,
@@ -249,6 +253,7 @@ async def start_run(
                 # is wired to live runs — but the weighting is now one fact in
                 # one place, and changing it changes both.
                 from arep.evaluation.composite import CompositeEvaluator as _CE
+
                 run.final_metrics = {
                     "composite_score": (
                         m.get("safety_score", 0.0) * _CE.SAFETY_WEIGHT
@@ -278,6 +283,9 @@ async def start_run(
     run.producer_task = asyncio.create_task(producer(), name=f"sim-{run_id}")
     logger.info(
         "Live run started: run_id=%s scenario=%s model=%s seed=%s",
-        run_id, scenario_def.name, model_name, master_seed,
+        run_id,
+        scenario_def.name,
+        model_name,
+        master_seed,
     )
     return run

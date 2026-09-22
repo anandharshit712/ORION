@@ -153,21 +153,25 @@ class ScenarioParser:
                     type=obj_data["behavior"]["type"],
                     parameters=obj_data["behavior"].get("parameters", {}),
                 )
-                traffic_objects.append(TrafficObjectDefinition(
-                    id=obj_data["id"],
-                    type=obj_data["type"],
-                    initial=obj_initial,
-                    behavior=obj_behavior,
-                ))
+                traffic_objects.append(
+                    TrafficObjectDefinition(
+                        id=obj_data["id"],
+                        type=obj_data["type"],
+                        initial=obj_initial,
+                        behavior=obj_behavior,
+                    )
+                )
 
             # Events
             events = []
             for ev_data in data.get("events", []):
-                events.append(ScenarioEvent(
-                    type=ev_data["type"],
-                    trigger_time=float(ev_data["trigger_time"]),
-                    parameters=ev_data.get("parameters", {}),
-                ))
+                events.append(
+                    ScenarioEvent(
+                        type=ev_data["type"],
+                        trigger_time=float(ev_data["trigger_time"]),
+                        parameters=ev_data.get("parameters", {}),
+                    )
+                )
 
             # Termination
             term_data = data["termination"]

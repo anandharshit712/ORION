@@ -71,3 +71,29 @@ where = ["."]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["arep"]
+# Deliberately not --strict. The point of running mypy here is to catch the
+# errors that bite at runtime — None flowing into something that dereferences it
+# — not to annotate every local. Tighten per-module as code gets cleaned up.
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# Third-party packages with no type information. Several genuinely ship none
+# (celery, cma, weasyprint, sklearn); the rest are optional extras that are not
+# installed in every environment, so a missing-import error says nothing about
+# this codebase.
+[[tool.mypy.overrides]]
+module = [
+    "boto3.*",
+    "celery.*",
+    "cma.*",
+    "jose.*",
+    "scipy.*",
+    "sklearn.*",
+    "weasyprint.*",
+    "yaml.*",
+]
+ignore_missing_imports = true

@@ -15,10 +15,11 @@ from pathlib import Path
 
 from arep.api.sim_registry import get_registry, start_run
 
-
 SCENARIO = str(
     Path(__file__).parent.parent
-    / "scenarios" / "basic" / "straight_road_lead_vehicle.yaml"
+    / "scenarios"
+    / "basic"
+    / "straight_road_lead_vehicle.yaml"
 )
 
 
@@ -96,6 +97,7 @@ async def _registry_lookup():
 
 
 # ── pytest entrypoints ───────────────────────────────────────────────────
+
 
 def test_live_run_streams_frames():
     _run(_live_run_streams_frames())

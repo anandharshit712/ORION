@@ -17,8 +17,8 @@ import numpy as np
 
 from arep.utils.validators import clamp
 
-
 # ── Action ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Action:
@@ -32,6 +32,7 @@ class Action:
 
     Brake takes precedence over throttle when both are nonzero.
     """
+
     steering: float = 0.0
     throttle: float = 0.0
     brake: float = 0.0
@@ -111,9 +112,7 @@ class Action:
 
     def to_array(self) -> np.ndarray:
         """Convert to numpy array [steering, throttle, brake]."""
-        return np.array(
-            [self.steering, self.throttle, self.brake], dtype=np.float64
-        )
+        return np.array([self.steering, self.throttle, self.brake], dtype=np.float64)
 
     @staticmethod
     def from_array(arr: np.ndarray) -> Action:
@@ -141,6 +140,7 @@ class Action:
 
 # ── ActionAlternative ────────────────────────────────────────────────────
 
+
 @dataclass
 class ActionAlternative:
     """
@@ -149,8 +149,9 @@ class ActionAlternative:
     Simpler for models that prefer to output a single acceleration value
     instead of separate throttle/brake.
     """
-    steering: float = 0.0        # [-1, 1]
-    acceleration: float = 0.0    # m/s² (positive = accel, negative = brake)
+
+    steering: float = 0.0  # [-1, 1]
+    acceleration: float = 0.0  # m/s² (positive = accel, negative = brake)
 
     def __post_init__(self):
         self.steering = clamp(self.steering, -1.0, 1.0)

@@ -23,9 +23,9 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.config import get_config, reload_config      # noqa: E402
+from arep.config import get_config, reload_config  # noqa: E402
 from arep.models.container import ContainerModelRunner  # noqa: E402
-from arep.utils.exceptions import ModelSandboxError     # noqa: E402
+from arep.utils.exceptions import ModelSandboxError  # noqa: E402
 
 
 def _command(monkeypatch, host_port: int = 54321, **config_env) -> list[str]:
@@ -50,6 +50,7 @@ def restore_config():
 
 
 # -- The isolation flags --------------------------------------------------
+
 
 def test_all_capabilities_are_dropped(monkeypatch):
     command = _command(monkeypatch)
@@ -112,6 +113,7 @@ def test_the_image_is_the_last_argument(monkeypatch):
 
 # -- The hardened runtime -------------------------------------------------
 
+
 def test_no_runtime_flag_by_default(monkeypatch):
     """gVisor is not installed on a development machine."""
     command = _command(monkeypatch, ORION_CONTAINER_RUNTIME="")
@@ -137,6 +139,7 @@ def test_limits_come_from_config_not_from_the_code(monkeypatch):
 
 # -- Refusing rather than falling back ------------------------------------
 
+
 def test_without_docker_it_refuses_instead_of_calling_localhost(monkeypatch):
     """The old behaviour was to return an HTTP client aimed at localhost and
     hope. That is the bug, not a fallback."""
@@ -148,7 +151,9 @@ def test_without_docker_it_refuses_instead_of_calling_localhost(monkeypatch):
 
 def test_requiring_a_hardened_runtime_without_one_configured_refuses(monkeypatch):
     """Production sets this so customer code is never run under plain runc."""
-    monkeypatch.setattr("arep.models.container.shutil.which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(
+        "arep.models.container.shutil.which", lambda _: "/usr/bin/docker"
+    )
     monkeypatch.setenv("ORION_REQUIRE_HARDENED_RUNTIME", "true")
     monkeypatch.setenv("ORION_CONTAINER_RUNTIME", "")
     reload_config()
@@ -161,22 +166,25 @@ def test_a_sandbox_error_voids_the_run_rather_than_scoring_it():
     """ModelSandboxError is the contract EvaluationRunner relies on: the run is
     void and the credit is refunded, never scored as if it had finished."""
     from arep.utils.exceptions import ModelSandboxError as Err
+
     assert issubclass(Err, Exception)
 
 
 # -- Teardown -------------------------------------------------------------
 
+
 def test_close_is_safe_before_a_container_exists():
     runner = ContainerModelRunner.__new__(ContainerModelRunner)
     runner._started = False
-    runner.close()          # must not raise
+    runner.close()  # must not raise
 
 
 def test_close_only_kills_once(monkeypatch):
     """EvaluationRunner calls close() in a finally, and callers may call it too."""
     calls = []
-    monkeypatch.setattr("arep.models.container.subprocess.run",
-                        lambda *a, **k: calls.append(a[0]))
+    monkeypatch.setattr(
+        "arep.models.container.subprocess.run", lambda *a, **k: calls.append(a[0])
+    )
 
     runner = ContainerModelRunner.__new__(ContainerModelRunner)
     runner._started = True
@@ -192,4 +200,5 @@ def test_close_only_kills_once(monkeypatch):
 def test_free_ports_do_not_repeat():
     """A fixed port collides whenever two runs overlap, which is the normal case."""
     from arep.models.container import _free_port
+
     assert _free_port() != 0

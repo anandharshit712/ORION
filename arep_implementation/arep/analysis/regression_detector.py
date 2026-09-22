@@ -23,18 +23,19 @@ from arep.utils.logging_config import get_logger
 logger = get_logger("analysis.regression_detector")
 
 # Regression thresholds (never change without updating baselines)
-REGRESSION_COMPOSITE_THRESHOLD = 0.05      # 5% drop in composite score
-REGRESSION_SAFETY_THRESHOLD = 0.10         # 10% drop in safety score
-REGRESSION_COLLISION_THRESHOLD = 0.01      # 1pp increase in collision rate
+REGRESSION_COMPOSITE_THRESHOLD = 0.05  # 5% drop in composite score
+REGRESSION_SAFETY_THRESHOLD = 0.10  # 10% drop in safety score
+REGRESSION_COLLISION_THRESHOLD = 0.01  # 1pp increase in collision rate
 
 
 @dataclass
 class MetricDelta:
     """Change in a single metric between two model versions."""
+
     metric: str
-    value_a: float           # baseline (vN-1) value
-    value_b: float           # candidate (vN) value
-    delta: float             # value_b - value_a (positive = improved)
+    value_a: float  # baseline (vN-1) value
+    value_b: float  # candidate (vN) value
+    delta: float  # value_b - value_a (positive = improved)
     is_regression: bool
     threshold_used: float
 
@@ -42,18 +43,20 @@ class MetricDelta:
 @dataclass
 class ScenarioComparison:
     """Comparison result for one scenario between two model versions."""
+
     scenario_id: str
     model_a_name: str
     model_b_name: str
     metric_deltas: List[MetricDelta] = field(default_factory=list)
     has_regression: bool = False
-    winner: str = "tie"      # "a" | "b" | "tie"
+    winner: str = "tie"  # "a" | "b" | "tie"
     runs_per_model: int = 0
 
 
 @dataclass
 class ComparisonReport:
     """Full comparison between two model versions across all scenarios."""
+
     model_a_id: str
     model_a_name: str
     model_b_id: str
@@ -61,7 +64,7 @@ class ComparisonReport:
     scenario_comparisons: List[ScenarioComparison] = field(default_factory=list)
     regressions: List[MetricDelta] = field(default_factory=list)
     overall_winner: str = "tie"
-    recommendation: str = ""   # "Safe to deploy" | "Regression detected — do not deploy"
+    recommendation: str = ""  # "Safe to deploy" | "Regression detected — do not deploy"
 
 
 class RegressionDetector:
@@ -70,7 +73,6 @@ class RegressionDetector:
 
     Compares batches with identical scenario IDs and run counts.
     """
-
 
     # Per-metric thresholds. Composite, safety and the component scores are
     # "higher is better"; collision rate is not, and is handled separately.
@@ -111,18 +113,30 @@ class RegressionDetector:
         model_b = resolve_model(model_b_id, AVAILABLE_MODELS)
 
         report = ComparisonReport(
-            model_a_id=model_a_id, model_a_name=model_a.name,
-            model_b_id=model_b_id, model_b_name=model_b.name,
+            model_a_id=model_a_id,
+            model_a_name=model_a.name,
+            model_b_id=model_b_id,
+            model_b_name=model_b.name,
         )
 
         try:
             for scenario_id in scenario_ids:
-                batch_a = runner.run_batch(scenario_id, model_a, runs_per_scenario, seed)
-                batch_b = runner.run_batch(scenario_id, model_b, runs_per_scenario, seed)
-                report.scenario_comparisons.append(self._compare_aggregates(
-                    scenario_id, model_a.name, model_b.name,
-                    batch_a.aggregated, batch_b.aggregated, runs_per_scenario,
-                ))
+                batch_a = runner.run_batch(
+                    scenario_id, model_a, runs_per_scenario, seed
+                )
+                batch_b = runner.run_batch(
+                    scenario_id, model_b, runs_per_scenario, seed
+                )
+                report.scenario_comparisons.append(
+                    self._compare_aggregates(
+                        scenario_id,
+                        model_a.name,
+                        model_b.name,
+                        batch_a.aggregated,
+                        batch_b.aggregated,
+                        runs_per_scenario,
+                    )
+                )
         finally:
             # Out-of-process models hold a child process or a container.
             for model in (model_a, model_b):
@@ -179,19 +193,33 @@ class RegressionDetector:
 
         model_a_name, model_b_name, scenario_name = names
         report = ComparisonReport(
-            model_a_id=str(batch_id_a), model_a_name=model_a_name,
-            model_b_id=str(batch_id_b), model_b_name=model_b_name,
+            model_a_id=str(batch_id_a),
+            model_a_name=model_a_name,
+            model_b_id=str(batch_id_b),
+            model_b_name=model_b_name,
         )
-        report.scenario_comparisons.append(self._compare_aggregates(
-            scenario_name, model_a_name, model_b_name,
-            summary_a, summary_b, min(summary_a.num_runs, summary_b.num_runs),
-        ))
+        report.scenario_comparisons.append(
+            self._compare_aggregates(
+                scenario_name,
+                model_a_name,
+                model_b_name,
+                summary_a,
+                summary_b,
+                min(summary_a.num_runs, summary_b.num_runs),
+            )
+        )
         return self._finalise(report)
 
     # ── Internals ────────────────────────────────────────────────────
 
     def _compare_aggregates(
-        self, scenario_id, model_a_name, model_b_name, agg_a, agg_b, runs,
+        self,
+        scenario_id,
+        model_a_name,
+        model_b_name,
+        agg_a,
+        agg_b,
+        runs,
     ) -> ScenarioComparison:
         comparison = ScenarioComparison(
             scenario_id=scenario_id,
@@ -204,24 +232,35 @@ class RegressionDetector:
             value_a = float(getattr(agg_a, attribute))
             value_b = float(getattr(agg_b, attribute))
             delta = value_b - value_a
-            comparison.metric_deltas.append(MetricDelta(
-                metric=metric, value_a=value_a, value_b=value_b, delta=delta,
-                is_regression=delta < -threshold,
-                threshold_used=threshold,
-            ))
+            comparison.metric_deltas.append(
+                MetricDelta(
+                    metric=metric,
+                    value_a=value_a,
+                    value_b=value_b,
+                    delta=delta,
+                    is_regression=delta < -threshold,
+                    threshold_used=threshold,
+                )
+            )
 
         # Collision rate is inverted: a rise is the regression. The delta is
         # negated so "positive means improved" holds for every metric here.
         rate_a = float(agg_a.collision_rate)
         rate_b = float(agg_b.collision_rate)
-        comparison.metric_deltas.append(MetricDelta(
-            metric="collision_rate",
-            value_a=rate_a, value_b=rate_b, delta=-(rate_b - rate_a),
-            is_regression=(rate_b - rate_a) > REGRESSION_COLLISION_THRESHOLD,
-            threshold_used=REGRESSION_COLLISION_THRESHOLD,
-        ))
+        comparison.metric_deltas.append(
+            MetricDelta(
+                metric="collision_rate",
+                value_a=rate_a,
+                value_b=rate_b,
+                delta=-(rate_b - rate_a),
+                is_regression=(rate_b - rate_a) > REGRESSION_COLLISION_THRESHOLD,
+                threshold_used=REGRESSION_COLLISION_THRESHOLD,
+            )
+        )
 
-        comparison.has_regression = any(d.is_regression for d in comparison.metric_deltas)
+        comparison.has_regression = any(
+            d.is_regression for d in comparison.metric_deltas
+        )
 
         composite_delta = next(
             d.delta for d in comparison.metric_deltas if d.metric == "composite_score"

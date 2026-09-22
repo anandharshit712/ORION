@@ -18,11 +18,12 @@ from arep.evaluation.collector import SimulationRecord
 @dataclass
 class ComplianceResult:
     """Compliance metric results."""
-    speed_compliance_fraction: float   # [0, 1], 1 = always ≤ limit
-    mean_speed_excess: float           # m/s above limit (avg over violations)
-    max_speed_excess: float            # m/s above limit (worst)
-    lane_compliance_fraction: float    # [0, 1], 1 = always in-lane
-    compliance_score: float            # composite [0, 1]
+
+    speed_compliance_fraction: float  # [0, 1], 1 = always ≤ limit
+    mean_speed_excess: float  # m/s above limit (avg over violations)
+    max_speed_excess: float  # m/s above limit (worst)
+    lane_compliance_fraction: float  # [0, 1], 1 = always in-lane
+    compliance_score: float  # composite [0, 1]
     # Phase 0.5 / D-05. Signed, in metres, from the lane centerline: negative is
     # left of travel. The mean shows a persistent bias, the max shows the worst
     # excursion — a model that weaves and one that hugs a line have similar
@@ -83,8 +84,7 @@ class ComplianceMetrics:
         total = len(snapshots)
         speed_frac = speed_compliant / total
         mean_excess = (
-            sum(speed_excesses) / len(speed_excesses)
-            if speed_excesses else 0.0
+            sum(speed_excesses) / len(speed_excesses) if speed_excesses else 0.0
         )
 
         # Speed score: compliance fraction, penalized more at high excess
@@ -106,8 +106,7 @@ class ComplianceMetrics:
 
         # ── Composite ────────────────────────────────────────────────
         compliance_score = (
-            self.SPEED_WEIGHT * speed_score
-            + self.LANE_WEIGHT * lane_frac
+            self.SPEED_WEIGHT * speed_score + self.LANE_WEIGHT * lane_frac
         )
 
         return ComplianceResult(
@@ -143,7 +142,8 @@ class ComplianceMetrics:
             return 1.0, 0.0, 0.0
 
         in_lane = sum(
-            1 for s in measured
+            1
+            for s in measured
             if abs(s.lane_offset) + s.vehicle_half_width <= s.lane_width / 2.0
         )
         offsets = [s.lane_offset for s in measured]

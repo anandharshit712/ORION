@@ -95,9 +95,7 @@ class SimulationEngine:
         # 3–4. Update dynamic objects and traffic lights
         new_world = world.copy()
         new_world.ego_vehicle = new_ego
-        new_world = self.world_manager.update_dynamic_objects(
-            new_world, self.dt, rng
-        )
+        new_world = self.world_manager.update_dynamic_objects(new_world, self.dt, rng)
         new_world = self.world_manager.update_traffic_lights(new_world, rng)
 
         # 5. Check collisions
@@ -149,7 +147,8 @@ class SimulationEngine:
 
         logger.info(
             "Starting simulation (max_steps=%d, dt=%.4f)",
-            max_steps, self.dt,
+            max_steps,
+            self.dt,
         )
 
         for step in range(max_steps):
@@ -213,7 +212,9 @@ class SimulationEngine:
         model.reset()
         logger.info(
             "Starting async simulation (max_steps=%d, dt=%.4f, pace=%.4fs)",
-            max_steps, self.dt, tick_interval,
+            max_steps,
+            self.dt,
+            tick_interval,
         )
 
         next_deadline = time.monotonic() if tick_interval > 0 else 0.0
@@ -321,16 +322,18 @@ class SimulationEngine:
                     or behavior.get("state")
                     or behavior.get("type", "")
                 )
-            npcs.append({
-                "id": obj.object_id,
-                "x": round(obj.position.x, 4),
-                "y": round(obj.position.y, 4),
-                "z": 0.0,
-                "heading": round(obj.heading, 4),
-                "speed": round(obj.velocity, 4),
-                "type": obj.object_type.value,
-                "bt_state": bt_state,
-            })
+            npcs.append(
+                {
+                    "id": obj.object_id,
+                    "x": round(obj.position.x, 4),
+                    "y": round(obj.position.y, 4),
+                    "z": 0.0,
+                    "heading": round(obj.heading, 4),
+                    "speed": round(obj.velocity, 4),
+                    "type": obj.object_type.value,
+                    "bt_state": bt_state,
+                }
+            )
 
         frame: Dict[str, Any] = {
             "tick": world.timestep_count,

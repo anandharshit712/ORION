@@ -18,11 +18,20 @@ from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import (
-    Integer, Float, String, Boolean, Text, DateTime,
-    ForeignKey, Index,
+    Integer,
+    Float,
+    String,
+    Boolean,
+    Text,
+    DateTime,
+    ForeignKey,
+    Index,
 )
 from sqlalchemy.orm import (
-    DeclarativeBase, relationship, Mapped, mapped_column,
+    DeclarativeBase,
+    relationship,
+    Mapped,
+    mapped_column,
 )
 
 
@@ -32,18 +41,23 @@ def _new_uuid() -> str:
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
+
     pass
 
 
 # ── Multi-tenancy ────────────────────────────────────────────────────────
 
+
 class OrganisationRecord(Base):
     """Tenant organisation. Owns users, api_keys, runs, batch jobs, models."""
+
     __tablename__ = "organisations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    slug: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
     plan: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
     run_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(
@@ -51,11 +65,15 @@ class OrganisationRecord(Base):
     )
     # Phase 1.4. Nullable throughout: an org created in beta has no Stripe
     # presence and must keep working without one.
-    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True
+    )
     # Stored rather than inferred from `plan`, because Stripe distinguishes
     # states that matter differently here: `past_due` still has access while the
     # retry schedule runs, `canceled` does not.
-    subscription_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    subscription_status: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True
+    )
     current_period_end: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime, nullable=True
     )
@@ -79,6 +97,7 @@ class OrganisationRecord(Base):
 
 class ModelRecord(Base):
     """Customer-submitted model. Artefact lives in object storage; only metadata here."""
+
     __tablename__ = "models"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
@@ -90,7 +109,9 @@ class ModelRecord(Base):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1.0")
-    submission_type: Mapped[str] = mapped_column(String(16), nullable=False)  # python_sdk | docker
+    submission_type: Mapped[str] = mapped_column(
+        String(16), nullable=False
+    )  # python_sdk | docker
     artefact_uri: Mapped[str] = mapped_column(String(512), nullable=False)
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -100,9 +121,7 @@ class ModelRecord(Base):
         DateTime, default=datetime.datetime.utcnow
     )
 
-    __table_args__ = (
-        Index("ix_models_org_name_version", "org_id", "name", "version"),
-    )
+    __table_args__ = (Index("ix_models_org_name_version", "org_id", "name", "version"),)
 
     def __repr__(self) -> str:
         return f"<Model {self.name}@{self.version} type={self.submission_type} org={self.org_id}>"
@@ -110,6 +129,7 @@ class ModelRecord(Base):
 
 class ApiKeyRecord(Base):
     """API key for programmatic access. Stores hash, never plaintext."""
+
     __tablename__ = "api_keys"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
@@ -119,14 +139,22 @@ class ApiKeyRecord(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False
     )
-    key_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
-    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)  # first 12 chars for display
+    key_hash: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    key_prefix: Mapped[str] = mapped_column(
+        String(16), nullable=False
+    )  # first 12 chars for display
     label: Mapped[str] = mapped_column(String(128), nullable=False)
-    last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )
-    revoked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
 
     organisation: Mapped["OrganisationRecord"] = relationship(back_populates="api_keys")
     user: Mapped["UserRecord"] = relationship()
@@ -137,6 +165,7 @@ class ApiKeyRecord(Base):
 
 class ScenarioRecord(Base):
     """Stored scenario definition."""
+
     __tablename__ = "scenarios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -161,6 +190,7 @@ class ScenarioRecord(Base):
 
 class BatchJobRecord(Base):
     """A batch evaluation job (N runs of one model × one scenario)."""
+
     __tablename__ = "batch_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -209,6 +239,7 @@ class BatchJobRecord(Base):
 
 class RunRecord(Base):
     """Single simulation run with its evaluation result."""
+
     __tablename__ = "runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -275,6 +306,7 @@ class RunRecord(Base):
 
 class UserRecord(Base):
     """User account for authentication."""
+
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -282,8 +314,12 @@ class UserRecord(Base):
         String(36), ForeignKey("organisations.id"), nullable=True, index=True
     )
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
-    email: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, index=True)
-    username: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(
+        String(256), nullable=False, unique=True, index=True
+    )
+    username: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
     hashed_password: Mapped[str] = mapped_column(String(512), nullable=False)
     full_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -313,14 +349,19 @@ class UserRecord(Base):
         DateTime, nullable=True
     )
 
-    organisation: Mapped[Optional["OrganisationRecord"]] = relationship(back_populates="users")
+    organisation: Mapped[Optional["OrganisationRecord"]] = relationship(
+        back_populates="users"
+    )
 
     def __repr__(self) -> str:
-        return f"<User {self.username} ({self.email}) org={self.org_id} role={self.role}>"
+        return (
+            f"<User {self.username} ({self.email}) org={self.org_id} role={self.role}>"
+        )
 
 
 class PasswordResetRecord(Base):
     """Single-use password reset token. Stores SHA256 hash of the raw 64-hex code."""
+
     __tablename__ = "password_resets"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
@@ -334,7 +375,9 @@ class PasswordResetRecord(Base):
         DateTime, nullable=False, default=datetime.datetime.utcnow
     )
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
-    used_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    used_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     requested_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     def __repr__(self) -> str:
@@ -350,6 +393,7 @@ class RunFailureRecord(Base):
     primary key makes the database enforce "once" rather than an application
     check that races with itself across workers.
     """
+
     __tablename__ = "run_failures"
 
     batch_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -382,6 +426,7 @@ class WebhookEventRecord(Base):
     The payload is deliberately not stored: it carries customer billing details,
     and nothing in the replay path needs it.
     """
+
     __tablename__ = "webhook_events"
 
     # The provider's event id (Stripe: "evt_..."), not one we generate — that is
@@ -393,7 +438,9 @@ class WebhookEventRecord(Base):
     received_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.datetime.utcnow
     )
-    processed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    processed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
 
     def __repr__(self) -> str:
         return f"<WebhookEvent {self.provider}:{self.event_id} {self.status}>"

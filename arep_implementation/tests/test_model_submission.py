@@ -34,16 +34,19 @@ def env(tmp_path_factory):
     os.environ["ORION_MODEL_STORE_PATH"] = str(tmp_path_factory.mktemp("model_store"))
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
 
     # Reset ModelStore singleton so it picks up the new path
     from arep.api import model_store as ms
+
     ms._store = None
 
     from fastapi.testclient import TestClient
     from arep.api.app import create_app
+
     app = create_app()
     with TestClient(app) as client:
         yield client
@@ -81,10 +84,15 @@ def _signup(client, email, username, slug, allow_pickle=True):
     superadmin would for a design partner. Pass allow_pickle=False to test the
     default-denied behaviour itself.
     """
-    r = client.post("/api/auth/signup", json={
-        "email": email, "username": username,
-        "password": "password123", "org_slug": slug,
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": username,
+            "password": "password123",
+            "org_slug": slug,
+        },
+    )
     assert r.status_code == 201, r.text
     # D-04: an unverified account cannot upload or register a model. These tests
     # are about the artefact paths, not the verification flow.
@@ -95,9 +103,13 @@ def _signup(client, email, username, slug, allow_pickle=True):
 
 
 def _login(client, identifier):
-    r = client.post("/api/auth/login", json={
-        "identifier": identifier, "password": "password123",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": identifier,
+            "password": "password123",
+        },
+    )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
 
@@ -106,10 +118,12 @@ def _make_pickle_blob() -> bytes:
     """Cloudpickle a real ModelInterface instance."""
     import cloudpickle
     from arep.models.examples.example_models import EmergencyBrakeModel
+
     return cloudpickle.dumps(EmergencyBrakeModel())
 
 
 # ── Tests ────────────────────────────────────────────────────────────────
+
 
 def test_upload_python_sdk_model(env):
     _signup(env, "owen@a.com", "owen", "owen-co")
@@ -210,7 +224,9 @@ def test_delete_model(env):
     )
     model_id = r.json()["id"]
 
-    r = env.delete(f"/api/models/{model_id}", headers={"Authorization": f"Bearer {token}"})
+    r = env.delete(
+        f"/api/models/{model_id}", headers={"Authorization": f"Bearer {token}"}
+    )
     assert r.status_code == 204
 
     r = env.get(f"/api/models/{model_id}", headers={"Authorization": f"Bearer {token}"})
@@ -225,8 +241,10 @@ def test_register_docker_model(env):
         "/api/models/register",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "name": "vic-docker", "version": "v2.0",
-            "image": "registry.local/victor/model:v2", "port": 9090,
+            "name": "vic-docker",
+            "version": "v2.0",
+            "image": "registry.local/victor/model:v2",
+            "port": 9090,
         },
     )
     assert r.status_code == 201, r.text
@@ -239,6 +257,7 @@ def test_resolver_builtin_name(env):
     """Resolver returns built-in instance for known names without DB lookup."""
     from arep.api.routes import AVAILABLE_MODELS
     from arep.models.resolver import resolve_model
+
     model = resolve_model("EmergencyBrake", AVAILABLE_MODELS, org_id=None)
     assert hasattr(model, "predict")
 
@@ -246,6 +265,7 @@ def test_resolver_builtin_name(env):
 def test_resolver_invalid_name(env):
     from arep.api.routes import AVAILABLE_MODELS
     from arep.models.resolver import resolve_model
+
     with pytest.raises(ValueError):
         resolve_model("NotAModel", AVAILABLE_MODELS, org_id=None)
 
@@ -253,10 +273,12 @@ def test_resolver_invalid_name(env):
 def test_resolver_uuid_not_found(env):
     from arep.api.routes import AVAILABLE_MODELS
     from arep.models.resolver import resolve_model
+
     with pytest.raises(KeyError):
         resolve_model(
             "00000000-0000-0000-0000-000000000000",
-            AVAILABLE_MODELS, org_id="bogus-org",
+            AVAILABLE_MODELS,
+            org_id="bogus-org",
         )
 
 
@@ -275,7 +297,8 @@ def test_resolver_uuid_dispatches_to_sandbox(env):
 
     # Find the org_id by reading /api/orgs/me
     org_id = env.get(
-        "/api/orgs/me", headers={"Authorization": f"Bearer {token}"},
+        "/api/orgs/me",
+        headers={"Authorization": f"Bearer {token}"},
     ).json()["id"]
 
     from arep.api.routes import AVAILABLE_MODELS
@@ -304,7 +327,8 @@ def test_resolver_uuid_org_mismatch_blocked(env):
     model_id = r.json()["id"]
 
     yael_org_id = env.get(
-        "/api/orgs/me", headers={"Authorization": f"Bearer {token_y}"},
+        "/api/orgs/me",
+        headers={"Authorization": f"Bearer {token_y}"},
     ).json()["id"]
 
     from arep.api.routes import AVAILABLE_MODELS
@@ -316,6 +340,7 @@ def test_resolver_uuid_org_mismatch_blocked(env):
 
 # ── Phase 0.2 — per-org cloudpickle gate (D-01) ──────────────────────────
 
+
 def test_upload_blocked_when_org_not_cleared_for_pickle_models(env):
     """Default-deny: a self-serve org cannot upload a cloudpickle artefact."""
     _signup(env, "zoe@a.com", "zoe", "zoe-co", allow_pickle=False)
@@ -325,8 +350,13 @@ def test_upload_blocked_when_org_not_cleared_for_pickle_models(env):
         "/api/models/upload",
         headers={"Authorization": f"Bearer {token}"},
         data={"name": "sneaky", "version": "v1.0"},
-        files={"artefact": ("s.pkl", io.BytesIO(_make_pickle_blob()),
-                            "application/octet-stream")},
+        files={
+            "artefact": (
+                "s.pkl",
+                io.BytesIO(_make_pickle_blob()),
+                "application/octet-stream",
+            )
+        },
     )
     assert r.status_code == 403, r.text
     assert "disabled for this organisation" in r.json()["detail"]
@@ -335,21 +365,34 @@ def test_upload_blocked_when_org_not_cleared_for_pickle_models(env):
 def test_upload_succeeds_once_an_admin_enables_the_path(env):
     _signup(env, "abe@a.com", "abe", "abe-co", allow_pickle=False)
     token = _login(env, "abe")
-    files = {"artefact": ("a.pkl", io.BytesIO(_make_pickle_blob()),
-                          "application/octet-stream")}
+    files = {
+        "artefact": (
+            "a.pkl",
+            io.BytesIO(_make_pickle_blob()),
+            "application/octet-stream",
+        )
+    }
 
     blocked = env.post(
-        "/api/models/upload", headers={"Authorization": f"Bearer {token}"},
-        data={"name": "abe-model", "version": "v1.0"}, files=files,
+        "/api/models/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"name": "abe-model", "version": "v1.0"},
+        files=files,
     )
     assert blocked.status_code == 403
 
     _set_pickle_gate("abe-co", True)
     allowed = env.post(
-        "/api/models/upload", headers={"Authorization": f"Bearer {token}"},
+        "/api/models/upload",
+        headers={"Authorization": f"Bearer {token}"},
         data={"name": "abe-model", "version": "v1.0"},
-        files={"artefact": ("a.pkl", io.BytesIO(_make_pickle_blob()),
-                            "application/octet-stream")},
+        files={
+            "artefact": (
+                "a.pkl",
+                io.BytesIO(_make_pickle_blob()),
+                "application/octet-stream",
+            )
+        },
     )
     assert allowed.status_code == 201, allowed.text
 
@@ -365,8 +408,13 @@ def test_resolver_refuses_pickle_model_after_the_gate_is_revoked(env):
         "/api/models/upload",
         headers={"Authorization": f"Bearer {token}"},
         data={"name": "bea-model", "version": "v1.0"},
-        files={"artefact": ("b.pkl", io.BytesIO(_make_pickle_blob()),
-                            "application/octet-stream")},
+        files={
+            "artefact": (
+                "b.pkl",
+                io.BytesIO(_make_pickle_blob()),
+                "application/octet-stream",
+            )
+        },
     )
     assert r.status_code == 201, r.text
     model_id = r.json()["id"]
@@ -385,6 +433,7 @@ def test_resolver_refuses_pickle_model_after_the_gate_is_revoked(env):
 
 
 # -- Artefact integrity (Phase 2, closing the model_store TODO) ----------
+
 
 def test_a_tampered_artefact_is_refused(tmp_path):
     """These bytes get unpickled, and unpickling is code execution. The

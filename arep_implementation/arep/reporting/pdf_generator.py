@@ -65,8 +65,7 @@ class PDFGenerator:
             import jinja2  # noqa: F401
         except ImportError:
             raise ImportError(
-                "jinja2 is not installed. "
-                "Install with: pip install arep[reporting]"
+                "jinja2 is not installed. " "Install with: pip install arep[reporting]"
             )
 
     def render_batch_report(
@@ -110,7 +109,9 @@ class PDFGenerator:
 
         """
         return self._render(
-            "comparison_report.html", {"comparison": comparison_data}, output_path,
+            "comparison_report.html",
+            {"comparison": comparison_data},
+            output_path,
         )
 
     # ── Internals ────────────────────────────────────────────────────
@@ -125,7 +126,10 @@ class PDFGenerator:
         WeasyPrint cannot load its GTK native libraries at all.
         """
         from jinja2 import (
-            Environment, FileSystemLoader, StrictUndefined, select_autoescape,
+            Environment,
+            FileSystemLoader,
+            StrictUndefined,
+            select_autoescape,
         )
 
         environment = Environment(
@@ -149,7 +153,9 @@ class PDFGenerator:
         import weasyprint
 
         html = self.render_html(template_name, context)
-        pdf_bytes = weasyprint.HTML(string=html, base_url=str(TEMPLATES_DIR)).write_pdf()
+        pdf_bytes = weasyprint.HTML(
+            string=html, base_url=str(TEMPLATES_DIR)
+        ).write_pdf()
 
         if output_path is not None:
             path = Path(output_path)

@@ -22,13 +22,14 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.utils.hashing import FrameHasher          # noqa: E402
+from arep.utils.hashing import FrameHasher  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIO = str(REPO / "scenarios" / "basic" / "straight_road_lead_vehicle.yaml")
 
 
 # -- The hasher ------------------------------------------------------------
+
 
 def test_identical_frames_hash_identically():
     a, b = FrameHasher(), FrameHasher()
@@ -76,6 +77,7 @@ def test_hexdigest_is_readable_mid_run():
 
 # -- The canonical frame ---------------------------------------------------
 
+
 def test_tick_frame_carries_no_wall_clock():
     """emit_ts_ms in the canonical frame is what made runs unhashable."""
     from arep.config import get_config
@@ -117,7 +119,7 @@ def test_two_runs_of_the_same_seed_produce_the_same_frames():
             scenario_path=SCENARIO,
             model_name="EmergencyBrake",
             master_seed=42,
-            tick_interval=0.0,          # headless: pacing is a delivery concern
+            tick_interval=0.0,  # headless: pacing is a delivery concern
         )
         if run.producer_task is not None:
             await run.producer_task
@@ -145,8 +147,10 @@ def test_a_different_model_produces_a_different_hash():
 
     async def hash_for(model_name: str) -> str:
         run = await start_run(
-            scenario_path=SCENARIO, model_name=model_name,
-            master_seed=42, tick_interval=0.0,
+            scenario_path=SCENARIO,
+            model_name=model_name,
+            master_seed=42,
+            tick_interval=0.0,
         )
         if run.producer_task is not None:
             await run.producer_task
@@ -157,6 +161,7 @@ def test_a_different_model_produces_a_different_hash():
 
 # -- The hard rule ---------------------------------------------------------
 
+
 def test_no_wall_clock_in_the_simulation_packages():
     """`git grep time.time` over the deterministic packages → zero hits.
 
@@ -165,12 +170,23 @@ def test_no_wall_clock_in_the_simulation_packages():
     socket, never what the frame contains.
     """
     result = subprocess.run(
-        ["git", "grep", "-n", r"time\.time()", "--",
-         "arep/simulation", "arep/core", "arep/evaluation"],
-        cwd=REPO, capture_output=True, text=True,
+        [
+            "git",
+            "grep",
+            "-n",
+            r"time\.time()",
+            "--",
+            "arep/simulation",
+            "arep/core",
+            "arep/evaluation",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
     )
     hits = [
-        line for line in result.stdout.splitlines()
+        line
+        for line in result.stdout.splitlines()
         # The prose in engine.py's docstring explains why the call is gone.
         if line.strip() and "``time.time()``" not in line
     ]
@@ -179,9 +195,19 @@ def test_no_wall_clock_in_the_simulation_packages():
 
 def test_no_datetime_now_in_the_simulation_packages():
     result = subprocess.run(
-        ["git", "grep", "-n", r"datetime\.now()\|utcnow()", "--",
-         "arep/simulation", "arep/core", "arep/evaluation"],
-        cwd=REPO, capture_output=True, text=True,
+        [
+            "git",
+            "grep",
+            "-n",
+            r"datetime\.now()\|utcnow()",
+            "--",
+            "arep/simulation",
+            "arep/core",
+            "arep/evaluation",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
     )
     assert not result.stdout.strip(), (
         "wall-clock reached a deterministic package:\n" + result.stdout
@@ -191,9 +217,19 @@ def test_no_datetime_now_in_the_simulation_packages():
 def test_no_bare_random_module_in_the_simulation_packages():
     """All randomness goes through RandomManager, seeded per run."""
     result = subprocess.run(
-        ["git", "grep", "-n", r"^import random\|^from random import", "--",
-         "arep/simulation", "arep/core", "arep/evaluation"],
-        cwd=REPO, capture_output=True, text=True,
+        [
+            "git",
+            "grep",
+            "-n",
+            r"^import random\|^from random import",
+            "--",
+            "arep/simulation",
+            "arep/core",
+            "arep/evaluation",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
     )
     assert not result.stdout.strip(), (
         "unseeded randomness in a deterministic package:\n" + result.stdout

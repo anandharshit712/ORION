@@ -112,9 +112,7 @@ class ModelWrapper:
             raise
         except Exception as e:
             self.error_count += 1
-            raise ModelExecutionError(
-                f"Model {self.model.name} error: {e}"
-            ) from e
+            raise ModelExecutionError(f"Model {self.model.name} error: {e}") from e
         finally:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             self.total_predict_calls += 1
@@ -125,7 +123,9 @@ class ModelWrapper:
             self.timeout_count += 1
             logger.warning(
                 "Model %s exceeded timeout: %.2f ms > %d ms",
-                self.model.name, elapsed_ms, self.timeout_ms,
+                self.model.name,
+                elapsed_ms,
+                self.timeout_ms,
             )
             # Log warning but don't raise — soft timeout
             # Raise only for hard timeout:

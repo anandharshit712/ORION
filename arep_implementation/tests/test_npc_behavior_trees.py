@@ -22,16 +22,18 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.core.random_manager import RandomManager          # noqa: E402
+from arep.core.random_manager import RandomManager  # noqa: E402
 from arep.core.state import Vector2D, VehicleState, WorldState  # noqa: E402
-from arep.simulation import npc_bt                          # noqa: E402
+from arep.simulation import npc_bt  # noqa: E402
 
 DT = 0.02
 
 
 def _vehicle(x=0.0, y=0.0, velocity=10.0, heading=0.0, object_id="npc"):
     return VehicleState(
-        position=Vector2D(x, y), velocity=velocity, heading=heading,
+        position=Vector2D(x, y),
+        velocity=velocity,
+        heading=heading,
         object_id=object_id,
     )
 
@@ -55,6 +57,7 @@ def _behavior(**params):
 
 
 # -- Helpers --------------------------------------------------------------
+
 
 def test_sample_returns_a_scalar_unchanged():
     gen = RandomManager(1).get("traffic")
@@ -119,6 +122,7 @@ def test_move_along_heading_reverses_on_negative_speed():
 
 # -- Triggers -------------------------------------------------------------
 
+
 def test_time_trigger_fires_at_its_threshold():
     behavior = _behavior(trigger_type="time", trigger_value=2.0)
     npc = _vehicle()
@@ -172,6 +176,7 @@ def test_an_unresolved_range_never_fires():
 
 # -- TTC helper -----------------------------------------------------------
 
+
 def test_ttc_is_zero_when_already_overlapping():
     npc = _vehicle(x=1.0)
     ego = _vehicle(x=0.0, object_id="ego")
@@ -193,6 +198,7 @@ def test_ttc_shrinks_as_the_gap_closes():
 
 
 # -- The registry ---------------------------------------------------------
+
 
 def test_every_registered_tree_is_reachable():
     for name in npc_bt._BT_REGISTRY:
@@ -227,6 +233,7 @@ def test_every_tree_ticks_without_moving_before_its_trigger(bt_type):
 @pytest.mark.parametrize("bt_type", sorted(npc_bt._BT_REGISTRY))
 def test_every_tree_is_deterministic_for_one_seed(bt_type):
     """Same seed, same manoeuvre — or the run hash means nothing."""
+
     def drive() -> list[tuple[float, float]]:
         tree = npc_bt.get_bt(bt_type)
         behavior = _behavior(trigger_type="time", trigger_value=0.1)
@@ -258,12 +265,16 @@ def test_every_tree_keeps_speed_physically_plausible(bt_type):
 
 # -- Individual manoeuvres ------------------------------------------------
 
+
 def test_hesitant_brake_actually_slows_down():
     tree = npc_bt.get_bt("hesitant_brake")
     behavior = _behavior(
-        trigger_type="time", trigger_value=0.0,
-        initial_decel=-4.0, initial_brake_duration=0.5,
-        hesitation_prob=0.0, final_decel=-8.0,
+        trigger_type="time",
+        trigger_value=0.0,
+        initial_decel=-4.0,
+        initial_brake_duration=0.5,
+        hesitation_prob=0.0,
+        final_decel=-8.0,
     )
     npc = _vehicle(x=50.0, velocity=20.0)
     rng = RandomManager(3)
@@ -277,9 +288,13 @@ def test_hesitant_brake_actually_slows_down():
 def test_hesitant_brake_reaches_a_stop_eventually():
     tree = npc_bt.get_bt("hesitant_brake")
     behavior = _behavior(
-        trigger_type="time", trigger_value=0.0,
-        initial_decel=-6.0, initial_brake_duration=0.2,
-        hesitation_prob=0.0, final_decel=-9.0, min_velocity=0.0,
+        trigger_type="time",
+        trigger_value=0.0,
+        initial_decel=-6.0,
+        initial_brake_duration=0.2,
+        hesitation_prob=0.0,
+        final_decel=-9.0,
+        min_velocity=0.0,
     )
     npc = _vehicle(x=50.0, velocity=15.0)
     rng = RandomManager(5)
@@ -300,8 +315,9 @@ def test_the_tailgater_closes_the_gap_without_waiting_for_a_trigger():
 
     start_gap = ego.position.x - npc.position.x
     for step in range(200):
-        npc = tree.tick(npc, behavior, _world(sim_time=step * DT, ego=ego, npc=npc),
-                        rng, DT)
+        npc = tree.tick(
+            npc, behavior, _world(sim_time=step * DT, ego=ego, npc=npc), rng, DT
+        )
 
     assert ego.position.x - npc.position.x < start_gap, "the tailgater fell behind"
 
@@ -310,9 +326,13 @@ def test_hesitation_probability_of_one_takes_the_hesitation_branch():
     """The branch that makes this scenario interesting — release, then brake."""
     tree = npc_bt.get_bt("hesitant_brake")
     behavior = _behavior(
-        trigger_type="time", trigger_value=0.0,
-        initial_decel=-4.0, initial_brake_duration=0.1,
-        hesitation_prob=1.0, hesitation_duration=0.3, hesitation_accel=0.5,
+        trigger_type="time",
+        trigger_value=0.0,
+        initial_decel=-4.0,
+        initial_brake_duration=0.1,
+        hesitation_prob=1.0,
+        hesitation_duration=0.3,
+        hesitation_accel=0.5,
         final_decel=-8.0,
     )
     npc = _vehicle(x=50.0, velocity=20.0)
@@ -328,13 +348,13 @@ def test_hesitation_probability_of_one_takes_the_hesitation_branch():
 
 # -- Junction yielding (Phase 2, closing the 1.5 gap) ---------------------
 
+
 def _junction_world(npc, ego_distance_from_junction=100.0):
     """A four-way intersection with the ego some distance from the centre."""
     from arep.core import road_templates
 
     graph = road_templates.four_way_intersection()
-    ego = _vehicle(x=ego_distance_from_junction, y=0.0, velocity=10.0,
-                   object_id="ego")
+    ego = _vehicle(x=ego_distance_from_junction, y=0.0, velocity=10.0, object_id="ego")
     world = _world(ego=ego, npc=npc)
     world.road_graph = graph
     return world, graph
@@ -376,12 +396,12 @@ def test_a_yielding_npc_proceeds_once_the_ego_is_clear():
     npc = _vehicle(x=0.0, y=-20.0, velocity=10.0, heading=math.pi / 2)
     rng = RandomManager(3)
 
-    for _ in range(200):     # ego close: come to a stop
+    for _ in range(200):  # ego close: come to a stop
         world, _ = _junction_world(npc, ego_distance_from_junction=2.0)
         npc = tree.tick(npc, behavior, world, rng, DT)
     stopped_at = npc.position.y
 
-    for _ in range(200):     # ego long gone
+    for _ in range(200):  # ego long gone
         world, _ = _junction_world(npc, ego_distance_from_junction=400.0)
         npc = tree.tick(npc, behavior, world, rng, DT)
 
@@ -407,13 +427,13 @@ def test_a_priority_arm_does_not_yield():
 
     segment = graph.segments[priority_arms[0]]
     start = segment.centerline[0]
-    npc = _vehicle(x=start.x, y=start.y, velocity=10.0,
-                   heading=segment.heading_start)
+    npc = _vehicle(x=start.x, y=start.y, velocity=10.0, heading=segment.heading_start)
 
     rng = RandomManager(4)
     for _ in range(60):
-        world = _world(ego=_vehicle(x=0.0, y=0.0, velocity=5.0, object_id="ego"),
-                       npc=npc)
+        world = _world(
+            ego=_vehicle(x=0.0, y=0.0, velocity=5.0, object_id="ego"), npc=npc
+        )
         world.road_graph = graph
         npc = tree.tick(npc, behavior, world, rng, DT)
 

@@ -23,15 +23,22 @@ from tests.conftest import verify_email_for
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 SCENARIO_PATH = os.path.join(
-    _PROJECT_ROOT, "scenarios", "basic", "straight_road_lead_vehicle.yaml",
+    _PROJECT_ROOT,
+    "scenarios",
+    "basic",
+    "straight_road_lead_vehicle.yaml",
 )
 if not os.path.exists(SCENARIO_PATH):
     # Fallback: nested under arep_implementation/scenarios/ in some checkouts
     alt = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "scenarios", "basic", "straight_road_lead_vehicle.yaml",
+        "scenarios",
+        "basic",
+        "straight_road_lead_vehicle.yaml",
     )
     if os.path.exists(alt):
         SCENARIO_PATH = alt
@@ -44,12 +51,14 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
 
     # Run Celery tasks synchronously, no broker needed.
     from arep.worker.celery_app import celery_app
+
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = False
 
@@ -69,15 +78,25 @@ def client():
 
 
 def _signup_login(client, email, username, slug):
-    client.post("/api/auth/signup", json={
-        "email": email, "username": username, "password": "password123",
-        "org_name": f"{username} org", "org_slug": slug,
-    })
+    client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": username,
+            "password": "password123",
+            "org_name": f"{username} org",
+            "org_slug": slug,
+        },
+    )
     # D-04: an unverified account cannot enqueue a batch.
     verify_email_for(email)
-    r = client.post("/api/auth/login", json={
-        "identifier": email, "password": "password123",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": email,
+            "password": "password123",
+        },
+    )
     return r.json()["access_token"]
 
 
@@ -92,6 +111,7 @@ def _initial_credits() -> int:
     Keeps these tests valid across the eventual billing flip.
     """
     from arep.config import get_config
+
     cfg = get_config()
     return 50 if cfg.billing.billing_enabled else cfg.billing.beta_credits
 
@@ -137,7 +157,7 @@ def test_insufficient_credits_returns_402(client):
         json={
             "scenario_path": SCENARIO_PATH,
             "model_name": "EmergencyBrake",
-            "num_runs": _initial_credits() + 1,   # exceed the org's starting credits
+            "num_runs": _initial_credits() + 1,  # exceed the org's starting credits
             "master_seed": 1,
         },
     )

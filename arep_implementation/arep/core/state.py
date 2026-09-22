@@ -29,8 +29,10 @@ if TYPE_CHECKING:  # pragma: no cover
 
 # ── Enums ────────────────────────────────────────────────────────────────
 
+
 class ObjectType(Enum):
     """Types of dynamic objects in the simulation."""
+
     CAR = "car"
     TRUCK = "truck"
     MOTORCYCLE = "motorcycle"
@@ -41,6 +43,7 @@ class ObjectType(Enum):
 
 class TrafficLightState(Enum):
     """Traffic light states."""
+
     RED = "red"
     YELLOW = "yellow"
     GREEN = "green"
@@ -49,6 +52,7 @@ class TrafficLightState(Enum):
 
 class TerminationReason(Enum):
     """Reasons the simulation can terminate."""
+
     COLLISION = "collision"
     OFF_ROAD = "off_road"
     TIMEOUT = "timeout"
@@ -59,6 +63,7 @@ class TerminationReason(Enum):
 
 # ── Vector2D ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class Vector2D:
     """
@@ -67,6 +72,7 @@ class Vector2D:
     Provides deterministic operations for position, velocity, and
     direction calculations throughout the simulation.
     """
+
     x: float = 0.0
     y: float = 0.0
 
@@ -152,9 +158,11 @@ class Vector2D:
 
 # ── TrafficLightInfo ─────────────────────────────────────────────────────
 
+
 @dataclass
 class TrafficLightInfo:
     """Traffic light state at a specific position."""
+
     light_id: str
     position: Vector2D
     state: TrafficLightState
@@ -188,9 +196,11 @@ class TrafficLightInfo:
 
 # ── LaneInfo ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class LaneInfo:
     """Lane definition with centerline and properties."""
+
     lane_id: str
     centerline_points: List[Vector2D]
     width: float
@@ -299,6 +309,7 @@ class LaneInfo:
 
 # ── VehicleState ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class VehicleState:
     """
@@ -306,11 +317,12 @@ class VehicleState:
 
     Position, heading, velocity, dimensions, and identity.
     """
+
     position: Vector2D = field(default_factory=Vector2D)
-    heading: float = 0.0        # radians, 0 = +x direction
-    velocity: float = 0.0       # m/s (scalar, along heading)
-    acceleration: float = 0.0   # m/s²
-    length: float = 4.5         # metres
+    heading: float = 0.0  # radians, 0 = +x direction
+    velocity: float = 0.0  # m/s (scalar, along heading)
+    acceleration: float = 0.0  # m/s²
+    length: float = 4.5  # metres
     width: float = 2.0
     wheelbase: float = 2.7
     object_type: ObjectType = ObjectType.CAR
@@ -422,6 +434,7 @@ class VehicleState:
 
 # ── WorldState ───────────────────────────────────────────────────────────
 
+
 @dataclass
 class WorldState:
     """
@@ -431,6 +444,7 @@ class WorldState:
     Contains the ego vehicle, all dynamic objects, environment state,
     and simulation metadata.
     """
+
     # Simulation time
     sim_time: float = 0.0
     timestep_count: int = 0

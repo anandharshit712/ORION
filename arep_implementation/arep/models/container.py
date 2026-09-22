@@ -89,7 +89,9 @@ class ContainerModelRunner(ModelInterface):
         host_port = _free_port()
         command = self._build_command(cfg, host_port)
 
-        logger.info("Starting model container %s from %s", self.container_name, self.image)
+        logger.info(
+            "Starting model container %s from %s", self.container_name, self.image
+        )
         try:
             subprocess.run(command, check=True, capture_output=True, timeout=60)
         except subprocess.CalledProcessError as exc:
@@ -112,24 +114,36 @@ class ContainerModelRunner(ModelInterface):
         dropped --cap-drop is invisible at runtime.
         """
         command = [
-            "docker", "run", "--detach", "--rm",
-            "--name", self.container_name,
+            "docker",
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            self.container_name,
             # Bind to loopback only. Published on 0.0.0.0 the customer's model
             # would be reachable from outside the host.
-            "--publish", f"127.0.0.1:{host_port}:{self.container_port}",
-            "--memory", cfg.container_memory,
-            "--cpus", cfg.container_cpus,
-            "--pids-limit", str(cfg.container_pids_limit),
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
+            "--publish",
+            f"127.0.0.1:{host_port}:{self.container_port}",
+            "--memory",
+            cfg.container_memory,
+            "--cpus",
+            cfg.container_cpus,
+            "--pids-limit",
+            str(cfg.container_pids_limit),
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
             # Writable only in a small tmpfs: a model may need scratch space,
             # and nothing it writes should outlive the run.
             "--read-only",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=64m",
             # No inherited environment. The API process holds ORION_* database
             # credentials, and the subprocess sandbox already refuses to pass
             # them on for the same reason.
-            "--env-file", _empty_env_file(),
+            "--env-file",
+            _empty_env_file(),
         ]
 
         if cfg.container_runtime:
@@ -176,7 +190,9 @@ class ContainerModelRunner(ModelInterface):
         try:
             subprocess.run(
                 ["docker", "kill", self.container_name],
-                check=False, capture_output=True, timeout=30,
+                check=False,
+                capture_output=True,
+                timeout=30,
             )
         except Exception:
             logger.exception("Could not stop container %s", self.container_name)

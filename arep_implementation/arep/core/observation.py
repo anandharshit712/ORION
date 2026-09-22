@@ -28,7 +28,6 @@ from arep.core.state import (
     TrafficLightState,
 )
 
-
 MAX_OBJECTS = 10
 OBJECT_FEATURES = 8
 EGO_FEATURES = 7
@@ -43,28 +42,32 @@ class ObjectObservation:
 
     All positions and velocities are relative to the ego.
     """
+
     object_id: str = ""
-    relative_x: float = 0.0       # metres, ego frame (forward)
-    relative_y: float = 0.0       # metres, ego frame (lateral)
-    relative_vx: float = 0.0      # m/s, ego frame
-    relative_vy: float = 0.0      # m/s, ego frame
-    heading: float = 0.0          # relative heading (radians)
-    speed: float = 0.0            # scalar speed (m/s)
-    length: float = 0.0           # metres
-    width: float = 0.0            # metres
+    relative_x: float = 0.0  # metres, ego frame (forward)
+    relative_y: float = 0.0  # metres, ego frame (lateral)
+    relative_vx: float = 0.0  # m/s, ego frame
+    relative_vy: float = 0.0  # m/s, ego frame
+    heading: float = 0.0  # relative heading (radians)
+    speed: float = 0.0  # scalar speed (m/s)
+    length: float = 0.0  # metres
+    width: float = 0.0  # metres
 
     def to_array(self) -> np.ndarray:
         """Convert to numpy array (8 floats)."""
-        return np.array([
-            self.relative_x,
-            self.relative_y,
-            self.relative_vx,
-            self.relative_vy,
-            self.heading,
-            self.speed,
-            self.length,
-            self.width,
-        ], dtype=np.float64)
+        return np.array(
+            [
+                self.relative_x,
+                self.relative_y,
+                self.relative_vx,
+                self.relative_vy,
+                self.heading,
+                self.speed,
+                self.length,
+                self.width,
+            ],
+            dtype=np.float64,
+        )
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ObjectObservation":
@@ -102,18 +105,19 @@ class Observation:
 
     Generated from WorldState via from_world_state().
     """
+
     # Ego state
     ego_x: float = 0.0
     ego_y: float = 0.0
     ego_heading: float = 0.0
     ego_velocity: float = 0.0
     ego_acceleration: float = 0.0
-    ego_heading_rate: float = 0.0     # computed via finite difference
+    ego_heading_rate: float = 0.0  # computed via finite difference
     speed_limit: float = 0.0
 
     # Lane info
-    lane_offset: float = 0.0          # lateral offset from centerline
-    lane_heading_error: float = 0.0   # heading error relative to lane
+    lane_offset: float = 0.0  # lateral offset from centerline
+    lane_heading_error: float = 0.0  # heading error relative to lane
     lane_width: float = 3.5
     lane_curvature: float = 0.0
     lane_valid: bool = False
@@ -190,9 +194,7 @@ class Observation:
             tl_distance = tl.position.distance_to(ego.position)
 
         # ── Nearby objects ───────────────────────────────────────────
-        obj_observations = _convert_objects_to_relative(
-            ego, world.dynamic_objects
-        )
+        obj_observations = _convert_objects_to_relative(ego, world.dynamic_objects)
 
         return cls(
             ego_x=ego.position.x,
@@ -244,7 +246,7 @@ class Observation:
         for i, obj in enumerate(self.objects[:MAX_OBJECTS]):
             base = EGO_FEATURES + LANE_FEATURES + i * OBJECT_FEATURES
             arr = obj.to_array()
-            vec[base:base + OBJECT_FEATURES] = arr
+            vec[base : base + OBJECT_FEATURES] = arr
 
         return vec
 
@@ -317,6 +319,7 @@ class Observation:
 
 # ── Private helpers ──────────────────────────────────────────────────────
 
+
 def _convert_objects_to_relative(
     ego: VehicleState,
     objects: List[VehicleState],
@@ -345,17 +348,15 @@ def _convert_objects_to_relative(
         dy = obj.position.y - ego.position.y
 
         # Rotate to ego frame
-        rel_x = dx * cos_ego - dy * sin_ego   # forward
-        rel_y = dx * sin_ego + dy * cos_ego    # lateral
+        rel_x = dx * cos_ego - dy * sin_ego  # forward
+        rel_y = dx * sin_ego + dy * cos_ego  # lateral
 
         # World-frame relative velocity
-        dvx = (
-            obj.velocity * math.cos(obj.heading)
-            - ego.velocity * math.cos(ego.heading)
+        dvx = obj.velocity * math.cos(obj.heading) - ego.velocity * math.cos(
+            ego.heading
         )
-        dvy = (
-            obj.velocity * math.sin(obj.heading)
-            - ego.velocity * math.sin(ego.heading)
+        dvy = obj.velocity * math.sin(obj.heading) - ego.velocity * math.sin(
+            ego.heading
         )
 
         # Rotate velocity to ego frame
@@ -366,17 +367,19 @@ def _convert_objects_to_relative(
         rel_heading = obj.heading - ego.heading
         rel_heading = math.atan2(math.sin(rel_heading), math.cos(rel_heading))
 
-        observations.append(ObjectObservation(
-            object_id=obj.object_id,
-            relative_x=rel_x,
-            relative_y=rel_y,
-            relative_vx=rel_vx,
-            relative_vy=rel_vy,
-            heading=rel_heading,
-            speed=obj.velocity,
-            length=obj.length,
-            width=obj.width,
-        ))
+        observations.append(
+            ObjectObservation(
+                object_id=obj.object_id,
+                relative_x=rel_x,
+                relative_y=rel_y,
+                relative_vx=rel_vx,
+                relative_vy=rel_vy,
+                heading=rel_heading,
+                speed=obj.velocity,
+                length=obj.length,
+                width=obj.width,
+            )
+        )
 
     # Sort by distance (nearest first) — deterministic
     observations.sort(key=lambda o: o.relative_x**2 + o.relative_y**2)

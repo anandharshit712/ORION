@@ -85,7 +85,8 @@ class EventExecutor:
 
     @staticmethod
     def _spawn_pedestrian(
-        world: WorldState, event: ScenarioEvent,
+        world: WorldState,
+        event: ScenarioEvent,
     ) -> WorldState:
         p = event.parameters
         ped = VehicleState(

@@ -4,6 +4,7 @@ ORION Email Sender.
 When SMTP is configured (SMTP_HOST + SMTP_FROM env vars set): sends real email.
 When not configured: logs the reset link to the console so dev/beta mode still works.
 """
+
 from __future__ import annotations
 
 import smtplib
@@ -64,8 +65,9 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
     </body></html>
     """
 
-    _deliver(to_email, subject, body_text, body_html,
-             kind="password reset", link=reset_link)
+    _deliver(
+        to_email, subject, body_text, body_html, kind="password reset", link=reset_link
+    )
 
 
 def send_verification_email(to_email: str, verify_link: str) -> None:
@@ -119,12 +121,14 @@ def send_verification_email(to_email: str, verify_link: str) -> None:
     </body></html>
     """
 
-    _deliver(to_email, subject, body_text, body_html,
-             kind="verification", link=verify_link)
+    _deliver(
+        to_email, subject, body_text, body_html, kind="verification", link=verify_link
+    )
 
 
-def _deliver(to_email: str, subject: str, body_text: str, body_html: str,
-             *, kind: str, link: str) -> None:
+def _deliver(
+    to_email: str, subject: str, body_text: str, body_html: str, *, kind: str, link: str
+) -> None:
     """Send one multipart message, or log the link when SMTP is not configured.
 
     Shared by both templates — the SMTP handshake is the part worth having in
@@ -149,7 +153,9 @@ def _deliver(to_email: str, subject: str, body_text: str, body_html: str,
             server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10)
             server.starttls()
         else:
-            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10)
+            server = smtplib.SMTP_SSL(
+                settings.smtp_host, settings.smtp_port, timeout=10
+            )
 
         if settings.smtp_user and settings.smtp_pass:
             server.login(settings.smtp_user, settings.smtp_pass)

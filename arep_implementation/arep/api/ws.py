@@ -42,7 +42,9 @@ WS_AUTH_FAILED = 4401
 async def simulation_ws(
     websocket: WebSocket,
     run_id: str,
-    ticket: str = Query(..., description="Single-use ticket from POST /api/runs/{run_id}/ws-ticket"),
+    ticket: str = Query(
+        ..., description="Single-use ticket from POST /api/runs/{run_id}/ws-ticket"
+    ),
 ) -> None:
     # Redeeming consumes the ticket, so a replay of the same URL fails here even
     # if it is still inside its sixty seconds.
@@ -66,31 +68,37 @@ async def simulation_ws(
     queue = run.subscribe()
     logger.info(
         "WS attached: run_id=%s user_id=%s subscribers=%d",
-        run_id, user_id, len(run.subscribers),
+        run_id,
+        user_id,
+        len(run.subscribers),
     )
 
     try:
         while True:
             frame = await queue.get()
             if frame is None:  # end-of-stream sentinel
-                await websocket.send_json({
-                    "event": "stream_end",
-                    "status": run.status,
-                    "error": run.error,
-                    # Published once the run is over, so a client can check the
-                    # determinism digest of what it just watched (D-06).
-                    "frame_hash": run.frame_hash,
-                })
+                await websocket.send_json(
+                    {
+                        "event": "stream_end",
+                        "status": run.status,
+                        "error": run.error,
+                        # Published once the run is over, so a client can check the
+                        # determinism digest of what it just watched (D-06).
+                        "frame_hash": run.frame_hash,
+                    }
+                )
                 break
             # emit_ts_ms is stamped here, not in get_tick_frame (D-06). It is a
             # transport concern for the client's latency HUD; inside the frame
             # it broke the no-wall-clock rule and made every run's hash unique.
             # A copy, because subscribers share the published dict and the
             # canonical frame has already been hashed.
-            await websocket.send_json({
-                **frame,
-                "emit_ts_ms": round(time.time() * 1000.0, 2),
-            })
+            await websocket.send_json(
+                {
+                    **frame,
+                    "emit_ts_ms": round(time.time() * 1000.0, 2),
+                }
+            )
     except WebSocketDisconnect:
         logger.info("WS disconnected: run_id=%s user_id=%s", run_id, user_id)
     except Exception:

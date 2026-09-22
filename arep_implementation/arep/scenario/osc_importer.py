@@ -53,7 +53,9 @@ class OpenSCENARIOImporter:
             raise FileNotFoundError(f"OpenSCENARIO file not found: {osc_path}")
         return self.import_string(path.read_text(encoding="utf-8"), source=path.name)
 
-    def import_string(self, osc_text: str, source: str = "<string>") -> ScenarioDefinition:
+    def import_string(
+        self, osc_text: str, source: str = "<string>"
+    ) -> ScenarioDefinition:
         """
         Convert OSC2 DSL text into a ScenarioDefinition.
 
@@ -74,7 +76,9 @@ class OpenSCENARIOImporter:
         a scenario missing its hazard still runs and still produces a score.
         """
         from arep.scenario.schema import (
-            ScenarioTermination, TrafficObjectBehavior, TrafficObjectDefinition,
+            ScenarioTermination,
+            TrafficObjectBehavior,
+            TrafficObjectDefinition,
         )
 
         scenario = ScenarioDefinition(name="", version="2.0")
@@ -92,7 +96,7 @@ class OpenSCENARIOImporter:
                 continue
 
             if line.startswith("scenario ") and line.endswith(":"):
-                scenario.name = line[len("scenario "):-1].strip()
+                scenario.name = line[len("scenario ") : -1].strip()
                 continue
 
             declaration = _ACTOR_RE.match(line)
@@ -101,7 +105,8 @@ class OpenSCENARIOImporter:
                 if name != "ego":
                     actors[name] = {
                         "type": "pedestrian" if actor_type == "Pedestrian" else "car",
-                        "speed": 0.0, "behaviour": "constant_velocity",
+                        "speed": 0.0,
+                        "behaviour": "constant_velocity",
                         "params": {},
                     }
                     order.append(name)
@@ -157,7 +162,8 @@ class OpenSCENARIOImporter:
             obj = TrafficObjectDefinition(id=name, type=actor["type"])
             obj.initial.velocity = actor["speed"]
             obj.behavior = TrafficObjectBehavior(
-                type=actor["behaviour"], parameters=actor["params"],
+                type=actor["behaviour"],
+                parameters=actor["params"],
             )
             scenario.traffic_objects.append(obj)
 
@@ -170,13 +176,17 @@ class OpenSCENARIOImporter:
             # Logged individually: a reviewer needs to know *what* was lost,
             # not merely that something was.
             logger.warning(
-                "%s: %d construct(s) not imported", source, len(unsupported),
+                "%s: %d construct(s) not imported",
+                source,
+                len(unsupported),
             )
             for line in unsupported[:20]:
                 logger.warning("  skipped: %s", line)
 
         logger.info(
-            "Imported %s: %d traffic actor(s)", source, len(scenario.traffic_objects),
+            "Imported %s: %d traffic actor(s)",
+            source,
+            len(scenario.traffic_objects),
         )
         return scenario
 
