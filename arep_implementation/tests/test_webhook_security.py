@@ -49,7 +49,7 @@ def db_path():
 
 
 @pytest.fixture
-def signed_client(db_path):
+def signed_client(db_path, monkeypatch):
     """App with a webhook signing secret configured, billing still in beta.
 
     Beta plus a secret is the state this phase actually ships: signatures are
@@ -58,7 +58,7 @@ def signed_client(db_path):
     """
     from arep.config import reload_config
 
-    os.environ["STRIPE_WEBHOOK_SECRET"] = WEBHOOK_SECRET
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
     reload_config()
 
     from fastapi.testclient import TestClient
@@ -67,16 +67,20 @@ def signed_client(db_path):
     with TestClient(create_app()) as c:
         yield c
 
-    del os.environ["STRIPE_WEBHOOK_SECRET"]
+    # Undo first, then reload: reloading while the var is still set caches it
+    # for every later test. monkeypatch also restores a pre-existing value,
+    # which `del os.environ[...]` did not -- and it raised KeyError when the
+    # var was already absent.
+    monkeypatch.undo()
     reload_config()
 
 
 @pytest.fixture
-def unsigned_client(db_path):
+def unsigned_client(db_path, monkeypatch):
     """App in beta with no signing secret — the local-development default."""
     from arep.config import reload_config
 
-    os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+    monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
     reload_config()
 
     from fastapi.testclient import TestClient
@@ -84,6 +88,11 @@ def unsigned_client(db_path):
 
     with TestClient(create_app()) as c:
         yield c
+
+    # monkeypatch restores the variable, but the config cache still holds the
+    # no-secret reload until something re-reads it.
+    monkeypatch.undo()
+    reload_config()
 
 
 def _stripe_signature(payload: bytes, secret: str, timestamp: int | None = None) -> str:

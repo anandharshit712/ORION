@@ -111,6 +111,11 @@ def live_billing(monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_not_a_real_key")
     reload_config()
     yield get_config()
+    # Undo the environment *before* reloading. Reloading first re-reads the
+    # vars this fixture set and caches them, so billing stayed enabled with a
+    # fake Stripe key for every later test in the session -- which surfaces as
+    # an AuthenticationError somewhere far away from here.
+    monkeypatch.undo()
     reload_config()
 
 
