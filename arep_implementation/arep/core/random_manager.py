@@ -21,7 +21,6 @@ import numpy as np
 
 from arep.utils.hashing import derive_seed
 
-
 # Standard subsystem names
 SUBSYSTEMS = ("scenario", "traffic", "pedestrian", "weather", "noise")
 
@@ -54,9 +53,7 @@ class RandomManager:
         """Create a generator for a subsystem."""
         seed = derive_seed(self.master_seed, subsystem)
         self._seeds[subsystem] = seed
-        self._generators[subsystem] = np.random.Generator(
-            np.random.PCG64(seed)
-        )
+        self._generators[subsystem] = np.random.Generator(np.random.PCG64(seed))
 
     def get(self, subsystem: str) -> np.random.Generator:
         """
@@ -114,6 +111,7 @@ class RandomManager:
 
 
 # ── Utility functions ────────────────────────────────────────────────────
+
 
 def add_gaussian_noise(
     value: float,

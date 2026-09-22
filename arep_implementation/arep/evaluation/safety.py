@@ -29,12 +29,13 @@ from arep.evaluation.collector import SimulationRecord
 @dataclass
 class SafetyResult:
     """Safety metric results."""
+
     collision_occurred: bool
-    collision_penalty: float      # [0, 1], 0 = collision, 1 = no collision
-    min_ttc: float                # seconds
-    min_ttc_score: float          # [0, 1]
+    collision_penalty: float  # [0, 1], 0 = collision, 1 = no collision
+    min_ttc: float  # seconds
+    min_ttc_score: float  # [0, 1]
     critical_ttc_fraction: float  # fraction of steps with TTC ≤ 2s
-    safety_score: float           # composite [0, 1]
+    safety_score: float  # composite [0, 1]
 
 
 class SafetyMetrics:
@@ -51,8 +52,8 @@ class SafetyMetrics:
     MIN_TTC_WEIGHT = 0.30
     CRITICAL_TTC_WEIGHT = 0.20
 
-    TTC_SAFE_THRESHOLD = 10.0   # seconds, TTC above this → score = 1.0
-    TTC_CRITICAL = 2.0          # seconds
+    TTC_SAFE_THRESHOLD = 10.0  # seconds, TTC above this → score = 1.0
+    TTC_CRITICAL = 2.0  # seconds
 
     def compute(self, record: SimulationRecord) -> SafetyResult:
         """

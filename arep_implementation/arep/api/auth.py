@@ -58,15 +58,16 @@ CSRF_HEADER = "X-CSRF-Token"
 
 # ── Password hashing ────────────────────────────────────────────────────
 
+
 def hash_password(password: str) -> str:
-    pwd_bytes = password.encode('utf-8')[:72]
+    pwd_bytes = password.encode("utf-8")[:72]
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    pwd_bytes = plain.encode('utf-8')[:72]
-    return bcrypt.checkpw(pwd_bytes, hashed.encode('utf-8'))
+    pwd_bytes = plain.encode("utf-8")[:72]
+    return bcrypt.checkpw(pwd_bytes, hashed.encode("utf-8"))
 
 
 # ── JWT ──────────────────────────────────────────────────────────────────
@@ -81,7 +82,9 @@ def token_lifetime_for(role: Optional[str]) -> datetime.timedelta:
     return datetime.timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
 
 
-def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
+def create_access_token(
+    data: dict, expires_delta: Optional[datetime.timedelta] = None
+) -> str:
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + (
         expires_delta or token_lifetime_for(data.get("role"))
@@ -125,12 +128,22 @@ def set_session_cookies(response: Response, token: str, role: Optional[str]) -> 
     secure = _cookies_are_secure()
 
     response.set_cookie(
-        SESSION_COOKIE, token,
-        max_age=max_age, httponly=True, secure=secure, samesite="lax", path="/",
+        SESSION_COOKIE,
+        token,
+        max_age=max_age,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
     )
     response.set_cookie(
-        CSRF_COOKIE, secrets.token_urlsafe(32),
-        max_age=max_age, httponly=False, secure=secure, samesite="lax", path="/",
+        CSRF_COOKIE,
+        secrets.token_urlsafe(32),
+        max_age=max_age,
+        httponly=False,
+        secure=secure,
+        samesite="lax",
+        path="/",
     )
 
 
@@ -234,6 +247,7 @@ def normalise_slug(raw: str) -> str:
 
 # ── Pydantic schemas ────────────────────────────────────────────────────
 
+
 class SignupRequest(BaseModel):
     email: str = Field(..., min_length=5)
     username: str = Field(..., min_length=3, max_length=64)
@@ -289,6 +303,7 @@ auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
 # ── Email verification (Phase 0.4, D-04) ─────────────────────────────────
+
 
 def generate_verification_token() -> tuple[str, str]:
     """Return (raw token, SHA256 hash). Only the hash is ever stored.
@@ -369,9 +384,13 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
     slug = normalise_slug(slug_seed)
 
     with session_scope() as session:
-        existing = session.query(UserRecord).filter(
-            (UserRecord.email == req.email) | (UserRecord.username == req.username)
-        ).first()
+        existing = (
+            session.query(UserRecord)
+            .filter(
+                (UserRecord.email == req.email) | (UserRecord.username == req.username)
+            )
+            .first()
+        )
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -389,7 +408,7 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
         cfg = get_config()
         if cfg.billing.billing_enabled:
             initial_plan = "free"
-            initial_credits = 50        # free tier allocation
+            initial_credits = 50  # free tier allocation
         else:
             initial_plan = "beta"
             initial_credits = cfg.billing.beta_credits  # 1000 by default
@@ -422,7 +441,9 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
         session.expunge(user)
         if user.organisation is not None:
             session.expunge(user.organisation)
-        logger.info("Signed up user=%s org=%s slug=%s", user.username, org.id, candidate)
+        logger.info(
+            "Signed up user=%s org=%s slug=%s", user.username, org.id, candidate
+        )
 
     # Sent after the transaction commits: an address that gets a link for an
     # account that then failed to save is worse than a missing email.
@@ -442,6 +463,7 @@ def _create_user_with_org(req: SignupRequest) -> UserRecord:
 #
 # Dropping either one breaks the route at call time, not at import. Limits come
 # from api.rate_limit_* (D-03).
+
 
 @auth_router.post("/signup", response_model=UserResponse, status_code=201)
 @limiter.limit(signup_limit)
@@ -468,9 +490,14 @@ def login(req: LoginRequest, request: Request, response: Response):
         )
     session = get_session()
     try:
-        user = session.query(UserRecord).filter(
-            (UserRecord.email == req.identifier) | (UserRecord.username == req.identifier)
-        ).first()
+        user = (
+            session.query(UserRecord)
+            .filter(
+                (UserRecord.email == req.identifier)
+                | (UserRecord.username == req.identifier)
+            )
+            .first()
+        )
         if not user or not verify_password(req.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -485,12 +512,14 @@ def login(req: LoginRequest, request: Request, response: Response):
         user.last_login = datetime.datetime.utcnow()
         session.commit()
 
-        token = create_access_token(data={
-            "sub": str(user.id),
-            "email": user.email,
-            "org_id": user.org_id,
-            "role": user.role,
-        })
+        token = create_access_token(
+            data={
+                "sub": str(user.id),
+                "email": user.email,
+                "org_id": user.org_id,
+                "role": user.role,
+            }
+        )
         set_session_cookies(response, token, user.role)
         logger.info("User logged in: %s (org=%s)", user.username, user.org_id)
         # The body still carries the token. The browser app ignores it and uses
@@ -517,6 +546,7 @@ def get_me(current_user: UserRecord = Depends(get_current_user)):
 
 
 # ── Email verification endpoints (Phase 0.4, D-04) ───────────────────────
+
 
 class VerifyEmailRequest(BaseModel):
     token: str
@@ -558,9 +588,11 @@ def verify_email(req: VerifyEmailRequest):
     ttl = _dt.timedelta(hours=get_settings().verification_token_ttl_hours)
 
     with session_scope() as session:
-        user = session.query(UserRecord).filter_by(
-            verification_token_hash=token_hash
-        ).first()
+        user = (
+            session.query(UserRecord)
+            .filter_by(verification_token_hash=token_hash)
+            .first()
+        )
 
         # One message for "no such token" and "expired": distinguishing them
         # tells a stranger which tokens once existed.
@@ -587,7 +619,9 @@ def verify_email(req: VerifyEmailRequest):
 @auth_router.post("/resend-verification", response_model=SimpleMessageResponse)
 @limiter.limit(signup_limit)
 def resend_verification(
-    req: ResendVerificationRequest, request: Request, response: Response,
+    req: ResendVerificationRequest,
+    request: Request,
+    response: Response,
 ):
     """
     Issue a fresh verification link.
@@ -610,7 +644,9 @@ def resend_verification(
         last_sent = user.verification_sent_at
         if last_sent is not None:
             since = _dt.datetime.utcnow() - last_sent
-            min_gap = _dt.timedelta(hours=1) / max(settings.verification_resend_per_hour, 1)
+            min_gap = _dt.timedelta(hours=1) / max(
+                settings.verification_resend_per_hour, 1
+            )
             if since < min_gap:
                 logger.warning("Verification resend throttled for user=%s", user.id)
                 return ok
@@ -626,6 +662,7 @@ def resend_verification(
 
 # ── Password reset schemas ────────────────────────────────────────────────
 
+
 class ForgotPasswordRequest(BaseModel):
     email: str = Field(..., description="Email address of the account to reset")
 
@@ -635,12 +672,17 @@ class ForgotPasswordResponse(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(..., min_length=64, max_length=64,
-                       description="64-hex reset token from the email link")
+    token: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="64-hex reset token from the email link",
+    )
     new_password: str = Field(..., min_length=6)
 
 
 # ── Password reset routes ────────────────────────────────────────────────
+
 
 @auth_router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(req: ForgotPasswordRequest, request: Request):
@@ -673,11 +715,10 @@ def forgot_password(req: ForgotPasswordRequest, request: Request):
             return ok_msg  # silently swallow — no information leak
 
         # Generate single-use token: 64 hex chars, store its SHA256 hash
-        raw_token = secrets.token_hex(32)               # 64 hex characters
+        raw_token = secrets.token_hex(32)  # 64 hex characters
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        expires_at = (
-            _dt.datetime.utcnow()
-            + _dt.timedelta(minutes=settings.reset_token_ttl_minutes)
+        expires_at = _dt.datetime.utcnow() + _dt.timedelta(
+            minutes=settings.reset_token_ttl_minutes
         )
         client_ip = request.client.host if request.client else None
         pr_repo.create(
@@ -735,4 +776,6 @@ def reset_password(req: ResetPasswordRequest):
         pr_repo.invalidate_all_for_user(user.id)
         logger.info("Password reset successful for user=%s", user.id)
 
-    return ForgotPasswordResponse(message="Password updated successfully. You can now log in.")
+    return ForgotPasswordResponse(
+        message="Password updated successfully. You can now log in."
+    )

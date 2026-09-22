@@ -23,6 +23,7 @@ from arep.core.state import VehicleState, WorldState, Vector2D
 @dataclass
 class CollisionEvent:
     """Record of a collision between ego and a dynamic object."""
+
     ego_id: str
     object_id: str
     sim_time: float
@@ -96,9 +97,7 @@ class CollisionDetector:
         collisions: List[CollisionEvent] = []
 
         # Sort objects deterministically by ID
-        sorted_objects = sorted(
-            world.dynamic_objects, key=lambda o: o.object_id
-        )
+        sorted_objects = sorted(world.dynamic_objects, key=lambda o: o.object_id)
 
         for obj in sorted_objects:
             if self.check_collision(ego, obj):
@@ -116,14 +115,16 @@ class CollisionDetector:
                     (ego.position.y + obj.position.y) / 2.0,
                 )
 
-                collisions.append(CollisionEvent(
-                    ego_id=ego.object_id,
-                    object_id=obj.object_id,
-                    sim_time=world.sim_time,
-                    impact_speed=impact_speed,
-                    impact_angle=impact_angle,
-                    collision_point=collision_point,
-                ))
+                collisions.append(
+                    CollisionEvent(
+                        ego_id=ego.object_id,
+                        object_id=obj.object_id,
+                        sim_time=world.sim_time,
+                        impact_speed=impact_speed,
+                        impact_angle=impact_angle,
+                        collision_point=collision_point,
+                    )
+                )
 
         return collisions
 

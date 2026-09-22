@@ -27,7 +27,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from arep.config import SimulationConfig, reload_config
 from arep.core.state import (
-    Vector2D, VehicleState, WorldState,
+    Vector2D,
+    VehicleState,
+    WorldState,
     LaneInfo,
 )
 from arep.core.action import Action, ActionAlternative
@@ -40,8 +42,10 @@ from arep.simulation.engine import SimulationEngine
 from arep.evaluation.collector import DataCollector
 from arep.evaluation.composite import CompositeEvaluator
 from arep.models.examples.example_models import (
-    ConstantActionModel, EmergencyBrakeModel,
-    SimpleLaneKeepModel, RandomModel,
+    ConstantActionModel,
+    EmergencyBrakeModel,
+    SimpleLaneKeepModel,
+    RandomModel,
 )
 from arep.statistics.aggregator import StatisticalAggregator
 from arep.utils.hashing import hash_string, derive_seed
@@ -128,7 +132,7 @@ def test_vehicle_state():
     # All corners should be at the correct distance from center
     for c in corners:
         dist = c.distance_to(v.position)
-        expected = math.sqrt((4.5/2)**2 + (2.0/2)**2)
+        expected = math.sqrt((4.5 / 2) ** 2 + (2.0 / 2) ** 2)
         assert abs(dist - expected) < 1e-6
 
     # Serialization roundtrip
@@ -233,7 +237,7 @@ def test_random_manager():
     expected_noise = float(probe.get("noise").normal(0, 1))
 
     interleaved = RandomManager(master_seed=42)
-    interleaved.get("scenario").uniform(0, 100)          # perturb another stream
+    interleaved.get("scenario").uniform(0, 100)  # perturb another stream
     assert float(interleaved.get("noise").normal(0, 1)) == expected_noise
 
     # Save/restore
@@ -260,41 +264,59 @@ def test_collision_detection():
 
     # Two overlapping vehicles at same position
     v1 = VehicleState(
-        position=Vector2D(0.0, 0.0), heading=0.0,
-        length=4.5, width=2.0, object_id="a",
+        position=Vector2D(0.0, 0.0),
+        heading=0.0,
+        length=4.5,
+        width=2.0,
+        object_id="a",
     )
     v2 = VehicleState(
-        position=Vector2D(0.0, 0.0), heading=0.0,
-        length=4.5, width=2.0, object_id="b",
+        position=Vector2D(0.0, 0.0),
+        heading=0.0,
+        length=4.5,
+        width=2.0,
+        object_id="b",
     )
     assert detector.check_collision(v1, v2)
 
     # Two separated vehicles
     v3 = VehicleState(
-        position=Vector2D(100.0, 0.0), heading=0.0,
-        length=4.5, width=2.0, object_id="c",
+        position=Vector2D(100.0, 0.0),
+        heading=0.0,
+        length=4.5,
+        width=2.0,
+        object_id="c",
     )
     assert not detector.check_collision(v1, v3)
 
     # Edge case: barely NOT touching (4.5m center-to-center = length apart)
     v4 = VehicleState(
-        position=Vector2D(4.5 + 0.01, 0.0), heading=0.0,
-        length=4.5, width=2.0, object_id="d",
+        position=Vector2D(4.5 + 0.01, 0.0),
+        heading=0.0,
+        length=4.5,
+        width=2.0,
+        object_id="d",
     )
     # Centers 4.51m apart, half lengths 2.25+2.25 = 4.5 → gap of 0.01
     assert not detector.check_collision(v1, v4)
 
     # Overlapping case: 3m apart (overlap = 4.5 - 3 = 1.5)
     v4b = VehicleState(
-        position=Vector2D(3.0, 0.0), heading=0.0,
-        length=4.5, width=2.0, object_id="d2",
+        position=Vector2D(3.0, 0.0),
+        heading=0.0,
+        length=4.5,
+        width=2.0,
+        object_id="d2",
     )
     assert detector.check_collision(v1, v4b)
 
     # Clear separation
     v5 = VehicleState(
-        position=Vector2D(10.0, 0.0), heading=0.0,
-        length=4.5, width=2.0, object_id="e",
+        position=Vector2D(10.0, 0.0),
+        heading=0.0,
+        length=4.5,
+        width=2.0,
+        object_id="e",
     )
     assert not detector.check_collision(v1, v5)
 
@@ -315,11 +337,15 @@ def test_ttc():
     calc = TTCCalculator()
 
     ego = VehicleState(
-        position=Vector2D(0.0, 0.0), heading=0.0, velocity=20.0,
+        position=Vector2D(0.0, 0.0),
+        heading=0.0,
+        velocity=20.0,
     )
     # Vehicle ahead, moving slower
     ahead = VehicleState(
-        position=Vector2D(100.0, 0.0), heading=0.0, velocity=10.0,
+        position=Vector2D(100.0, 0.0),
+        heading=0.0,
+        velocity=10.0,
         object_id="ahead",
     )
 
@@ -330,14 +356,18 @@ def test_ttc():
 
     # Vehicle behind → no TTC
     behind = VehicleState(
-        position=Vector2D(-50.0, 0.0), heading=0.0, velocity=10.0,
+        position=Vector2D(-50.0, 0.0),
+        heading=0.0,
+        velocity=10.0,
         object_id="behind",
     )
     assert calc.compute_ttc(ego, behind) is None
 
     # Vehicle moving away → no TTC
     away = VehicleState(
-        position=Vector2D(100.0, 0.0), heading=0.0, velocity=30.0,
+        position=Vector2D(100.0, 0.0),
+        heading=0.0,
+        velocity=30.0,
         object_id="away",
     )
     assert calc.compute_ttc(ego, away) is None
@@ -352,11 +382,15 @@ def test_ttc():
 def test_observation():
     """Test observation generation."""
     ego = VehicleState(
-        position=Vector2D(50.0, 0.0), heading=0.0, velocity=20.0,
+        position=Vector2D(50.0, 0.0),
+        heading=0.0,
+        velocity=20.0,
         object_id="ego",
     )
     obj = VehicleState(
-        position=Vector2D(100.0, 3.0), heading=0.0, velocity=15.0,
+        position=Vector2D(100.0, 3.0),
+        heading=0.0,
+        velocity=15.0,
         object_id="obj1",
     )
     world = WorldState(ego_vehicle=ego, dynamic_objects=[obj])
@@ -386,7 +420,9 @@ def test_simulation_engine():
     rng = RandomManager(42)
 
     ego = VehicleState(
-        position=Vector2D(0.0, 0.0), heading=0.0, velocity=10.0,
+        position=Vector2D(0.0, 0.0),
+        heading=0.0,
+        velocity=10.0,
         object_id="ego",
     )
     world = WorldState(ego_vehicle=ego)
@@ -417,11 +453,15 @@ def test_evaluation_pipeline():
     rng = RandomManager(42)
 
     ego = VehicleState(
-        position=Vector2D(0.0, 0.0), heading=0.0, velocity=15.0,
+        position=Vector2D(0.0, 0.0),
+        heading=0.0,
+        velocity=15.0,
         object_id="ego",
     )
     obj = VehicleState(
-        position=Vector2D(80.0, 0.0), heading=0.0, velocity=10.0,
+        position=Vector2D(80.0, 0.0),
+        heading=0.0,
+        velocity=10.0,
         object_id="lead",
     )
     lane = LaneInfo(
@@ -482,7 +522,9 @@ def test_statistical_aggregation():
     for seed in range(5):
         rng = RandomManager(42 + seed)
         ego = VehicleState(
-            position=Vector2D(0.0, 0.0), heading=0.0, velocity=15.0,
+            position=Vector2D(0.0, 0.0),
+            heading=0.0,
+            velocity=15.0,
         )
         world = WorldState(ego_vehicle=ego)
 
@@ -507,10 +549,12 @@ def test_statistical_aggregation():
     metrics = aggregator.compute()
     assert metrics.num_runs == 5
     assert 0.0 <= metrics.composite_mean <= 1.0
-    assert metrics.composite_ci_lower <= metrics.composite_mean or \
-        (np.isnan(metrics.composite_ci_lower) and metrics.composite_std == 0)
-    assert metrics.composite_mean <= metrics.composite_ci_upper or \
-        (np.isnan(metrics.composite_ci_upper) and metrics.composite_std == 0)
+    assert metrics.composite_ci_lower <= metrics.composite_mean or (
+        np.isnan(metrics.composite_ci_lower) and metrics.composite_std == 0
+    )
+    assert metrics.composite_mean <= metrics.composite_ci_upper or (
+        np.isnan(metrics.composite_ci_upper) and metrics.composite_std == 0
+    )
 
     d = metrics.to_dict()
     assert "composite_95ci" in d
@@ -614,6 +658,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"  [FAIL] {name} FAILED: {e}")
             import traceback
+
             traceback.print_exc()
             failed += 1
 

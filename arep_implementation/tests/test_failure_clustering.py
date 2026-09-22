@@ -20,8 +20,10 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.analysis.failure_clustering import (       # noqa: E402
-    FailureClusterer, _dominant_event, _is_failure,
+from arep.analysis.failure_clustering import (  # noqa: E402
+    FailureClusterer,
+    _dominant_event,
+    _is_failure,
 )
 
 SCENARIO = "scenarios/basic/straight_road_lead_vehicle.yaml"
@@ -49,17 +51,23 @@ def _record_batch(conn_mod, scenario_path: str, model, seeds, num_runs=None) -> 
 
     with conn_mod.session_scope() as session:
         scenario_row = ScenarioRecord(
-            name="clustering-fixture", version="2.0", content_hash=os.urandom(32).hex(),
-            yaml_content="", duration=30.0,
+            name="clustering-fixture",
+            version="2.0",
+            content_hash=os.urandom(32).hex(),
+            yaml_content="",
+            duration=30.0,
         )
         session.add(scenario_row)
         session.flush()
         scenario_id = scenario_row.id
 
         job = BatchJobRecord(
-            scenario_name="clustering-fixture", model_name=model.name,
-            num_runs=num_runs or len(seeds), master_seed=seeds[0],
-            status="running", scenario_path=scenario_path,
+            scenario_name="clustering-fixture",
+            model_name=model.name,
+            num_runs=num_runs or len(seeds),
+            master_seed=seeds[0],
+            status="running",
+            scenario_path=scenario_path,
         )
         session.add(job)
         session.flush()
@@ -69,12 +77,15 @@ def _record_batch(conn_mod, scenario_path: str, model, seeds, num_runs=None) -> 
     for seed in seeds:
         result = runner.run_single(scenario_path, model, seed)
         with conn_mod.session_scope() as session:
-            RunRepository(session).save_result(scenario_id, result, batch_job_id=batch_id)
+            RunRepository(session).save_result(
+                scenario_id, result, batch_job_id=batch_id
+            )
 
     return batch_id
 
 
 # -- What counts as a failure --------------------------------------------
+
 
 def test_a_collision_is_a_failure():
     assert _is_failure({"collision": True, "termination_reason": "collision"})
@@ -101,6 +112,7 @@ def test_the_dominant_event_is_the_most_common_one():
 
 # -- End to end on real runs ---------------------------------------------
 
+
 def test_a_clean_batch_reports_no_fault_conditions(db):
     from arep.models.examples.example_models import EmergencyBrakeModel
 
@@ -119,7 +131,10 @@ def test_a_failing_batch_is_summarised(db):
     from arep.models.examples.example_models import ConstantActionModel
 
     batch_id = _record_batch(
-        db, SCENARIO, ConstantActionModel(throttle=0.4), seeds=list(range(6)),
+        db,
+        SCENARIO,
+        ConstantActionModel(throttle=0.4),
+        seeds=list(range(6)),
     )
     report = FailureClusterer().analyse(batch_id)
 
@@ -134,7 +149,10 @@ def test_an_unparameterised_scenario_says_so_rather_than_implying_no_pattern(db)
     from arep.models.examples.example_models import ConstantActionModel
 
     batch_id = _record_batch(
-        db, SCENARIO, ConstantActionModel(throttle=0.4), seeds=list(range(4)),
+        db,
+        SCENARIO,
+        ConstantActionModel(throttle=0.4),
+        seeds=list(range(4)),
     )
     report = FailureClusterer().analyse(batch_id)
 
@@ -147,7 +165,9 @@ def test_a_parameterised_batch_reconstructs_its_parameters(db):
     from arep.models.examples.example_models import ConstantActionModel
 
     batch_id = _record_batch(
-        db, PARAMETERISED, ConstantActionModel(throttle=0.5),
+        db,
+        PARAMETERISED,
+        ConstantActionModel(throttle=0.5),
         seeds=list(range(12)),
     )
     report = FailureClusterer().analyse(batch_id)
@@ -167,18 +187,23 @@ def test_reconstruction_is_deterministic(db):
     from arep.models.examples.example_models import ConstantActionModel
 
     batch_id = _record_batch(
-        db, PARAMETERISED, ConstantActionModel(throttle=0.5), seeds=list(range(8)),
+        db,
+        PARAMETERISED,
+        ConstantActionModel(throttle=0.5),
+        seeds=list(range(8)),
     )
     clusterer = FailureClusterer()
     first = clusterer.analyse(batch_id)
     second = clusterer.analyse(batch_id)
 
     assert first.fail_runs == second.fail_runs
-    assert [c.description for c in first.fault_conditions] == \
-           [c.description for c in second.fault_conditions]
+    assert [c.description for c in first.fault_conditions] == [
+        c.description for c in second.fault_conditions
+    ]
 
 
 # -- Degenerate inputs ----------------------------------------------------
+
 
 def test_an_unknown_batch_raises(db):
     with pytest.raises(ValueError, match="No batch job"):
@@ -190,8 +215,12 @@ def test_an_empty_batch_reports_zero_rather_than_dividing_by_it(db):
 
     with db.session_scope() as session:
         job = BatchJobRecord(
-            scenario_name="empty", model_name="m", num_runs=0, master_seed=1,
-            status="completed", scenario_path=SCENARIO,
+            scenario_name="empty",
+            model_name="m",
+            num_runs=0,
+            master_seed=1,
+            status="completed",
+            scenario_path=SCENARIO,
         )
         session.add(job)
         session.flush()
@@ -212,15 +241,22 @@ def test_a_batch_with_no_recorded_path_says_it_cannot_be_analysed(db):
 
     with db.session_scope() as session:
         scenario_row = ScenarioRecord(
-            name="pathless", version="2.0", content_hash=os.urandom(32).hex(),
-            yaml_content="", duration=30.0,
+            name="pathless",
+            version="2.0",
+            content_hash=os.urandom(32).hex(),
+            yaml_content="",
+            duration=30.0,
         )
         session.add(scenario_row)
         session.flush()
         scenario_id = scenario_row.id
         job = BatchJobRecord(
-            scenario_name="pathless", model_name="m", num_runs=2, master_seed=1,
-            status="completed", scenario_path=None,
+            scenario_name="pathless",
+            model_name="m",
+            num_runs=2,
+            master_seed=1,
+            status="completed",
+            scenario_path=None,
         )
         session.add(job)
         session.flush()
@@ -230,13 +266,16 @@ def test_a_batch_with_no_recorded_path_says_it_cannot_be_analysed(db):
     for seed in (1, 2):
         result = runner.run_single(SCENARIO, ConstantActionModel(throttle=0.4), seed)
         with db.session_scope() as session:
-            RunRepository(session).save_result(scenario_id, result, batch_job_id=batch_id)
+            RunRepository(session).save_result(
+                scenario_id, result, batch_job_id=batch_id
+            )
 
     report = FailureClusterer().analyse(batch_id)
     assert "cannot be reconstructed" in report.safe_region_description
 
 
 # -- Description building -------------------------------------------------
+
 
 def test_a_description_names_only_the_extreme_parameters():
     """Listing every parameter says nothing; the useful part is the two or
@@ -245,9 +284,9 @@ def test_a_description_names_only_the_extreme_parameters():
     description = clusterer._build_description(
         cluster_params={"gap": 12.0, "speed": 25.0, "middling": 50.0},
         scenario_param_ranges={
-            "gap": (10.0, 60.0),        # cluster sits at the bottom
-            "speed": (10.0, 26.0),      # cluster sits at the top
-            "middling": (0.0, 100.0),   # cluster sits in the middle
+            "gap": (10.0, 60.0),  # cluster sits at the bottom
+            "speed": (10.0, 26.0),  # cluster sits at the top
+            "middling": (0.0, 100.0),  # cluster sits in the middle
         },
     )
     assert "gap <" in description
@@ -259,10 +298,17 @@ def test_the_safe_region_inverts_the_faults_and_hedges():
     from arep.analysis.failure_clustering import FaultCondition
 
     clusterer = FailureClusterer()
-    text = clusterer._build_safe_region([
-        FaultCondition(description="gap < 22.5", failure_rate=0.3, run_count=3,
-                       dominant_event="collision", example_run_id="7"),
-    ])
+    text = clusterer._build_safe_region(
+        [
+            FaultCondition(
+                description="gap < 22.5",
+                failure_rate=0.3,
+                run_count=3,
+                dominant_event="collision",
+                example_run_id="7",
+            ),
+        ]
+    )
     assert "gap >=" in text
     assert "not a safety guarantee" in text
 

@@ -38,6 +38,7 @@ W_COMPLIANCE = 0.5
 @dataclass
 class EvaluationRecord:
     """Result of one fitness evaluation."""
+
     params: Dict[str, Any]
     fitness: float
     seed: int
@@ -117,18 +118,19 @@ class ObjectiveFunction:
             compliance_score=result.compliance.compliance_score,
         )
 
-        self._history.append(EvaluationRecord(
-            params=params,
-            fitness=fitness,
-            seed=seed,
-            collision_occurred=result.safety.collision_occurred,
-            min_ttc=result.safety.min_ttc,
-            safety_score=result.safety.safety_score,
-            compliance_score=result.compliance.compliance_score,
-            composite_score=result.composite_score,
-        ))
+        self._history.append(
+            EvaluationRecord(
+                params=params,
+                fitness=fitness,
+                seed=seed,
+                collision_occurred=result.safety.collision_occurred,
+                min_ttc=result.safety.min_ttc,
+                safety_score=result.safety.safety_score,
+                compliance_score=result.compliance.compliance_score,
+                composite_score=result.composite_score,
+            )
+        )
         return fitness
-
 
     @property
     def history(self) -> List[EvaluationRecord]:

@@ -33,11 +33,13 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
 
     from arep.worker.celery_app import celery_app
+
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = False
 
@@ -62,10 +64,16 @@ def account(client):
 
     slug = f"refund{uuid.uuid4().hex[:8]}"
     email = f"{slug}@example.com"
-    r = client.post("/api/auth/signup", json={
-        "email": email, "username": slug, "password": PASSWORD,
-        "org_name": f"{slug} org", "org_slug": slug,
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": slug,
+            "password": PASSWORD,
+            "org_name": f"{slug} org",
+            "org_slug": slug,
+        },
+    )
     assert r.status_code == 201, r.text
     verify_email_for(email)
 
@@ -82,10 +90,16 @@ def _credits(client, account) -> int:
 def test_all_runs_succeed_no_refund(client, account):
     before = _credits(client, account)
 
-    r = client.post("/api/runs/batch", headers=account["headers"], json={
-        "scenario_path": SCENARIO, "model_name": "EmergencyBrake",
-        "num_runs": 3, "master_seed": 100,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=account["headers"],
+        json={
+            "scenario_path": SCENARIO,
+            "model_name": "EmergencyBrake",
+            "num_runs": 3,
+            "master_seed": 100,
+        },
+    )
     assert r.status_code == 202, r.text
 
     after = _credits(client, account)
@@ -111,33 +125,40 @@ def test_three_of_five_failures_refund_exactly_three(client, account, monkeypatc
 
     real_execute = tasks.execute_single_run
 
-    def tracking(task, batch_id, scenario_id, scenario_path, model_name, seed,
-                 org_id=None):
+    def tracking(
+        task, batch_id, scenario_id, scenario_path, model_name, seed, org_id=None
+    ):
         seen.append(seed)
-        return real_execute(task, batch_id, scenario_id, scenario_path,
-                            model_name, seed, org_id)
+        return real_execute(
+            task, batch_id, scenario_id, scenario_path, model_name, seed, org_id
+        )
 
     monkeypatch.setattr(tasks, "resolve_model", selective)
     monkeypatch.setattr(tasks, "execute_single_run", tracking)
 
-    r = client.post("/api/runs/batch", headers=account["headers"], json={
-        "scenario_path": SCENARIO, "model_name": "EmergencyBrake",
-        "num_runs": 5, "master_seed": base_seed,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=account["headers"],
+        json={
+            "scenario_path": SCENARIO,
+            "model_name": "EmergencyBrake",
+            "num_runs": 5,
+            "master_seed": base_seed,
+        },
+    )
     assert r.status_code == 202, r.text
     batch_id = r.json()["batch_id"]
 
     after = _credits(client, account)
     spent = before - after
 
-    status = client.get(f"/api/runs/batch/{batch_id}/status",
-                        headers=account["headers"]).json()
+    status = client.get(
+        f"/api/runs/batch/{batch_id}/status", headers=account["headers"]
+    ).json()
 
     assert status["failed"] == 3, f"expected 3 failures, got {status}"
     assert status["completed"] == 2
-    assert spent == 2, (
-        f"5 deducted, 3 should be refunded, so 2 net — spent {spent}"
-    )
+    assert spent == 2, f"5 deducted, 3 should be refunded, so 2 net — spent {spent}"
 
 
 def test_a_fully_failed_batch_refunds_everything(client, account, monkeypatch):
@@ -150,32 +171,47 @@ def test_a_fully_failed_batch_refunds_everything(client, account, monkeypatch):
 
     monkeypatch.setattr(tasks, "resolve_model", always_fail)
 
-    r = client.post("/api/runs/batch", headers=account["headers"], json={
-        "scenario_path": SCENARIO, "model_name": "EmergencyBrake",
-        "num_runs": 4, "master_seed": 900,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=account["headers"],
+        json={
+            "scenario_path": SCENARIO,
+            "model_name": "EmergencyBrake",
+            "num_runs": 4,
+            "master_seed": 900,
+        },
+    )
     assert r.status_code == 202
 
-    assert _credits(client, account) == before, (
-        "nothing was delivered, so nothing should be charged"
-    )
+    assert (
+        _credits(client, account) == before
+    ), "nothing was delivered, so nothing should be charged"
 
 
 def test_the_batch_finalises_once_and_reports_terminal_state(
-    client, account, monkeypatch,
+    client,
+    account,
+    monkeypatch,
 ):
     """Double-finalising can double-count the aggregate it writes."""
     from arep.database.connection import session_scope
     from arep.database.repository import BatchJobRepository
 
-    r = client.post("/api/runs/batch", headers=account["headers"], json={
-        "scenario_path": SCENARIO, "model_name": "EmergencyBrake",
-        "num_runs": 2, "master_seed": 1200,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=account["headers"],
+        json={
+            "scenario_path": SCENARIO,
+            "model_name": "EmergencyBrake",
+            "num_runs": 2,
+            "master_seed": 1200,
+        },
+    )
     batch_id = r.json()["batch_id"]
 
-    status = client.get(f"/api/runs/batch/{batch_id}/status",
-                        headers=account["headers"]).json()
+    status = client.get(
+        f"/api/runs/batch/{batch_id}/status", headers=account["headers"]
+    ).json()
     assert status["status"] in ("completed", "failed")
     assert status["completed"] + status["failed"] == status["total"]
 
@@ -183,24 +219,38 @@ def test_the_batch_finalises_once_and_reports_terminal_state(
     with session_scope() as db:
         repo = BatchJobRepository(db)
         before = repo.get_by_id(batch_id, org_id=None)
-        snapshot = (before.status, before.runs_completed, before.runs_failed,
-                    before.composite_mean)
+        snapshot = (
+            before.status,
+            before.runs_completed,
+            before.runs_failed,
+            before.composite_mean,
+        )
         repo.finalise_if_done(batch_id)
 
     with session_scope() as db:
         after = BatchJobRepository(db).get_by_id(batch_id, org_id=None)
-        assert (after.status, after.runs_completed, after.runs_failed,
-                after.composite_mean) == snapshot
+        assert (
+            after.status,
+            after.runs_completed,
+            after.runs_failed,
+            after.composite_mean,
+        ) == snapshot
 
 
 def test_credits_are_deducted_before_execution_not_after(client, account):
     """A client that disconnects mid-request must still be charged correctly."""
     before = _credits(client, account)
-    r = client.post("/api/runs/batch", headers=account["headers"], json={
-        "scenario_path": SCENARIO, "model_name": "EmergencyBrake",
-        "num_runs": 2, "master_seed": 1500,
-    })
-    assert r.status_code == 202
-    assert r.json()["credits_remaining"] == before - 2, (
-        "the 202 response must report the post-deduction balance"
+    r = client.post(
+        "/api/runs/batch",
+        headers=account["headers"],
+        json={
+            "scenario_path": SCENARIO,
+            "model_name": "EmergencyBrake",
+            "num_runs": 2,
+            "master_seed": 1500,
+        },
     )
+    assert r.status_code == 202
+    assert (
+        r.json()["credits_remaining"] == before - 2
+    ), "the 202 response must report the post-deduction balance"

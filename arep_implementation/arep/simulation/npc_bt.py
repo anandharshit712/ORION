@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
 # ── Module-level helpers ─────────────────────────────────────────────────────
 
+
 def _sample(spec, gen) -> float:
     """Return a scalar or sample a {min, max} range uniformly."""
     if isinstance(spec, dict) and "min" in spec and "max" in spec:
@@ -77,7 +78,9 @@ def _move_along_heading(obj: VehicleState, speed: float, dt: float) -> VehicleSt
     Move obj at `speed` along its current heading.
     Negative speed reverses direction (heading flipped by pi).
     """
-    actual_heading = obj.heading if speed >= 0 else (obj.heading + math.pi) % (2 * math.pi)
+    actual_heading = (
+        obj.heading if speed >= 0 else (obj.heading + math.pi) % (2 * math.pi)
+    )
     act_speed = abs(speed)
     new_obj = obj.copy()
     new_obj.velocity = act_speed
@@ -125,13 +128,14 @@ def _compute_ttc(obj: VehicleState, ego: VehicleState) -> float | None:
         return 0.0
     rel_vx = ego.velocity * math.cos(ego.heading) - obj.velocity * math.cos(obj.heading)
     rel_vy = ego.velocity * math.sin(ego.heading) - obj.velocity * math.sin(obj.heading)
-    rel_v = math.sqrt(rel_vx ** 2 + rel_vy ** 2)
+    rel_v = math.sqrt(rel_vx**2 + rel_vy**2)
     if rel_v < 1e-6:
         return None
     return gap / rel_v
 
 
 # ── Base class ────────────────────────────────────────────────────────────────
+
 
 class BaseBT:
     def tick(
@@ -146,6 +150,7 @@ class BaseBT:
 
 
 # ── Vehicle BTs ───────────────────────────────────────────────────────────────
+
 
 class HesitantBrakeBT(BaseBT):
     """
@@ -188,7 +193,11 @@ class HesitantBrakeBT(BaseBT):
         elif state == "initial_brake":
             data["elapsed"] = data.get("elapsed", 0.0) + dt
             new_obj = _apply_accel(
-                obj, data["initial_decel"], float(params.get("min_velocity", 0.0)), 50.0, dt
+                obj,
+                data["initial_decel"],
+                float(params.get("min_velocity", 0.0)),
+                50.0,
+                dt,
             )
             if data["elapsed"] >= data["phase_duration"]:
                 if gen.random() < data["hesitation_prob"]:
@@ -209,8 +218,11 @@ class HesitantBrakeBT(BaseBT):
             data["elapsed"] = data.get("elapsed", 0.0) + dt
             # Release brakes momentarily — creates the "near-miss" pattern
             new_obj = _apply_accel(
-                obj, data.get("hesitation_accel", 1.5),
-                0.0, float(params.get("max_velocity", 30.0)), dt
+                obj,
+                data.get("hesitation_accel", 1.5),
+                0.0,
+                float(params.get("max_velocity", 30.0)),
+                dt,
             )
             if data["elapsed"] >= data["phase_duration"]:
                 behavior["_bt_state"] = "full_stop"
@@ -219,8 +231,11 @@ class HesitantBrakeBT(BaseBT):
 
         elif state == "full_stop":
             return _apply_accel(
-                obj, data.get("final_decel", -9.0),
-                float(params.get("min_velocity", 0.0)), 50.0, dt
+                obj,
+                data.get("final_decel", -9.0),
+                float(params.get("min_velocity", 0.0)),
+                50.0,
+                dt,
             )
 
         return _const_vel(obj, dt)
@@ -281,7 +296,11 @@ class HesitantCutInBT(BaseBT):
                 world.ego_vehicle.acceleration < -1.5
                 or world.ego_vehicle.velocity < obj.velocity - 2.5
             )
-            if ego_braking and not data.get("committed") and gen.random() < data["abort_prob"]:
+            if (
+                ego_braking
+                and not data.get("committed")
+                and gen.random() < data["abort_prob"]
+            ):
                 behavior["_bt_state"] = "aborting"
                 return _const_vel(obj, dt)
 
@@ -367,6 +386,7 @@ class AdaptiveTailgateBT(BaseBT):
 
 
 # ── Pedestrian / VRU BTs ─────────────────────────────────────────────────────
+
 
 class CautiousPedestrianBT(BaseBT):
     """
@@ -455,7 +475,9 @@ class CautiousPedestrianBT(BaseBT):
                     behavior["_bt_state"] = "retreating"
                 else:
                     behavior["_bt_state"] = "crossing"
-                    data["cross_speed"] = data["walk_speed"] * float(gen.uniform(1.0, 1.3))
+                    data["cross_speed"] = data["walk_speed"] * float(
+                        gen.uniform(1.0, 1.3)
+                    )
             return obj.copy()  # stationary while hesitating
 
         elif state == "retreating":
@@ -502,13 +524,13 @@ class ErraticPedestrianBT(BaseBT):
         if world.sim_time >= data.get("next_decision_t", float("inf")):
             roll = gen.random()
             if roll < 0.20:
-                data["direction"] = -data.get("direction", 1.0)          # reverse
+                data["direction"] = -data.get("direction", 1.0)  # reverse
             elif roll < 0.45:
-                data["current_speed"] = _sample(                           # change speed
+                data["current_speed"] = _sample(  # change speed
                     params.get("walk_speed_range", {"min": 0.4, "max": 1.6}), gen
                 )
             elif roll < 0.60:
-                data["current_speed"] = 0.0                               # freeze
+                data["current_speed"] = 0.0  # freeze
             elif roll < 0.65:
                 # Brief sprint
                 data["current_speed"] = _sample({"min": 1.8, "max": 2.5}, gen)
@@ -585,7 +607,7 @@ class JunctionYieldBT(BaseBT):
 
         # Brake so the stop lands on the line rather than wherever the fixed
         # deceleration happens to run out: v² = 2·a·d.
-        needed = -(obj.velocity ** 2) / (2.0 * max(gap, 0.1))
+        needed = -(obj.velocity**2) / (2.0 * max(gap, 0.1))
         return _apply_accel(obj, max(needed, decel), 0.0, cruise_speed, dt)
 
     @staticmethod
@@ -598,8 +620,9 @@ class JunctionYieldBT(BaseBT):
             if distance > best_dist or distance < 1e-6:
                 continue
             # In front: positive projection onto the heading.
-            forward = (to_junction.x * math.cos(obj.heading)
-                       + to_junction.y * math.sin(obj.heading))
+            forward = to_junction.x * math.cos(obj.heading) + to_junction.y * math.sin(
+                obj.heading
+            )
             if forward <= 0:
                 continue
             best, best_dist = junction, distance
@@ -620,12 +643,12 @@ class JunctionYieldBT(BaseBT):
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 _BT_REGISTRY: dict[str, BaseBT] = {
-    "hesitant_brake":       HesitantBrakeBT(),
-    "hesitant_cut_in":      HesitantCutInBT(),
-    "adaptive_tailgate":    AdaptiveTailgateBT(),
-    "cautious_pedestrian":  CautiousPedestrianBT(),
-    "erratic_pedestrian":   ErraticPedestrianBT(),
-    "junction_yield":       JunctionYieldBT(),
+    "hesitant_brake": HesitantBrakeBT(),
+    "hesitant_cut_in": HesitantCutInBT(),
+    "adaptive_tailgate": AdaptiveTailgateBT(),
+    "cautious_pedestrian": CautiousPedestrianBT(),
+    "erratic_pedestrian": ErraticPedestrianBT(),
+    "junction_yield": JunctionYieldBT(),
 }
 
 
@@ -633,5 +656,7 @@ def get_bt(bt_type: str) -> BaseBT:
     """Return the BT instance for the given type string."""
     bt = _BT_REGISTRY.get(bt_type)
     if bt is None:
-        raise ValueError(f"Unknown BT type: {bt_type!r}. Available: {list(_BT_REGISTRY)}")
+        raise ValueError(
+            f"Unknown BT type: {bt_type!r}. Available: {list(_BT_REGISTRY)}"
+        )
     return bt

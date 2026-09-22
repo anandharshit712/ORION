@@ -24,8 +24,8 @@ from typing import Dict, List, Literal, Optional
 from arep.core.state import Vector2D
 from arep.core.physics import SurfaceType
 
-
 # ── RoadSegment ───────────────────────────────────────────────────────────
+
 
 @dataclass
 class RoadSegment:
@@ -36,15 +36,16 @@ class RoadSegment:
     the road centre. Lane centerlines are computed by offsetting from this
     by multiples of lane_width.
     """
+
     segment_id: str
     segment_type: Literal["straight", "curve", "intersection_arm", "ramp"]
-    centerline: List[Vector2D]           # 1m-spaced points along road centre
+    centerline: List[Vector2D]  # 1m-spaced points along road centre
     lane_count: int
-    lane_width: float                    # metres per lane
-    speed_limit: float                   # m/s
+    lane_width: float  # metres per lane
+    speed_limit: float  # m/s
     surface: SurfaceType = SurfaceType.DRY_ASPHALT
-    heading_start: float = 0.0          # radians at start of segment
-    heading_end: float = 0.0            # radians at end of segment
+    heading_start: float = 0.0  # radians at start of segment
+    heading_end: float = 0.0  # radians at end of segment
 
     @property
     def length(self) -> float:
@@ -88,10 +89,12 @@ class RoadSegment:
             else:
                 # Perpendicular: rotate forward vector 90° CCW
                 perp = Vector2D(-fwd.y / fwd_len, fwd.x / fwd_len)
-            result.append(Vector2D(
-                pt.x + perp.x * lane_offset,
-                pt.y + perp.y * lane_offset,
-            ))
+            result.append(
+                Vector2D(
+                    pt.x + perp.x * lane_offset,
+                    pt.y + perp.y * lane_offset,
+                )
+            )
         return result
 
     def contains_point(self, position: Vector2D, margin: float = 0.5) -> bool:
@@ -117,6 +120,7 @@ class RoadSegment:
 
 # ── Junction ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class Junction:
     """
@@ -125,9 +129,10 @@ class Junction:
     right_of_way maps each arm's segment_id to "priority" or "yield".
     Traffic light state is managed by the simulation engine separately.
     """
+
     junction_id: str
     junction_type: Literal["t_junction", "4way", "roundabout", "merge"]
-    arms: List[str]                          # segment_ids that connect here
+    arms: List[str]  # segment_ids that connect here
     position: Vector2D = field(default_factory=Vector2D)
     has_traffic_light: bool = False
     right_of_way: Dict[str, str] = field(default_factory=dict)
@@ -135,6 +140,7 @@ class Junction:
 
 
 # ── RoadGraph ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class RoadGraph:
@@ -145,6 +151,7 @@ class RoadGraph:
     Immutable after construction — do not modify segments or junctions
     after the graph is handed to the scenario executor.
     """
+
     segments: Dict[str, RoadSegment] = field(default_factory=dict)
     junctions: Dict[str, Junction] = field(default_factory=dict)
 
@@ -166,7 +173,9 @@ class RoadGraph:
         """Return True if position is not on any road segment."""
         return self.get_ego_segment(position) is None
 
-    def get_junction_at(self, position: Vector2D, radius: float = 5.0) -> Optional[Junction]:
+    def get_junction_at(
+        self, position: Vector2D, radius: float = 5.0
+    ) -> Optional[Junction]:
         """Find a junction within radius metres of position."""
         for junc in self.junctions.values():
             if junc.position.distance_to(position) <= radius:
@@ -178,9 +187,7 @@ class RoadGraph:
         seg = self.get_ego_segment(position)
         return seg.speed_limit if seg else 0.0
 
-    def get_lane_centerline(
-        self, segment_id: str, lane_index: int
-    ) -> List[Vector2D]:
+    def get_lane_centerline(self, segment_id: str, lane_index: int) -> List[Vector2D]:
         """Convenience: get lane centerline from segment_id + lane_index."""
         return self.get_segment(segment_id).get_lane_centerline(lane_index)
 

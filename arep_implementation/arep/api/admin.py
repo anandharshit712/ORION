@@ -27,7 +27,8 @@ from arep.api.middleware import require_superadmin
 from arep.database.connection import session_scope
 from arep.database.models import UserRecord
 from arep.database.repository import (
-    OrganisationRepository, UserRepository,
+    OrganisationRepository,
+    UserRepository,
 )
 from arep.utils.logging_config import get_logger
 
@@ -41,6 +42,7 @@ admin_router = APIRouter(
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
+
 
 class SuperadminCreateRequest(BaseModel):
     email: str = Field(..., min_length=5)
@@ -81,6 +83,7 @@ class AdminOrgResponse(BaseModel):
 
 # ── Routes ───────────────────────────────────────────────────────────────
 
+
 @admin_router.post(
     "/superadmin",
     response_model=AdminUserResponse,
@@ -92,9 +95,13 @@ def create_superadmin(req: SuperadminCreateRequest):
         raise HTTPException(400, "Password cannot be longer than 72 characters")
 
     with session_scope() as session:
-        existing = session.query(UserRecord).filter(
-            (UserRecord.email == req.email) | (UserRecord.username == req.username)
-        ).first()
+        existing = (
+            session.query(UserRecord)
+            .filter(
+                (UserRecord.email == req.email) | (UserRecord.username == req.username)
+            )
+            .first()
+        )
         if existing is not None:
             raise HTTPException(409, "Email or username already registered")
 
@@ -173,6 +180,7 @@ def list_all_orgs():
 
 # ── Beta credit management ────────────────────────────────────────────────
 
+
 class CreditTopUpRequest(BaseModel):
     amount: int = Field(..., gt=0, description="Number of credits to add")
     note: Optional[str] = Field(None, description="Internal note for audit trail")
@@ -220,7 +228,11 @@ def topup_org_credits(org_id: str, req: CreditTopUpRequest, request: Request):
 
     logger.info(
         "Admin credit top-up: org=%s added=%d new_balance=%d caller=%s note=%r",
-        org_id, req.amount, new_balance, caller_id, req.note,
+        org_id,
+        req.amount,
+        new_balance,
+        caller_id,
+        req.note,
     )
     return CreditTopUpResponse(
         org_id=org_id,
@@ -231,8 +243,12 @@ def topup_org_credits(org_id: str, req: CreditTopUpRequest, request: Request):
 
 
 class PickleModelsRequest(BaseModel):
-    enabled: bool = Field(..., description="Allow this org to upload/run cloudpickle models")
-    note: Optional[str] = Field(None, max_length=256, description="Why — recorded in the audit log")
+    enabled: bool = Field(
+        ..., description="Allow this org to upload/run cloudpickle models"
+    )
+    note: Optional[str] = Field(
+        None, max_length=256, description="Why — recorded in the audit log"
+    )
 
 
 @admin_router.put(
@@ -256,7 +272,9 @@ def set_org_pickle_models(org_id: str, req: PickleModelsRequest, request: Reques
         session.refresh(org)
         logger.warning(
             "Admin changed cloudpickle gate: org=%s enabled=%s note=%s",
-            org_id, req.enabled, req.note or "-",
+            org_id,
+            req.enabled,
+            req.note or "-",
         )
         return AdminOrgResponse.model_validate(org)
 
@@ -292,6 +310,8 @@ def change_org_plan(org_id: str, req: PlanChangeRequest):
         session.refresh(org)
         logger.info(
             "Admin plan change: org=%s plan=%s credits=%s",
-            org_id, req.plan, org.run_credits,
+            org_id,
+            req.plan,
+            org.run_credits,
         )
         return AdminOrgResponse.model_validate(org)

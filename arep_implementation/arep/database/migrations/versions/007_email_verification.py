@@ -16,6 +16,7 @@ Revision ID: 007
 Revises: 006
 Create Date: 2026-09-20
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -32,11 +33,17 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column(
         "users",
-        sa.Column("email_verified", sa.Boolean, nullable=False, server_default=sa.false()),
+        sa.Column(
+            "email_verified", sa.Boolean, nullable=False, server_default=sa.false()
+        ),
     )
     op.add_column("users", sa.Column("email_verified_at", sa.DateTime, nullable=True))
-    op.add_column("users", sa.Column("verification_token_hash", sa.String(64), nullable=True))
-    op.add_column("users", sa.Column("verification_sent_at", sa.DateTime, nullable=True))
+    op.add_column(
+        "users", sa.Column("verification_token_hash", sa.String(64), nullable=True)
+    )
+    op.add_column(
+        "users", sa.Column("verification_sent_at", sa.DateTime, nullable=True)
+    )
     op.create_index(
         "ix_users_verification_token_hash", "users", ["verification_token_hash"]
     )

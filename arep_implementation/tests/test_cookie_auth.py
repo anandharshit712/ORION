@@ -34,6 +34,7 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
@@ -55,10 +56,15 @@ def client():
 @pytest.fixture(scope="module")
 def account(client):
     email = "cookie@example.com"
-    r = client.post("/api/auth/signup", json={
-        "email": email, "username": "cookieuser",
-        "password": PASSWORD, "org_name": "Cookie Org",
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": "cookieuser",
+            "password": PASSWORD,
+            "org_name": "Cookie Org",
+        },
+    )
     assert r.status_code == 201, r.text
     verify_email_for(email)
     return email
@@ -68,7 +74,9 @@ def account(client):
 def logged_in(client, account):
     """Log in and leave the cookies on the client, as a browser would."""
     client.cookies.clear()
-    r = client.post("/api/auth/login", json={"identifier": account, "password": PASSWORD})
+    r = client.post(
+        "/api/auth/login", json={"identifier": account, "password": PASSWORD}
+    )
     assert r.status_code == 200, r.text
     yield r
     client.cookies.clear()
@@ -80,9 +88,12 @@ def _csrf(client) -> dict:
 
 # -- The cookie itself ----------------------------------------------------
 
+
 def test_login_sets_an_httponly_session_cookie(client, account):
     client.cookies.clear()
-    r = client.post("/api/auth/login", json={"identifier": account, "password": PASSWORD})
+    r = client.post(
+        "/api/auth/login", json={"identifier": account, "password": PASSWORD}
+    )
     assert r.status_code == 200
 
     set_cookie = r.headers.get("set-cookie", "")
@@ -98,7 +109,9 @@ def test_csrf_cookie_is_readable_on_purpose(client, account):
     cannot read it, which is exactly what makes double-submit work.
     """
     client.cookies.clear()
-    r = client.post("/api/auth/login", json={"identifier": account, "password": PASSWORD})
+    r = client.post(
+        "/api/auth/login", json={"identifier": account, "password": PASSWORD}
+    )
     csrf_header = [h for h in r.headers.get_list("set-cookie") if "orion_csrf" in h][0]
     assert "HttpOnly" not in csrf_header
 
@@ -106,7 +119,9 @@ def test_csrf_cookie_is_readable_on_purpose(client, account):
 def test_login_still_returns_a_bearer_token_for_sdk_clients(client, account):
     """Dropping the body token would break every script and the SDK."""
     client.cookies.clear()
-    r = client.post("/api/auth/login", json={"identifier": account, "password": PASSWORD})
+    r = client.post(
+        "/api/auth/login", json={"identifier": account, "password": PASSWORD}
+    )
     assert r.json()["access_token"]
 
 
@@ -130,7 +145,7 @@ def test_session_survives_a_simulated_refresh(client, logged_in):
 def test_logout_clears_the_session(client, logged_in):
     r = client.post("/api/auth/logout", headers=_csrf(client))
     assert r.status_code == 200
-    client.cookies.clear()          # the browser would drop the expired cookie
+    client.cookies.clear()  # the browser would drop the expired cookie
     assert client.get("/api/auth/me").status_code == 401
 
 
@@ -148,6 +163,7 @@ def test_a_garbage_cookie_is_rejected(client):
 
 # -- CSRF -----------------------------------------------------------------
 
+
 def test_cookie_write_without_a_csrf_token_is_refused(client, logged_in):
     """The attack this opens up: a cross-site form post riding the cookie."""
     r = client.post("/api/keys/", json={"label": "forged"})
@@ -156,8 +172,11 @@ def test_cookie_write_without_a_csrf_token_is_refused(client, logged_in):
 
 
 def test_cookie_write_with_a_mismatched_csrf_token_is_refused(client, logged_in):
-    r = client.post("/api/keys/", json={"label": "forged"},
-                    headers={"X-CSRF-Token": "guessed-value"})
+    r = client.post(
+        "/api/keys/",
+        json={"label": "forged"},
+        headers={"X-CSRF-Token": "guessed-value"},
+    )
     assert r.status_code == 403
 
 
@@ -178,13 +197,20 @@ def test_bearer_writes_do_not_need_a_csrf_token(client, account):
     Requiring a token there would break every script for no security gain.
     """
     client.cookies.clear()
-    token = client.post("/api/auth/login", json={
-        "identifier": account, "password": PASSWORD,
-    }).json()["access_token"]
-    client.cookies.clear()          # header only, no cookie jar
+    token = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": account,
+            "password": PASSWORD,
+        },
+    ).json()["access_token"]
+    client.cookies.clear()  # header only, no cookie jar
 
-    r = client.post("/api/keys/", json={"label": "sdk-client"},
-                    headers={"Authorization": f"Bearer {token}"})
+    r = client.post(
+        "/api/keys/",
+        json={"label": "sdk-client"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert r.status_code == 201, r.text
 
 
@@ -196,16 +222,20 @@ def test_authorization_header_wins_over_a_stale_cookie(client, account, logged_i
 
 # -- Token lifetimes ------------------------------------------------------
 
+
 def test_superadmin_tokens_expire_in_four_hours():
     """A platform-wide credential must not stay valid overnight (D-04)."""
     from arep.api.auth import (
-        ACCESS_TOKEN_EXPIRE_HOURS, SUPERADMIN_TOKEN_EXPIRE_HOURS, token_lifetime_for,
+        ACCESS_TOKEN_EXPIRE_HOURS,
+        SUPERADMIN_TOKEN_EXPIRE_HOURS,
+        token_lifetime_for,
     )
 
     assert SUPERADMIN_TOKEN_EXPIRE_HOURS == 4
     assert token_lifetime_for("superadmin") == datetime.timedelta(hours=4)
     assert token_lifetime_for("owner") == datetime.timedelta(
-        hours=ACCESS_TOKEN_EXPIRE_HOURS)
+        hours=ACCESS_TOKEN_EXPIRE_HOURS
+    )
 
 
 def test_superadmin_jwt_really_carries_the_shorter_expiry():
@@ -214,25 +244,37 @@ def test_superadmin_jwt_really_carries_the_shorter_expiry():
 
     from arep.api.auth import ALGORITHM, SECRET_KEY, create_access_token
 
-    admin = jwt.decode(create_access_token({"sub": "1", "role": "superadmin"}),
-                       SECRET_KEY, algorithms=[ALGORITHM])
-    owner = jwt.decode(create_access_token({"sub": "2", "role": "owner"}),
-                       SECRET_KEY, algorithms=[ALGORITHM])
+    admin = jwt.decode(
+        create_access_token({"sub": "1", "role": "superadmin"}),
+        SECRET_KEY,
+        algorithms=[ALGORITHM],
+    )
+    owner = jwt.decode(
+        create_access_token({"sub": "2", "role": "owner"}),
+        SECRET_KEY,
+        algorithms=[ALGORITHM],
+    )
     assert admin["exp"] < owner["exp"]
 
 
 def test_cookie_lifetime_matches_the_token(client, account):
     """A cookie outliving its JWT just produces confusing 401s."""
     client.cookies.clear()
-    r = client.post("/api/auth/login", json={"identifier": account, "password": PASSWORD})
-    session_cookie = [h for h in r.headers.get_list("set-cookie") if "orion_session" in h][0]
-    assert "Max-Age=86400" in session_cookie       # 24h, the non-superadmin lifetime
+    r = client.post(
+        "/api/auth/login", json={"identifier": account, "password": PASSWORD}
+    )
+    session_cookie = [
+        h for h in r.headers.get_list("set-cookie") if "orion_session" in h
+    ][0]
+    assert "Max-Age=86400" in session_cookie  # 24h, the non-superadmin lifetime
 
 
 def test_cookies_are_not_secure_in_dev(client, account):
     """A Secure cookie is dropped over http://, so dev would never log in."""
     client.cookies.clear()
-    r = client.post("/api/auth/login", json={"identifier": account, "password": PASSWORD})
+    r = client.post(
+        "/api/auth/login", json={"identifier": account, "password": PASSWORD}
+    )
     assert "Secure" not in r.headers.get("set-cookie", "")
 
 

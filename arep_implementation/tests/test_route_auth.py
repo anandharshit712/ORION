@@ -23,13 +23,26 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Routers that serve data and must never answer an anonymous caller.
-GATED_PREFIXES = ("/models", "/scenarios", "/evaluate", "/jobs", "/results", "/api/runs")
+GATED_PREFIXES = (
+    "/models",
+    "/scenarios",
+    "/evaluate",
+    "/jobs",
+    "/results",
+    "/api/runs",
+)
 
 # Deliberately public: probes and the login surface cannot present a token.
 PUBLIC_PATHS = {
-    "/health", "/docs", "/redoc", "/openapi.json",
-    "/api/auth/login", "/api/auth/signup", "/api/auth/register",
-    "/api/auth/forgot-password", "/api/auth/reset-password",
+    "/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/api/auth/login",
+    "/api/auth/signup",
+    "/api/auth/register",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
 }
 
 
@@ -40,6 +53,7 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
@@ -75,18 +89,24 @@ def anonymous_by_default(client):
 @pytest.fixture(scope="module")
 def token(client):
     """A real JWT, so the positive cases prove the gate opens for a valid caller."""
-    r = client.post("/api/auth/signup", json={
-        "email": "auth-test@example.com",
-        "username": "authtest",
-        "password": "correct-horse-battery",
-        "org_name": "Auth Test Org",
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": "auth-test@example.com",
+            "username": "authtest",
+            "password": "correct-horse-battery",
+            "org_name": "Auth Test Org",
+        },
+    )
     assert r.status_code == 201, r.text
 
-    r = client.post("/api/auth/login", json={
-        "identifier": "auth-test@example.com",
-        "password": "correct-horse-battery",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": "auth-test@example.com",
+            "password": "correct-horse-battery",
+        },
+    )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
 
@@ -96,6 +116,7 @@ def _auth(token: str) -> dict:
 
 
 # -- The acceptance criterion ---------------------------------------------
+
 
 def test_unauthenticated_scenarios_returns_401(client):
     """The D-03/D-07 acceptance criterion, verbatim from the roadmap."""
@@ -121,6 +142,7 @@ def test_unauthenticated_jobs_and_results_return_401(client):
 
 # -- The gate opens for a valid caller ------------------------------------
 
+
 def test_authenticated_caller_can_read_scenarios(client, token):
     r = client.get("/scenarios/", headers=_auth(token))
     assert r.status_code == 200
@@ -138,6 +160,7 @@ def test_authenticated_caller_can_read_jobs(client, token):
 
 
 # -- Negative credentials -------------------------------------------------
+
 
 def test_garbage_token_is_rejected(client):
     r = client.get("/scenarios/", headers={"Authorization": "Bearer not-a-jwt"})
@@ -157,6 +180,7 @@ def test_errors_keep_the_platform_error_shape(client):
 
 # -- Public surface stays public ------------------------------------------
 
+
 def test_health_stays_public(client):
     """A probe cannot hold a token; gating this reads as an outage."""
     assert client.get("/health").status_code == 200
@@ -167,6 +191,7 @@ def test_openapi_schema_stays_public(client):
 
 
 # -- The rule, not the list -----------------------------------------------
+
 
 def test_every_data_router_requires_auth(client):
     """Walk the mounted routes so a newly added one cannot slip through.
@@ -185,9 +210,9 @@ def test_every_data_router_requires_auth(client):
         if path in PUBLIC_PATHS or not path.startswith(GATED_PREFIXES):
             continue
         if "GET" not in methods:
-            continue            # POST/PUT/DELETE need a body or a real id
+            continue  # POST/PUT/DELETE need a body or a real id
         if "{" in path:
-            continue            # path params need a valid id; covered above
+            continue  # path params need a valid id; covered above
 
         if client.get(path).status_code != 401:
             unguarded.append(path)

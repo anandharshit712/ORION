@@ -19,25 +19,35 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.analysis.regression_detector import (   # noqa: E402
+from arep.analysis.regression_detector import (  # noqa: E402
     REGRESSION_COLLISION_THRESHOLD,
     REGRESSION_COMPOSITE_THRESHOLD,
     REGRESSION_SAFETY_THRESHOLD,
     RegressionDetector,
     _summarise,
 )
-from arep.statistics.aggregator import AggregatedMetrics   # noqa: E402
+from arep.statistics.aggregator import AggregatedMetrics  # noqa: E402
 
 SCENARIO = "scenarios/basic/straight_road_lead_vehicle.yaml"
 
 
-def _agg(composite=0.9, safety=0.9, compliance=0.9, stability=0.9,
-         reactivity=0.9, collision_rate=0.0, num_runs=10):
+def _agg(
+    composite=0.9,
+    safety=0.9,
+    compliance=0.9,
+    stability=0.9,
+    reactivity=0.9,
+    collision_rate=0.0,
+    num_runs=10,
+):
     return AggregatedMetrics(
         num_runs=num_runs,
-        composite_mean=composite, safety_mean=safety,
-        compliance_mean=compliance, stability_mean=stability,
-        reactivity_mean=reactivity, collision_rate=collision_rate,
+        composite_mean=composite,
+        safety_mean=safety,
+        compliance_mean=compliance,
+        stability_mean=stability,
+        reactivity_mean=reactivity,
+        collision_rate=collision_rate,
     )
 
 
@@ -45,13 +55,16 @@ def _compare(agg_a, agg_b):
     detector = RegressionDetector()
     comparison = detector._compare_aggregates("s1", "a", "b", agg_a, agg_b, 10)
     from arep.analysis.regression_detector import ComparisonReport
-    report = ComparisonReport(model_a_id="a", model_a_name="a",
-                              model_b_id="b", model_b_name="b")
+
+    report = ComparisonReport(
+        model_a_id="a", model_a_name="a", model_b_id="b", model_b_name="b"
+    )
     report.scenario_comparisons.append(comparison)
     return detector._finalise(report)
 
 
 # -- Detecting a regression ----------------------------------------------
+
 
 def test_a_composite_drop_past_the_threshold_is_a_regression():
     report = _compare(_agg(composite=0.90), _agg(composite=0.90 - 0.06))
@@ -88,8 +101,11 @@ def test_collision_delta_is_signed_so_positive_always_means_improved():
     """Every other metric is higher-is-better; collision rate is not, and a
     reader comparing deltas across metrics would otherwise be misled."""
     report = _compare(_agg(collision_rate=0.10), _agg(collision_rate=0.02))
-    delta = next(d for d in report.scenario_comparisons[0].metric_deltas
-                 if d.metric == "collision_rate")
+    delta = next(
+        d
+        for d in report.scenario_comparisons[0].metric_deltas
+        if d.metric == "collision_rate"
+    )
     assert delta.delta > 0, "a drop in collisions should read as an improvement"
 
 
@@ -99,20 +115,28 @@ def test_a_one_point_collision_rise_is_the_boundary():
 
 # -- Judgement --------------------------------------------------------------
 
+
 def test_a_regression_outranks_the_win_count():
     """A candidate better on most scenarios and dangerous on one does not ship."""
     detector = RegressionDetector()
     from arep.analysis.regression_detector import ComparisonReport
 
-    report = ComparisonReport(model_a_id="a", model_a_name="a",
-                              model_b_id="b", model_b_name="b")
+    report = ComparisonReport(
+        model_a_id="a", model_a_name="a", model_b_id="b", model_b_name="b"
+    )
     # Two clear wins...
     for scenario in ("win1", "win2"):
-        report.scenario_comparisons.append(detector._compare_aggregates(
-            scenario, "a", "b", _agg(composite=0.70), _agg(composite=0.90), 10))
+        report.scenario_comparisons.append(
+            detector._compare_aggregates(
+                scenario, "a", "b", _agg(composite=0.70), _agg(composite=0.90), 10
+            )
+        )
     # ...and one scenario where safety collapses.
-    report.scenario_comparisons.append(detector._compare_aggregates(
-        "danger", "a", "b", _agg(safety=0.95), _agg(safety=0.50), 10))
+    report.scenario_comparisons.append(
+        detector._compare_aggregates(
+            "danger", "a", "b", _agg(safety=0.95), _agg(safety=0.50), 10
+        )
+    )
 
     detector._finalise(report)
 
@@ -143,14 +167,19 @@ def test_a_baseline_that_stays_ahead_is_reported_as_no_improvement():
 
 def test_the_recommendation_names_the_worst_metric():
     report = _compare(_agg(composite=0.9, safety=0.95), _agg(composite=0.5, safety=0.5))
-    assert "safety_score" in report.recommendation or "composite_score" in report.recommendation
+    assert (
+        "safety_score" in report.recommendation
+        or "composite_score" in report.recommendation
+    )
 
 
 # -- Summarising stored runs ---------------------------------------------
 
+
 def test_summarise_recomputes_from_the_rows():
     """Reading the batch's stored aggregate would compare across whatever
     scoring version wrote it."""
+
     class Row:
         def __init__(self, composite, collision):
             self.composite_score = composite
@@ -172,6 +201,7 @@ def test_summarise_handles_an_empty_batch():
 
 # -- End to end ------------------------------------------------------------
 
+
 def test_two_real_models_compare_end_to_end():
     """EmergencyBrake against ConstantAction on a scenario where one brakes and
     the other does not — the comparison must call it."""
@@ -191,13 +221,38 @@ def test_two_real_models_compare_end_to_end():
     assert report.recommendation
 
 
-def test_both_models_face_the_same_seed():
+def test_both_models_face_the_same_seed(monkeypatch):
     """Comparing one model on one sample against another on a different sample
-    measures the sampler, not the models."""
-    import inspect
+    measures the sampler, not the models.
 
-    source = inspect.getsource(RegressionDetector.compare)
-    assert "runs_per_scenario, seed)" in source.replace("\n", " ").replace("  ", " ")
+    Asserted against the calls actually made. This used to grep the source of
+    `compare` for a literal argument list, which broke the moment the file was
+    reformatted and would have passed regardless of what the seeds were.
+    """
+    from arep.execution.runner import EvaluationRunner
+
+    calls = []
+    real_run_batch = EvaluationRunner.run_batch
+
+    def spy(self, scenario_path, model, num_runs, master_seed, *args, **kwargs):
+        calls.append((scenario_path, num_runs, master_seed))
+        return real_run_batch(
+            self, scenario_path, model, num_runs, master_seed, *args, **kwargs
+        )
+
+    monkeypatch.setattr(EvaluationRunner, "run_batch", spy)
+
+    RegressionDetector().compare(
+        model_a_id="EmergencyBrake",
+        model_b_id="ConstantAction",
+        scenario_ids=[SCENARIO],
+        runs_per_scenario=1,
+        seed=4242,
+    )
+
+    assert len(calls) == 2, "expected one batch per model"
+    assert calls[0] == calls[1], f"models faced different draws: {calls}"
+    assert calls[0][2] == 4242
 
 
 def test_comparing_batches_of_different_scenarios_is_refused(tmp_path):
@@ -210,10 +265,15 @@ def test_comparing_batches_of_different_scenarios_is_refused(tmp_path):
     try:
         with conn_mod.session_scope() as session:
             for name in ("scenario-one", "scenario-two"):
-                session.add(BatchJobRecord(
-                    scenario_name=name, model_name="m", num_runs=1,
-                    master_seed=1, status="completed",
-                ))
+                session.add(
+                    BatchJobRecord(
+                        scenario_name=name,
+                        model_name="m",
+                        num_runs=1,
+                        master_seed=1,
+                        status="completed",
+                    )
+                )
 
         with pytest.raises(ValueError, match="different scenarios"):
             RegressionDetector().compare_from_db("1", "2")

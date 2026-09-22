@@ -38,13 +38,14 @@ class SubmissionType(str, Enum):
 @dataclass
 class ModelArtefact:
     """Metadata about a stored model artefact."""
+
     model_id: str
     org_id: str
     name: str
     version: str
     submission_type: SubmissionType
-    artefact_uri: str          # s3://... or registry.orion.run/...
-    status: str                # uploading | ready | error
+    artefact_uri: str  # s3://... or registry.orion.run/...
+    status: str  # uploading | ready | error
     size_bytes: Optional[int] = None
     content_hash: Optional[str] = None
 
@@ -83,7 +84,9 @@ class ModelStore:
         uri = f"file://{dest}"
         digest = self.compute_hash(pickle_bytes)
         size = len(pickle_bytes)
-        logger.info("Stored SDK model artefact: %s (%d bytes, sha256=%s)", uri, size, digest[:8])
+        logger.info(
+            "Stored SDK model artefact: %s (%d bytes, sha256=%s)", uri, size, digest[:8]
+        )
         return uri, digest, size
 
     def delete(self, artefact_uri: str) -> None:
@@ -114,7 +117,9 @@ class ModelStore:
         return uri
 
     def fetch_python_sdk(
-        self, artefact_uri: str, expected_hash: Optional[str] = None,
+        self,
+        artefact_uri: str,
+        expected_hash: Optional[str] = None,
     ) -> bytes:
         """
         Fetch the cloudpickle blob for a python_sdk model.
@@ -156,7 +161,8 @@ class ModelStore:
         else:
             logger.warning(
                 "Loading %s without a hash check — the caller passed no "
-                "expected_hash", artefact_uri,
+                "expected_hash",
+                artefact_uri,
             )
 
         return data

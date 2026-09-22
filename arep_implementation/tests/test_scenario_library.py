@@ -74,7 +74,9 @@ def test_every_scenario_terminates(path: Path):
 
 
 @pytest.mark.parametrize(
-    "path", [p for p in ALL if p.parent.name != "basic"], ids=lambda p: p.name,
+    "path",
+    [p for p in ALL if p.parent.name != "basic"],
+    ids=lambda p: p.name,
 )
 def test_library_filenames_follow_the_naming_convention(path: Path):
     """[CATEGORY]-[SEQ]_description.yaml, and the directory must agree.
@@ -91,15 +93,19 @@ def test_library_filenames_follow_the_naming_convention(path: Path):
     category, seq = code.split("-", 1)
     assert category in CATEGORIES, f"{category} is not a known category"
     assert seq.isdigit(), f"{seq} is not a sequence number"
-    assert path.parent.name == category.lower(), (
-        f"{path.name} sits in {path.parent.name}/ but declares {category}"
-    )
+    assert (
+        path.parent.name == category.lower()
+    ), f"{path.name} sits in {path.parent.name}/ but declares {category}"
 
 
 # Behaviour types the executor knows how to build (see _build_npc_behaviors).
 KNOWN_BEHAVIOURS = {
-    "constant_velocity", "reactive_vehicle", "reactive_pedestrian",
-    "follow_lane", "scripted", "pedestrian",
+    "constant_velocity",
+    "reactive_vehicle",
+    "reactive_pedestrian",
+    "follow_lane",
+    "scripted",
+    "pedestrian",
 }
 
 

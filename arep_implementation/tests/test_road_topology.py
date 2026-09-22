@@ -26,20 +26,24 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.config import get_config                      # noqa: E402
-from arep.core import road_templates                    # noqa: E402
-from arep.core.state import Vector2D                    # noqa: E402
-from arep.scenario.executor import ScenarioExecutor     # noqa: E402
-from arep.scenario.parser import ScenarioParser         # noqa: E402
-from arep.utils.exceptions import ScenarioParseError    # noqa: E402
+from arep.config import get_config  # noqa: E402
+from arep.core import road_templates  # noqa: E402
+from arep.core.state import Vector2D  # noqa: E402
+from arep.scenario.executor import ScenarioExecutor  # noqa: E402
+from arep.scenario.parser import ScenarioParser  # noqa: E402
+from arep.utils.exceptions import ScenarioParseError  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 BASIC = str(REPO / "scenarios" / "basic" / "straight_road_lead_vehicle.yaml")
 INT_SCENARIOS = sorted((REPO.parent / "scenarios" / "int").glob("*.yaml"))
 
 TEMPLATES = [
-    "highway_straight", "urban_straight", "t_junction",
-    "four_way_intersection", "highway_onramp", "roundabout",
+    "highway_straight",
+    "urban_straight",
+    "t_junction",
+    "four_way_intersection",
+    "highway_onramp",
+    "roundabout",
 ]
 
 
@@ -52,6 +56,7 @@ def _scenario(path: str):
 
 
 # -- The templates themselves ---------------------------------------------
+
 
 @pytest.mark.parametrize("name", TEMPLATES)
 def test_every_template_builds_a_usable_graph(name):
@@ -77,9 +82,9 @@ def test_every_template_places_lanes_inside_its_road(name):
             centerline = segment.get_lane_centerline(lane_idx)
             assert len(centerline) == len(segment.centerline)
             midpoint = centerline[len(centerline) // 2]
-            assert segment.contains_point(midpoint), (
-                f"{name}/{segment.segment_id} lane {lane_idx} lies outside the road"
-            )
+            assert segment.contains_point(
+                midpoint
+            ), f"{name}/{segment.segment_id} lane {lane_idx} lies outside the road"
 
 
 def test_junction_templates_actually_have_junctions():
@@ -96,6 +101,7 @@ def test_lane_indices_are_bounds_checked():
 
 # -- Scenario wiring ------------------------------------------------------
 
+
 def test_a_scenario_without_a_template_gets_no_graph():
     """Every scenario written before 1.5 keeps the flat road it was scored on."""
     scenario = _scenario(BASIC)
@@ -108,7 +114,7 @@ def test_a_scenario_without_a_template_keeps_its_old_lanes():
     lanes = _executor()._create_lanes(scenario, None)
 
     assert len(lanes) == scenario.road.lanes
-    assert lanes[0].centerline_points[0].y == 0.0     # lane 0 on the travel line
+    assert lanes[0].centerline_points[0].y == 0.0  # lane 0 on the travel line
 
 
 def test_a_named_template_produces_a_graph():
@@ -157,7 +163,7 @@ def test_an_unknown_template_param_fails_loudly():
     """Silently dropping it would produce a road nobody asked for."""
     scenario = _scenario(BASIC)
     scenario.road.template = "four_way_intersection"
-    scenario.road.template_params = {"arm_lenght": 150.0}      # typo
+    scenario.road.template_params = {"arm_lenght": 150.0}  # typo
 
     with pytest.raises(ScenarioParseError, match="does not accept"):
         _executor()._create_road_graph(scenario)
@@ -178,6 +184,7 @@ def test_road_block_defaults_feed_the_template():
 
 # -- The graph changes behaviour ------------------------------------------
 
+
 def test_off_road_uses_the_graph_when_one_is_present():
     """The point of the whole exercise: on a junction, the nearest-centreline
     test cannot tell the verge from another arm."""
@@ -193,9 +200,11 @@ def test_off_road_uses_the_graph_when_one_is_present():
 
     def off_road_at(x: float, y: float) -> bool:
         world = WorldState(
-            sim_time=0.0, timestep_count=0,
+            sim_time=0.0,
+            timestep_count=0,
             ego_vehicle=VehicleState(position=Vector2D(x, y), velocity=5.0),
-            lanes=lanes, road_graph=graph,
+            lanes=lanes,
+            road_graph=graph,
         )
         return detector.check_off_road(world.ego_vehicle, world)
 
@@ -213,9 +222,11 @@ def test_speed_limit_comes_from_the_segment():
     graph = _executor()._create_road_graph(scenario)
 
     world = WorldState(
-        sim_time=0.0, timestep_count=0,
+        sim_time=0.0,
+        timestep_count=0,
         ego_vehicle=VehicleState(position=Vector2D(0.0, 0.0), velocity=5.0),
-        lanes=_executor()._create_lanes(scenario, graph), road_graph=graph,
+        lanes=_executor()._create_lanes(scenario, graph),
+        road_graph=graph,
     )
     assert world.get_speed_limit() == 9.5
 
@@ -231,12 +242,14 @@ def test_a_world_without_a_graph_still_answers_off_road_the_old_way():
     detector = CollisionDetector(get_config().simulation)
 
     on_lane = WorldState(
-        sim_time=0.0, timestep_count=0,
+        sim_time=0.0,
+        timestep_count=0,
         ego_vehicle=VehicleState(position=Vector2D(10.0, 0.0), velocity=5.0),
         lanes=lanes,
     )
     way_out = WorldState(
-        sim_time=0.0, timestep_count=0,
+        sim_time=0.0,
+        timestep_count=0,
         ego_vehicle=VehicleState(position=Vector2D(10.0, 40.0), velocity=5.0),
         lanes=lanes,
     )
@@ -246,6 +259,7 @@ def test_a_world_without_a_graph_still_answers_off_road_the_old_way():
 
 
 # -- The scenarios this unblocks ------------------------------------------
+
 
 def test_the_int_library_is_present():
     assert len(INT_SCENARIOS) >= 3, "intersection scenarios not found"
@@ -268,8 +282,10 @@ def test_intersection_scenarios_run_end_to_end(path):
     from arep.models.examples.example_models import EmergencyBrakeModel
 
     result = EvaluationRunner().run_batch(
-        scenario_path=str(path), model=EmergencyBrakeModel(),
-        num_runs=1, master_seed=42,
+        scenario_path=str(path),
+        model=EmergencyBrakeModel(),
+        num_runs=1,
+        master_seed=42,
     )
     run = result.per_run_results[0]
     assert 0.0 <= run.composite_score <= 1.0

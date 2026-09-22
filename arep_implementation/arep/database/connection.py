@@ -8,7 +8,7 @@ Supports SQLite (default) and PostgreSQL.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Generator, Optional
+from typing import Any, Generator, Optional
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -39,11 +39,12 @@ def init_database(
 
     if url is None:
         from arep.config.validate import resolve_database_url
+
         url = resolve_database_url()
 
     logger.info("Initializing database: %s", url.split("@")[-1])  # hide credentials
 
-    engine_kwargs = {"echo": echo}
+    engine_kwargs: dict[str, Any] = {"echo": echo}
     if url.startswith("postgresql"):
         engine_kwargs["pool_pre_ping"] = True
         engine_kwargs["pool_size"] = 5
@@ -65,6 +66,9 @@ def get_session() -> Session:
     """
     if _SessionFactory is None:
         init_database()  # auto-init with defaults
+    assert (
+        _SessionFactory is not None
+    ), "init_database() did not set the session factory"
     return _SessionFactory()
 
 
@@ -100,6 +104,7 @@ def reset_database() -> None:
     global _engine
     if _engine is None:
         init_database()
+    assert _engine is not None, "init_database() did not set the engine"
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
     logger.warning("Database reset complete — all data dropped")

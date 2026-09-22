@@ -53,8 +53,8 @@ class TTCCalculator:
     def __init__(
         self,
         forward_cone_angle: float = math.pi / 3.0,  # 60° half-angle
-        lateral_threshold: float = 5.0,               # metres
-        max_ttc: float = 30.0,                         # seconds cap
+        lateral_threshold: float = 5.0,  # metres
+        max_ttc: float = 30.0,  # seconds cap
     ):
         self.forward_cone_angle = forward_cone_angle
         self.lateral_threshold = lateral_threshold
@@ -182,8 +182,9 @@ class TTCCalculator:
         root = math.sqrt(discriminant)
         # Roots of a·t² + 2v·t − 2d = 0 are (−v ± root) / a. Take whichever is
         # positive and smaller: contact happens the first time the gap is zero.
-        candidates = [t for t in ((-speed + root) / accel, (-speed - root) / accel)
-                      if t > 0.0]
+        candidates = [
+            t for t in ((-speed + root) / accel, (-speed - root) / accel) if t > 0.0
+        ]
         if not candidates:
             return None
         return min(candidates)

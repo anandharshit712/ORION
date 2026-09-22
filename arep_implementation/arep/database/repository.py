@@ -14,9 +14,16 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from arep.database.models import (
-    ScenarioRecord, RunRecord, BatchJobRecord,
-    OrganisationRecord, ApiKeyRecord, UserRecord, ModelRecord,
-    PasswordResetRecord, WebhookEventRecord, RunFailureRecord,
+    ScenarioRecord,
+    RunRecord,
+    BatchJobRecord,
+    OrganisationRecord,
+    ApiKeyRecord,
+    UserRecord,
+    ModelRecord,
+    PasswordResetRecord,
+    WebhookEventRecord,
+    RunFailureRecord,
 )
 from arep.evaluation.composite import EvaluationResult
 from arep.statistics.aggregator import AggregatedMetrics
@@ -84,7 +91,10 @@ class RunRepository:
         self.session = session
 
     def claim_failure(
-        self, batch_job_id: int, master_seed: int, error: str = "",
+        self,
+        batch_job_id: int,
+        master_seed: int,
+        error: str = "",
     ) -> bool:
         """Record a terminal failure once. False if it was already recorded.
 
@@ -100,11 +110,13 @@ class RunRepository:
 
         savepoint = self.session.begin_nested()
         try:
-            self.session.add(RunFailureRecord(
-                batch_id=batch_job_id,
-                master_seed=master_seed,
-                error=(error or "")[:2000],
-            ))
+            self.session.add(
+                RunFailureRecord(
+                    batch_id=batch_job_id,
+                    master_seed=master_seed,
+                    error=(error or "")[:2000],
+                )
+            )
             savepoint.commit()
             return True
         except IntegrityError:
@@ -112,7 +124,9 @@ class RunRepository:
             return False
 
     def get_by_batch_and_seed(
-        self, batch_job_id: int, master_seed: int,
+        self,
+        batch_job_id: int,
+        master_seed: int,
     ) -> Optional[RunRecord]:
         """Find the row for one run of a batch, if it has already been written.
 
@@ -170,33 +184,31 @@ class RunRepository:
         return record
 
     def get_runs_for_model(
-        self, model_name: str, limit: int = 100,
+        self,
+        model_name: str,
+        limit: int = 100,
         org_id: Optional[str] = None,
     ) -> List[RunRecord]:
         q = self.session.query(RunRecord).filter_by(model_name=model_name)
         if org_id is not None:
             q = q.filter(RunRecord.org_id == org_id)
-        return (
-            q.order_by(RunRecord.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        return q.order_by(RunRecord.created_at.desc()).limit(limit).all()
 
     def get_runs_for_scenario(
-        self, scenario_id: int, limit: int = 100,
+        self,
+        scenario_id: int,
+        limit: int = 100,
         org_id: Optional[str] = None,
     ) -> List[RunRecord]:
         q = self.session.query(RunRecord).filter_by(scenario_id=scenario_id)
         if org_id is not None:
             q = q.filter(RunRecord.org_id == org_id)
-        return (
-            q.order_by(RunRecord.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        return q.order_by(RunRecord.created_at.desc()).limit(limit).all()
 
     def get_runs_for_batch(
-        self, batch_job_id: int, org_id: Optional[str] = None,
+        self,
+        batch_job_id: int,
+        org_id: Optional[str] = None,
     ) -> List[RunRecord]:
         q = self.session.query(RunRecord).filter_by(batch_job_id=batch_job_id)
         if org_id is not None:
@@ -295,13 +307,10 @@ class BatchJobRepository:
             return None
 
         # Aggregate from per-run rows. Lazy import to avoid heavy deps in DB layer.
-        runs = (
-            self.session.query(RunRecord)
-            .filter_by(batch_job_id=job_id)
-            .all()
-        )
+        runs = self.session.query(RunRecord).filter_by(batch_job_id=job_id).all()
         if runs:
             import numpy as np
+
             comp = np.array([r.composite_score for r in runs])
             safe = np.array([r.safety_score for r in runs])
             comp_l = np.array([r.compliance_score for r in runs])
@@ -325,7 +334,9 @@ class BatchJobRepository:
         return job
 
     def mark_completed(
-        self, job_id: int, aggregated: AggregatedMetrics,
+        self,
+        job_id: int,
+        aggregated: AggregatedMetrics,
     ) -> None:
         job = self.session.query(BatchJobRecord).get(job_id)
         if job:
@@ -346,19 +357,19 @@ class BatchJobRepository:
             job.completed_at = datetime.datetime.utcnow()
 
     def get_recent(
-        self, limit: int = 20, org_id: Optional[str] = None,
+        self,
+        limit: int = 20,
+        org_id: Optional[str] = None,
     ) -> List[BatchJobRecord]:
         q = self.session.query(BatchJobRecord)
         if org_id is not None:
             q = q.filter(BatchJobRecord.org_id == org_id)
-        return (
-            q.order_by(BatchJobRecord.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        return q.order_by(BatchJobRecord.created_at.desc()).limit(limit).all()
 
     def get_by_id(
-        self, job_id: int, org_id: Optional[str] = None,
+        self,
+        job_id: int,
+        org_id: Optional[str] = None,
     ) -> Optional[BatchJobRecord]:
         q = self.session.query(BatchJobRecord).filter(BatchJobRecord.id == job_id)
         if org_id is not None:
@@ -368,6 +379,7 @@ class BatchJobRepository:
 
 # ── Multi-tenancy repositories ──────────────────────────────────────────
 
+
 class OrganisationRepository:
     """CRUD for organisations."""
 
@@ -375,10 +387,17 @@ class OrganisationRepository:
         self.session = session
 
     def create(
-        self, name: str, slug: str, plan: str = "free", run_credits: int = 50,
+        self,
+        name: str,
+        slug: str,
+        plan: str = "free",
+        run_credits: int = 50,
     ) -> OrganisationRecord:
         record = OrganisationRecord(
-            name=name, slug=slug, plan=plan, run_credits=run_credits,
+            name=name,
+            slug=slug,
+            plan=plan,
+            run_credits=run_credits,
         )
         self.session.add(record)
         self.session.flush()
@@ -452,7 +471,9 @@ class OrganisationRepository:
         org = self.get_by_id(org_id)
         return bool(org is not None and org.allow_pickle_models)
 
-    def set_allow_pickle_models(self, org_id: str, enabled: bool) -> Optional[OrganisationRecord]:
+    def set_allow_pickle_models(
+        self, org_id: str, enabled: bool
+    ) -> Optional[OrganisationRecord]:
         """Enable/disable the cloudpickle path for one org. Returns None if unknown."""
         org = self.get_by_id(org_id)
         if org is None:
@@ -474,7 +495,9 @@ class OrganisationRepository:
 
     # ── Subscription state (Phase 1.4) ───────────────────────────────
 
-    def get_by_stripe_customer_id(self, customer_id: str) -> Optional[OrganisationRecord]:
+    def get_by_stripe_customer_id(
+        self, customer_id: str
+    ) -> Optional[OrganisationRecord]:
         """Find the org a Stripe webhook is about.
 
         Webhooks identify the account by customer id, never by our org id, so
@@ -531,12 +554,19 @@ class ApiKeyRepository:
         self.session = session
 
     def create(
-        self, org_id: str, user_id: int, key_hash: str,
-        key_prefix: str, label: str,
+        self,
+        org_id: str,
+        user_id: int,
+        key_hash: str,
+        key_prefix: str,
+        label: str,
     ) -> ApiKeyRecord:
         record = ApiKeyRecord(
-            org_id=org_id, user_id=user_id, key_hash=key_hash,
-            key_prefix=key_prefix, label=label,
+            org_id=org_id,
+            user_id=user_id,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            label=label,
         )
         self.session.add(record)
         self.session.flush()
@@ -584,15 +614,27 @@ class ModelRepository:
         self.session = session
 
     def create(
-        self, org_id: str, user_id: Optional[int], name: str, version: str,
-        submission_type: str, artefact_uri: str,
-        content_hash: Optional[str] = None, size_bytes: Optional[int] = None,
+        self,
+        org_id: str,
+        user_id: Optional[int],
+        name: str,
+        version: str,
+        submission_type: str,
+        artefact_uri: str,
+        content_hash: Optional[str] = None,
+        size_bytes: Optional[int] = None,
         status: str = "ready",
     ) -> ModelRecord:
         record = ModelRecord(
-            org_id=org_id, user_id=user_id, name=name, version=version,
-            submission_type=submission_type, artefact_uri=artefact_uri,
-            content_hash=content_hash, size_bytes=size_bytes, status=status,
+            org_id=org_id,
+            user_id=user_id,
+            name=name,
+            version=version,
+            submission_type=submission_type,
+            artefact_uri=artefact_uri,
+            content_hash=content_hash,
+            size_bytes=size_bytes,
+            status=status,
         )
         self.session.add(record)
         self.session.flush()
@@ -623,7 +665,9 @@ class ModelRepository:
         self.session.delete(record)
         return record
 
-    def set_status(self, model_id: str, status: str, error: Optional[str] = None) -> None:
+    def set_status(
+        self, model_id: str, status: str, error: Optional[str] = None
+    ) -> None:
         record = self.session.query(ModelRecord).filter_by(id=model_id).first()
         if record is not None:
             record.status = status
@@ -644,8 +688,7 @@ class UserRepository:
         return (
             self.session.query(UserRecord)
             .filter(
-                (UserRecord.email == identifier)
-                | (UserRecord.username == identifier)
+                (UserRecord.email == identifier) | (UserRecord.username == identifier)
             )
             .first()
         )
@@ -655,9 +698,7 @@ class UserRepository:
 
     def list_all(self) -> List[UserRecord]:
         return (
-            self.session.query(UserRecord)
-            .order_by(UserRecord.created_at.desc())
-            .all()
+            self.session.query(UserRecord).order_by(UserRecord.created_at.desc()).all()
         )
 
     def set_role(self, user_id: int, role: str) -> Optional[UserRecord]:
@@ -675,8 +716,11 @@ class PasswordResetRepository:
         self.session = session
 
     def create(
-        self, user_id: int, token_hash: str,
-        expires_at: datetime.datetime, requested_ip: Optional[str] = None,
+        self,
+        user_id: int,
+        token_hash: str,
+        expires_at: datetime.datetime,
+        requested_ip: Optional[str] = None,
     ) -> PasswordResetRecord:
         record = PasswordResetRecord(
             user_id=user_id,
@@ -702,11 +746,7 @@ class PasswordResetRepository:
         )
 
     def mark_used(self, record_id: str) -> None:
-        record = (
-            self.session.query(PasswordResetRecord)
-            .filter_by(id=record_id)
-            .first()
-        )
+        record = self.session.query(PasswordResetRecord).filter_by(id=record_id).first()
         if record is not None:
             record.used_at = datetime.datetime.utcnow()
 

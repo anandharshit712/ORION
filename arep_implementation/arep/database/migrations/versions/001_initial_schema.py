@@ -4,6 +4,7 @@ Revision ID: 001
 Revises: None
 Create Date: 2026-04-26
 """
+
 from __future__ import annotations
 from typing import Sequence, Union
 from alembic import op
@@ -63,8 +64,12 @@ def upgrade() -> None:
     op.create_table(
         "runs",
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("scenario_id", sa.Integer, sa.ForeignKey("scenarios.id"), nullable=False),
-        sa.Column("batch_job_id", sa.Integer, sa.ForeignKey("batch_jobs.id"), nullable=True),
+        sa.Column(
+            "scenario_id", sa.Integer, sa.ForeignKey("scenarios.id"), nullable=False
+        ),
+        sa.Column(
+            "batch_job_id", sa.Integer, sa.ForeignKey("batch_jobs.id"), nullable=True
+        ),
         sa.Column("model_name", sa.String(256), nullable=False, index=True),
         sa.Column("master_seed", sa.Integer, nullable=False),
         sa.Column("duration", sa.Float, nullable=False),

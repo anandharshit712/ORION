@@ -53,7 +53,9 @@ class ScenarioValidator:
     def _check_ego(s: ScenarioDefinition) -> List[str]:
         errors = []
         if s.ego_initial.velocity < 0:
-            errors.append(f"Ego initial velocity cannot be negative: {s.ego_initial.velocity}")
+            errors.append(
+                f"Ego initial velocity cannot be negative: {s.ego_initial.velocity}"
+            )
         return errors
 
     @staticmethod

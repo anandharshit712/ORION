@@ -18,9 +18,10 @@ from typing import Optional
 @dataclass
 class TimeMetrics:
     """Performance metrics about simulation timing."""
-    sim_time: float          # Simulation time elapsed (seconds)
-    wall_time: float         # Wall clock time elapsed (seconds)
-    timesteps: int           # Number of timesteps executed
+
+    sim_time: float  # Simulation time elapsed (seconds)
+    wall_time: float  # Wall clock time elapsed (seconds)
+    timesteps: int  # Number of timesteps executed
     real_time_factor: float  # sim_time / wall_time  (>1 = faster than real)
 
 

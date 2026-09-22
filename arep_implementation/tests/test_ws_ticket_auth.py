@@ -31,6 +31,7 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
@@ -52,6 +53,7 @@ def client():
 @pytest.fixture(autouse=True)
 def clean_tickets():
     from arep.api.ws_tickets import clear_tickets
+
     clear_tickets()
     yield
     clear_tickets()
@@ -60,15 +62,24 @@ def clean_tickets():
 @pytest.fixture(scope="module")
 def token(client):
     email = "ws-ticket@example.com"
-    r = client.post("/api/auth/signup", json={
-        "email": email, "username": "wsticket",
-        "password": "correct-horse-battery", "org_name": "WS Ticket Org",
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": "wsticket",
+            "password": "correct-horse-battery",
+            "org_name": "WS Ticket Org",
+        },
+    )
     assert r.status_code == 201, r.text
     verify_email_for(email)
-    r = client.post("/api/auth/login", json={
-        "identifier": email, "password": "correct-horse-battery",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": email,
+            "password": "correct-horse-battery",
+        },
+    )
     return r.json()["access_token"]
 
 
@@ -77,6 +88,7 @@ def _auth(token: str) -> dict:
 
 
 # -- Ticket lifecycle -----------------------------------------------------
+
 
 def test_ticket_is_single_use():
     """The whole point: a URL captured from a log must not reconnect."""
@@ -110,6 +122,7 @@ def test_ticket_is_bound_to_one_run():
 
 def test_unknown_ticket_is_rejected():
     from arep.api.ws_tickets import redeem_ticket
+
     assert redeem_ticket("not-a-real-ticket", "run-1") is None
 
 
@@ -125,6 +138,7 @@ def test_expired_tickets_are_pruned_on_issue():
 
 
 # -- The minting endpoint -------------------------------------------------
+
 
 def test_ticket_endpoint_requires_auth(client):
     assert client.post("/api/runs/does-not-exist/ws-ticket").status_code == 401
@@ -142,9 +156,14 @@ def test_ticket_endpoint_404s_rather_than_403_for_another_orgs_run(client, token
     from arep.api.sim_registry import LiveRun, get_registry
 
     foreign = LiveRun(
-        run_id="foreign-run", scenario_path="x", scenario_name="x",
-        model_name="EmergencyBrake", master_seed=1, status="running",
-        started_at="2026-09-20T00:00:00Z", org_id="some-other-org",
+        run_id="foreign-run",
+        scenario_path="x",
+        scenario_name="x",
+        model_name="EmergencyBrake",
+        master_seed=1,
+        status="running",
+        started_at="2026-09-20T00:00:00Z",
+        org_id="some-other-org",
     )
     asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
         get_registry().register(foreign)
@@ -155,6 +174,7 @@ def test_ticket_endpoint_404s_rather_than_403_for_another_orgs_run(client, token
 
 
 # -- The socket itself ----------------------------------------------------
+
 
 def test_ws_without_a_ticket_is_refused(client):
     """The query parameter is required, so the handshake fails outright."""
@@ -182,7 +202,7 @@ def test_ws_with_a_reused_ticket_closes_4401(client):
     from arep.api.ws_tickets import issue_ticket, redeem_ticket
 
     ticket, _ = issue_ticket("run-x", user_id=1, org_id="org-a")
-    redeem_ticket(ticket, "run-x")          # first use, elsewhere
+    redeem_ticket(ticket, "run-x")  # first use, elsewhere
 
     with pytest.raises(WebSocketDisconnect) as excinfo:
         with client.websocket_connect(f"/ws/simulation/run-x?ticket={ticket}") as ws:
@@ -207,9 +227,14 @@ def test_ws_url_from_the_endpoint_carries_no_jwt(client, token):
 
     org_id = client.get("/api/auth/me", headers=_auth(token)).json()["org_id"]
     run = LiveRun(
-        run_id="own-run", scenario_path="x", scenario_name="x",
-        model_name="EmergencyBrake", master_seed=1, status="running",
-        started_at="2026-09-20T00:00:00Z", org_id=org_id,
+        run_id="own-run",
+        scenario_path="x",
+        scenario_name="x",
+        model_name="EmergencyBrake",
+        master_seed=1,
+        status="running",
+        started_at="2026-09-20T00:00:00Z",
+        org_id=org_id,
     )
     asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
         get_registry().register(run)

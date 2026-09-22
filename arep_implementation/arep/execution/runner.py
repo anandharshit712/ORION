@@ -37,6 +37,7 @@ logger = get_logger("execution.runner")
 @dataclass
 class BatchResult:
     """Result of a batch evaluation run."""
+
     scenario_name: str
     model_name: str
     num_runs: int
@@ -155,11 +156,14 @@ class EvaluationRunner:
                     break
 
                 collector.record_step(world, action, previous_world)
-                frame_hasher.update(self.engine.get_tick_frame(
-                    world, action=action,
-                    scenario_name=scenario.name,
-                    speed_limit=world.get_speed_limit(),
-                ))
+                frame_hasher.update(
+                    self.engine.get_tick_frame(
+                        world,
+                        action=action,
+                        scenario_name=scenario.name,
+                        speed_limit=world.get_speed_limit(),
+                    )
+                )
 
                 previous_world = world
                 world = self.engine.step(world, action, rng)
@@ -189,7 +193,7 @@ class EvaluationRunner:
         if callable(closer):
             try:
                 closer()
-            except Exception as exc:   # teardown must never mask a run result
+            except Exception as exc:  # teardown must never mask a run result
                 logger.warning("Model close() failed: %s", exc)
 
     def run_batch(
@@ -219,7 +223,9 @@ class EvaluationRunner:
 
         logger.info(
             "Starting batch: scenario=%s, model=%s, runs=%d",
-            scenario.name, model.name, num_runs,
+            scenario.name,
+            model.name,
+            num_runs,
         )
 
         for i in range(num_runs):
@@ -231,7 +237,9 @@ class EvaluationRunner:
             if (i + 1) % 10 == 0 or i == 0:
                 logger.info(
                     "Run %d/%d complete (composite=%.3f)",
-                    i + 1, num_runs, result.composite_score,
+                    i + 1,
+                    num_runs,
+                    result.composite_score,
                 )
 
         aggregated = aggregator.compute()

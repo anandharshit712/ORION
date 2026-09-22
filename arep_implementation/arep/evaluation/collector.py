@@ -23,6 +23,7 @@ from arep.core.ttc import TTCCalculator
 @dataclass
 class EgoSnapshot:
     """Ego vehicle state at a single timestep."""
+
     sim_time: float
     x: float
     y: float
@@ -49,6 +50,7 @@ class EgoSnapshot:
 @dataclass
 class SimulationRecord:
     """Complete record of a single simulation run."""
+
     # Per-timestep data
     ego_snapshots: List[EgoSnapshot] = field(default_factory=list)
     actions: List[Action] = field(default_factory=list)
@@ -114,6 +116,7 @@ class DataCollector:
         heading_rate = 0.0
         if previous_world is not None:
             import math
+
             dh = ego.heading - previous_world.ego_vehicle.heading
             dh = math.atan2(math.sin(dh), math.cos(dh))
             dt = world.sim_time - previous_world.sim_time
@@ -132,24 +135,27 @@ class DataCollector:
             lane_width = 0.0
             lane_valid = False
 
-        self._snapshots.append(EgoSnapshot(
-            sim_time=world.sim_time,
-            x=ego.position.x,
-            y=ego.position.y,
-            heading=ego.heading,
-            velocity=ego.velocity,
-            acceleration=ego.acceleration,
-            heading_rate=heading_rate,
-            lane_offset=lane_offset,
-            lane_width=lane_width,
-            vehicle_half_width=ego.width / 2.0,
-            lane_valid=lane_valid,
-        ))
+        self._snapshots.append(
+            EgoSnapshot(
+                sim_time=world.sim_time,
+                x=ego.position.x,
+                y=ego.position.y,
+                heading=ego.heading,
+                velocity=ego.velocity,
+                acceleration=ego.acceleration,
+                heading_rate=heading_rate,
+                lane_offset=lane_offset,
+                lane_width=lane_width,
+                vehicle_half_width=ego.width / 2.0,
+                lane_valid=lane_valid,
+            )
+        )
         self._actions.append(action.copy())
 
         # TTC
         min_ttc = self._ttc_calculator.compute_min_ttc(
-            ego, world.dynamic_objects,
+            ego,
+            world.dynamic_objects,
         )
         self._ttc_values.append(min_ttc)
 
@@ -171,14 +177,13 @@ class DataCollector:
             num_timesteps=final_world.timestep_count,
             termination_reason=(
                 final_world.termination_reason.value
-                if final_world.termination_reason else None
+                if final_world.termination_reason
+                else None
             ),
             has_collision=final_world.has_collision,
             collision_time=final_world.collision_time,
             collision_object_id=final_world.collision_object_id,
-            min_ttc_overall=(
-                min(self._ttc_values) if self._ttc_values else 30.0
-            ),
+            min_ttc_overall=(min(self._ttc_values) if self._ttc_values else 30.0),
             speed_limit=final_world.get_speed_limit(),
             scenario_name=self.scenario_name,
             model_name=self.model_name,

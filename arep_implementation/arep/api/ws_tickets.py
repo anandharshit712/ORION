@@ -88,7 +88,9 @@ def redeem_ticket(ticket: str, run_id: str) -> Optional[tuple[int, Optional[str]
         # Already consumed above, which is the right call — a ticket presented
         # against the wrong run is either a bug or probing, and neither deserves
         # a second attempt.
-        logger.warning("WS ticket presented for the wrong run (wanted %s)", entry.run_id)
+        logger.warning(
+            "WS ticket presented for the wrong run (wanted %s)", entry.run_id
+        )
         return None
     return entry.user_id, entry.org_id
 

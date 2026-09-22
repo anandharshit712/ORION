@@ -20,16 +20,27 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.core.state import Vector2D, VehicleState   # noqa: E402
-from arep.core.ttc import TTCCalculator              # noqa: E402
+from arep.core.state import Vector2D, VehicleState  # noqa: E402
+from arep.core.ttc import TTCCalculator  # noqa: E402
 
 
-def _pair(gap=50.0, ego_v=20.0, obj_v=0.0, ego_a=0.0, obj_a=0.0,
-          lateral=0.0, obj_heading=0.0):
-    ego = VehicleState(position=Vector2D(0.0, 0.0), velocity=ego_v,
-                       acceleration=ego_a, heading=0.0, object_id="ego")
-    obj = VehicleState(position=Vector2D(gap, lateral), velocity=obj_v,
-                       acceleration=obj_a, heading=obj_heading, object_id="npc")
+def _pair(
+    gap=50.0, ego_v=20.0, obj_v=0.0, ego_a=0.0, obj_a=0.0, lateral=0.0, obj_heading=0.0
+):
+    ego = VehicleState(
+        position=Vector2D(0.0, 0.0),
+        velocity=ego_v,
+        acceleration=ego_a,
+        heading=0.0,
+        object_id="ego",
+    )
+    obj = VehicleState(
+        position=Vector2D(gap, lateral),
+        velocity=obj_v,
+        acceleration=obj_a,
+        heading=obj_heading,
+        object_id="npc",
+    )
     return ego, obj
 
 
@@ -38,6 +49,7 @@ def _ttc(**kwargs):
 
 
 # -- The constant-velocity case is unchanged ------------------------------
+
 
 def test_no_acceleration_still_gives_distance_over_speed():
     """With a = 0 the physics is the old formula, and must stay identical."""
@@ -51,6 +63,7 @@ def test_closing_speed_accounts_for_a_moving_lead():
 
 
 # -- What the old formula got wrong ---------------------------------------
+
 
 def test_braking_hard_enough_means_no_collision():
     """The headline case. d / v said 2.5 s and therefore "critical"; the ego
@@ -94,6 +107,7 @@ def test_matched_braking_leaves_the_relative_motion_unchanged():
 
 # -- The solver itself ----------------------------------------------------
 
+
 def test_the_solver_matches_the_closed_form():
     """0.5·a·t² + v·t − d = 0, checked by substitution rather than by
     re-deriving the same algebra in the test."""
@@ -107,8 +121,8 @@ def test_the_solver_takes_the_first_contact():
     first one is a collision."""
     t = TTCCalculator._solve_ttc(distance=50.0, speed=20.0, accel=-2.0)
     later = TTCCalculator._solve_ttc(distance=50.0, speed=20.0, accel=0.0)
-    assert t > later          # braking delays contact
-    assert t < 100.0          # ...but this is the near root, not the far one
+    assert t > later  # braking delays contact
+    assert t < 100.0  # ...but this is the near root, not the far one
 
 
 def test_the_solver_reports_no_contact_when_closing_stops_first():
@@ -121,6 +135,7 @@ def test_near_zero_acceleration_does_not_divide_by_zero():
 
 
 # -- Filters still apply --------------------------------------------------
+
 
 def test_an_object_behind_is_ignored():
     ego = VehicleState(position=Vector2D(50.0, 0.0), velocity=20.0, object_id="ego")
@@ -149,6 +164,7 @@ def test_overlapping_vehicles_are_zero():
 
 
 # -- The property the score depends on ------------------------------------
+
 
 def test_ttc_is_never_negative_or_nan():
     """min_ttc feeds a score bounded [0,1]; a negative or NaN would poison it."""

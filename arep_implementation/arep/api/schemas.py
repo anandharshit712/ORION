@@ -11,11 +11,12 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ── Request Models ───────────────────────────────────────────────────────
+
 
 class RunSingleRequest(BaseModel):
     """Request to run a single simulation."""
+
     scenario_path: str = Field(..., description="Path to scenario YAML file")
     model_name: str = Field(
         "SimpleLaneKeep", description="Name of built-in model to use"
@@ -25,6 +26,7 @@ class RunSingleRequest(BaseModel):
 
 class RunBatchRequest(BaseModel):
     """Request to run a batch evaluation."""
+
     scenario_path: str = Field(..., description="Path to scenario YAML file")
     model_name: str = Field(
         "SimpleLaneKeep", description="Name of built-in model to use"
@@ -35,8 +37,10 @@ class RunBatchRequest(BaseModel):
 
 # ── Response Models ──────────────────────────────────────────────────────
 
+
 class MetricsResponse(BaseModel):
     """Individual evaluation metrics."""
+
     composite_score: float
     safety_score: float
     compliance_score: float
@@ -52,6 +56,7 @@ class MetricsResponse(BaseModel):
 
 class AggregatedResponse(BaseModel):
     """Aggregated batch results."""
+
     num_runs: int
     composite_mean: float
     composite_std: float
@@ -68,6 +73,7 @@ class AggregatedResponse(BaseModel):
 
 class BatchResultResponse(BaseModel):
     """Full batch result response."""
+
     scenario_name: str
     model_name: str
     num_runs: int
@@ -77,6 +83,7 @@ class BatchResultResponse(BaseModel):
 
 class ScenarioResponse(BaseModel):
     """Scenario metadata response."""
+
     id: int
     name: str
     version: str
@@ -93,6 +100,7 @@ class ScenarioResponse(BaseModel):
 
 class BatchJobResponse(BaseModel):
     """Batch job status response."""
+
     id: int
     scenario_name: str
     model_name: str
@@ -113,6 +121,7 @@ class BatchJobResponse(BaseModel):
 
 class BatchEnqueueResponse(BaseModel):
     """Returned by POST /api/runs/batch — accepted, fan-out happens in worker."""
+
     batch_id: int
     status: str
     num_runs: int
@@ -122,6 +131,7 @@ class BatchEnqueueResponse(BaseModel):
 
 class BatchProgressResponse(BaseModel):
     """Returned by GET /api/runs/batch/{batch_id}/status — live progress."""
+
     batch_id: int
     status: str
     total: int
@@ -138,6 +148,7 @@ class BatchProgressResponse(BaseModel):
 
 class RunRecordResponse(BaseModel):
     """Individual run record response."""
+
     id: int
     model_name: str
     master_seed: int
@@ -158,6 +169,7 @@ class RunRecordResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response."""
+
     status: str = "healthy"
     version: str = "1.0.0"
     components: dict = {}
@@ -165,4 +177,5 @@ class HealthResponse(BaseModel):
 
 class ModelListResponse(BaseModel):
     """Available models response."""
+
     models: List[str]

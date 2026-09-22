@@ -48,7 +48,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import arep
 from arep.config import SandboxConfig, get_config
@@ -63,16 +63,14 @@ logger = get_logger("models.sandbox")
 __all__ = ["SubprocessModelRunner", "ModelSandboxError"]
 
 
-
-
 # Environment variables the child is allowed to inherit. Everything else —
 # above all ORION_* — is dropped. Keep this list minimal; each entry is a
 # decision that the value is not sensitive and the interpreter needs it.
 _ENV_WHITELIST = (
     "PATH",
-    "SYSTEMROOT",   # Windows: python.exe will not start without it
-    "COMSPEC",      # Windows
-    "WINDIR",       # Windows
+    "SYSTEMROOT",  # Windows: python.exe will not start without it
+    "COMSPEC",  # Windows
+    "WINDIR",  # Windows
     "LANG",
     "LC_ALL",
     "TZ",
@@ -248,8 +246,12 @@ class SubprocessModelRunner(ModelInterface):
         cfg = self._cfg
         resource.setrlimit(resource.RLIMIT_CPU, (cfg.cpu_seconds, cfg.cpu_seconds))
         resource.setrlimit(resource.RLIMIT_AS, (cfg.memory_bytes, cfg.memory_bytes))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (cfg.max_file_bytes, cfg.max_file_bytes))
-        resource.setrlimit(resource.RLIMIT_NOFILE, (cfg.max_open_files, cfg.max_open_files))
+        resource.setrlimit(
+            resource.RLIMIT_FSIZE, (cfg.max_file_bytes, cfg.max_file_bytes)
+        )
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE, (cfg.max_open_files, cfg.max_open_files)
+        )
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         # Own session => the whole tree dies with one killpg on timeout.
         os.setsid()
@@ -274,7 +276,7 @@ class SubprocessModelRunner(ModelInterface):
                 "provide one (needs Linux + unshare + user namespaces)"
             )
 
-        popen_kwargs = {
+        popen_kwargs: dict[str, Any] = {
             "stdin": subprocess.PIPE,
             "stdout": subprocess.PIPE,
             "stderr": subprocess.PIPE,
@@ -295,7 +297,13 @@ class SubprocessModelRunner(ModelInterface):
 
         # -s: no user site-packages. -B: no .pyc writes. NOT -I/-E: those drop
         # PYTHONPATH, which is how the child finds the arep package.
-        argv = netns + [sys.executable, "-s", "-B", str(script_path), str(artefact_path)]
+        argv = netns + [
+            sys.executable,
+            "-s",
+            "-B",
+            str(script_path),
+            str(artefact_path),
+        ]
         try:
             self._process = subprocess.Popen(argv, **popen_kwargs)
         except OSError as exc:
@@ -322,7 +330,9 @@ class SubprocessModelRunner(ModelInterface):
         self._await_ready(artefact_path)
         logger.info(
             "Model sandbox started (pid=%s, netns=%s, cwd=%s)",
-            self._process.pid, bool(netns), workdir,
+            self._process.pid,
+            bool(netns),
+            workdir,
         )
 
     def _await_ready(self, artefact_path: Path) -> None:
@@ -345,7 +355,7 @@ class SubprocessModelRunner(ModelInterface):
                 line = self._stderr_q.get(timeout=remaining)
             except queue.Empty:
                 continue
-            if line is None:       # EOF — the child died while loading
+            if line is None:  # EOF — the child died while loading
                 stderr = self._drain_stderr()
                 self._kill("child exited during startup")
                 raise ModelSandboxError(
@@ -376,7 +386,7 @@ class SubprocessModelRunner(ModelInterface):
         except (ValueError, OSError):
             pass
         finally:
-            out_q.put(None)   # EOF sentinel
+            out_q.put(None)  # EOF sentinel
 
     def _drain_stderr(self) -> str:
         """Non-blocking: whatever the stderr pump has queued so far."""
@@ -418,9 +428,13 @@ class SubprocessModelRunner(ModelInterface):
         deadline = min(self._cfg.predict_timeout_s, remaining_budget)
 
         started = time.perf_counter()
+        stdin = self._process.stdin
+        if stdin is None:
+            self._kill(f"model sandbox has no stdin for {what}")
+            raise ModelSandboxError(f"model sandbox stdin unavailable during {what}")
         try:
-            self._process.stdin.write(payload)
-            self._process.stdin.flush()
+            stdin.write(payload)
+            stdin.flush()
         except (BrokenPipeError, ValueError, OSError) as exc:
             self._kill(f"broken pipe on {what}: {exc}")
             raise ModelSandboxError(f"model sandbox pipe broke during {what}") from exc
@@ -485,11 +499,13 @@ class SubprocessModelRunner(ModelInterface):
         if process is None or process.poll() is not None:
             return
         try:
-            if os.name == "posix":
+            if sys.platform != "win32":
                 import signal
 
                 # Kill the whole session created in _preexec, not just the head.
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL if force else signal.SIGTERM)
+                os.killpg(
+                    os.getpgid(process.pid), signal.SIGKILL if force else signal.SIGTERM
+                )
             elif force:
                 process.kill()
             else:

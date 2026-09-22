@@ -76,8 +76,7 @@ class SimpleLaneKeepModel(ModelInterface):
     def predict(self, observation: Observation) -> Action:
         # Steering: PD control on lane offset
         steering = -(
-            self.kp * observation.lane_offset
-            + self.kd * observation.lane_heading_error
+            self.kp * observation.lane_offset + self.kd * observation.lane_heading_error
         )
         steering = clamp(steering, -1.0, 1.0)
 

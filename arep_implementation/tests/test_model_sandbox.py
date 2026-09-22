@@ -26,22 +26,22 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.config import SandboxConfig                      # noqa: E402
-from arep.core.action import Action                        # noqa: E402
+from arep.config import SandboxConfig  # noqa: E402
+from arep.core.action import Action  # noqa: E402
 from arep.core.observation import Observation, ObjectObservation  # noqa: E402
-from arep.core.state import TrafficLightState              # noqa: E402
-from arep.models.interface import ModelInterface           # noqa: E402
-from arep.models.sandbox import (                          # noqa: E402
+from arep.core.state import TrafficLightState  # noqa: E402
+from arep.models.interface import ModelInterface  # noqa: E402
+from arep.models.sandbox import (  # noqa: E402
     ModelSandboxError,
     SubprocessModelRunner,
     _ENV_WHITELIST,
     _SECRET_PREFIXES,
 )
 
-
 # ── Models used as sandbox payloads ──────────────────────────────────────
 # Defined at module scope so plain pickle can serialise them by reference;
 # the sandbox child imports this module via PYTHONPATH.
+
 
 class BrakeModel(ModelInterface):
     """Well-behaved model."""
@@ -59,7 +59,9 @@ class EnvSnoopModel(ModelInterface):
     def predict(self, observation: Observation) -> Action:
         import os as _os
 
-        leaked = [k for k in _os.environ if k.startswith(("ORION_", "AREP_", "STRIPE_"))]
+        leaked = [
+            k for k in _os.environ if k.startswith(("ORION_", "AREP_", "STRIPE_"))
+        ]
         # steering encodes the count of leaked variables
         return Action(steering=min(1.0, len(leaked) / 10.0), throttle=0.0, brake=0.0)
 
@@ -105,23 +107,30 @@ class RaisingModel(ModelInterface):
 
 def _observation() -> Observation:
     return Observation(
-        ego_x=10.0, ego_y=0.0, ego_velocity=15.0, speed_limit=27.8,
-        lane_valid=True, traffic_light_state=TrafficLightState.GREEN,
+        ego_x=10.0,
+        ego_y=0.0,
+        ego_velocity=15.0,
+        speed_limit=27.8,
+        lane_valid=True,
+        traffic_light_state=TrafficLightState.GREEN,
         objects=[ObjectObservation(object_id="npc0", relative_x=30.0, speed=12.0)],
         sim_time=1.0,
     )
 
 
 def _runner(model: ModelInterface, **overrides) -> SubprocessModelRunner:
-    cfg = SandboxConfig(**{
-        "predict_timeout_s": 10.0,
-        "total_wallclock_s": 60.0,
-        **overrides,
-    })
+    cfg = SandboxConfig(
+        **{
+            "predict_timeout_s": 10.0,
+            "total_wallclock_s": 60.0,
+            **overrides,
+        }
+    )
     return SubprocessModelRunner(pickle_bytes=pickle.dumps(model), config=cfg)
 
 
 # ── Wire format ──────────────────────────────────────────────────────────
+
 
 def test_observation_round_trips_through_the_wire_format():
     """to_dict/from_dict must be lossless — the sandbox IPC depends on it."""
@@ -130,6 +139,7 @@ def test_observation_round_trips_through_the_wire_format():
 
 
 # ── Happy path ───────────────────────────────────────────────────────────
+
 
 def test_sandboxed_model_returns_its_action():
     runner = _runner(BrakeModel())
@@ -156,9 +166,12 @@ def test_model_exception_yields_emergency_brake_and_keeps_the_run_alive():
 
 # ── Acceptance: environment is stripped ──────────────────────────────────
 
+
 def test_env_whitelist_excludes_secret_bearing_prefixes():
     for name in _ENV_WHITELIST:
-        assert not name.startswith(_SECRET_PREFIXES), f"{name} is whitelisted but secret-shaped"
+        assert not name.startswith(
+            _SECRET_PREFIXES
+        ), f"{name} is whitelisted but secret-shaped"
 
 
 def test_sandbox_env_contains_no_orion_variables(monkeypatch):
@@ -173,7 +186,7 @@ def test_sandbox_env_contains_no_orion_variables(monkeypatch):
     assert not [k for k in env if k.startswith(_SECRET_PREFIXES)]
     assert "ORION_DATABASE_URL" not in env
     assert "ORION_SECRET_KEY" not in env
-    assert env["PYTHONPATH"]          # arep must still be importable
+    assert env["PYTHONPATH"]  # arep must still be importable
 
 
 def test_model_cannot_read_orion_env_from_inside_the_sandbox(monkeypatch):
@@ -183,12 +196,15 @@ def test_model_cannot_read_orion_env_from_inside_the_sandbox(monkeypatch):
     runner = _runner(EnvSnoopModel())
     try:
         action = runner.predict(_observation())
-        assert action.steering == pytest.approx(0.0), "model saw ORION_*/AREP_* variables"
+        assert action.steering == pytest.approx(
+            0.0
+        ), "model saw ORION_*/AREP_* variables"
     finally:
         runner.close()
 
 
 # ── Acceptance: network is blocked ───────────────────────────────────────
+
 
 def test_model_that_opens_a_socket_fails():
     """
@@ -205,6 +221,7 @@ def test_model_that_opens_a_socket_fails():
 
 
 # ── Acceptance: hard wall-clock kill ─────────────────────────────────────
+
 
 def test_hanging_model_is_killed_at_the_wall_clock_limit():
     runner = _runner(HangingModel(), predict_timeout_s=2.0)
@@ -245,7 +262,7 @@ def test_total_wallclock_budget_is_enforced_across_calls():
         runner.predict(_observation())
         assert runner._elapsed_s > 0.0, "call time is not being accumulated"
 
-        runner._elapsed_s = 30.0        # budget now exhausted
+        runner._elapsed_s = 30.0  # budget now exhausted
         with pytest.raises(ModelSandboxError, match="total wall-clock budget"):
             runner.predict(_observation())
         assert runner._process is None, "child was not torn down"
@@ -254,6 +271,7 @@ def test_total_wallclock_budget_is_enforced_across_calls():
 
 
 # ── Teardown ─────────────────────────────────────────────────────────────
+
 
 def test_close_terminates_the_child_and_removes_its_jail():
     runner = _runner(BrakeModel())
@@ -275,10 +293,11 @@ def test_close_is_idempotent():
     runner = _runner(BrakeModel())
     runner.predict(_observation())
     runner.close()
-    runner.close()      # must not raise
+    runner.close()  # must not raise
 
 
 # ── Acceptance: a killed sandbox fails the run (so the credit is refunded) ──
+
 
 def test_runner_aborts_the_run_when_the_sandbox_is_killed(tmp_path):
     """
@@ -295,7 +314,9 @@ def test_runner_aborts_the_run_when_the_sandbox_is_killed(tmp_path):
 
     scenario = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "scenarios", "basic", "straight_road_lead_vehicle.yaml",
+        "scenarios",
+        "basic",
+        "straight_road_lead_vehicle.yaml",
     )
     runner = EvaluationRunner()
     model = _runner(HangingModel(), predict_timeout_s=2.0)
@@ -314,8 +335,12 @@ def test_model_that_merely_raises_still_produces_a_score():
 
     scenario = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "scenarios", "basic", "straight_road_lead_vehicle.yaml",
+        "scenarios",
+        "basic",
+        "straight_road_lead_vehicle.yaml",
     )
-    result = EvaluationRunner().run_single(scenario, _runner(RaisingModel()), master_seed=42)
+    result = EvaluationRunner().run_single(
+        scenario, _runner(RaisingModel()), master_seed=42
+    )
     assert result is not None
     assert 0.0 <= result.composite_score <= 1.0

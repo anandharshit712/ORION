@@ -21,22 +21,33 @@ from pydantic import BaseModel, Field
 from arep.api.auth import get_request_principal, require_verified_email
 from arep.api.ratelimit import limiter
 from arep.api.schemas import (
-    RunSingleRequest, RunBatchRequest,
-    MetricsResponse, BatchResultResponse, AggregatedResponse,
-    ScenarioResponse, BatchJobResponse, RunRecordResponse,
-    HealthResponse, ModelListResponse,
-    BatchEnqueueResponse, BatchProgressResponse,
+    RunSingleRequest,
+    RunBatchRequest,
+    MetricsResponse,
+    BatchResultResponse,
+    AggregatedResponse,
+    ScenarioResponse,
+    BatchJobResponse,
+    RunRecordResponse,
+    HealthResponse,
+    ModelListResponse,
+    BatchEnqueueResponse,
+    BatchProgressResponse,
 )
 from arep.database.connection import session_scope
 from arep.database.models import ScenarioRecord
 from arep.database.repository import (
-    ScenarioRepository, RunRepository, BatchJobRepository,
+    ScenarioRepository,
+    RunRepository,
+    BatchJobRepository,
     OrganisationRepository,
 )
 from arep.execution.runner import EvaluationRunner
 from arep.models.examples.example_models import (
-    ConstantActionModel, EmergencyBrakeModel,
-    SimpleLaneKeepModel, RandomModel,
+    ConstantActionModel,
+    EmergencyBrakeModel,
+    SimpleLaneKeepModel,
+    RandomModel,
 )
 from arep.models.interface import ModelInterface
 from arep.models.resolver import resolve_model, is_uuid
@@ -86,15 +97,24 @@ health_router = APIRouter(tags=["Health"])
 # free load on the database. No public page consumes either: the frontend's
 # api.getScenarios() already sends a token. Revisit only if a marketing page
 # needs to render the catalogue, and then serve it from a static snapshot.
-models_router = APIRouter(prefix="/models", tags=["Models"], dependencies=_AUTHENTICATED)
-scenarios_router = APIRouter(prefix="/scenarios", tags=["Scenarios"], dependencies=_AUTHENTICATED)
-evaluate_router = APIRouter(prefix="/evaluate", tags=["Evaluate"], dependencies=_AUTHENTICATED)
+models_router = APIRouter(
+    prefix="/models", tags=["Models"], dependencies=_AUTHENTICATED
+)
+scenarios_router = APIRouter(
+    prefix="/scenarios", tags=["Scenarios"], dependencies=_AUTHENTICATED
+)
+evaluate_router = APIRouter(
+    prefix="/evaluate", tags=["Evaluate"], dependencies=_AUTHENTICATED
+)
 jobs_router = APIRouter(prefix="/jobs", tags=["Jobs"], dependencies=_AUTHENTICATED)
-results_router = APIRouter(prefix="/results", tags=["Results"], dependencies=_AUTHENTICATED)
+results_router = APIRouter(
+    prefix="/results", tags=["Results"], dependencies=_AUTHENTICATED
+)
 runs_router = APIRouter(prefix="/api/runs", tags=["Runs"], dependencies=_AUTHENTICATED)
 
 
 # ── Health ───────────────────────────────────────────────────────────────
+
 
 # Exempt from the global rate limit (D-03): liveness probes hit this every few
 # seconds from one address, and a throttled health check reads as an outage.
@@ -113,6 +133,7 @@ def health_check():
 
 # ── Models ───────────────────────────────────────────────────────────────
 
+
 @models_router.get("/", response_model=ModelListResponse)
 def list_models():
     return ModelListResponse(models=list(AVAILABLE_MODELS.keys()))
@@ -120,14 +141,13 @@ def list_models():
 
 # ── Scenarios ────────────────────────────────────────────────────────────
 
+
 @scenarios_router.get("/", response_model=List[ScenarioResponse])
 def list_scenarios():
     with session_scope() as session:
         repo = ScenarioRepository(session)
         scenarios = repo.get_all()
-        return [
-            ScenarioResponse.model_validate(s) for s in scenarios
-        ]
+        return [ScenarioResponse.model_validate(s) for s in scenarios]
 
 
 @scenarios_router.get("/{scenario_id}", response_model=ScenarioResponse)
@@ -145,8 +165,12 @@ def get_scenario(scenario_id: int):
 
 # ── Evaluate ─────────────────────────────────────────────────────────────
 
-@evaluate_router.post("/single", response_model=MetricsResponse,
-                      dependencies=[Depends(require_verified_email)])
+
+@evaluate_router.post(
+    "/single",
+    response_model=MetricsResponse,
+    dependencies=[Depends(require_verified_email)],
+)
 def run_single(req: RunSingleRequest, request: Request):
     """Run a single simulation and return metrics."""
     org_id, _, _ = get_request_principal(request)
@@ -182,8 +206,11 @@ def run_single(req: RunSingleRequest, request: Request):
     return MetricsResponse(**result.to_dict())
 
 
-@evaluate_router.post("/batch", response_model=BatchResultResponse,
-                      dependencies=[Depends(require_verified_email)])
+@evaluate_router.post(
+    "/batch",
+    response_model=BatchResultResponse,
+    dependencies=[Depends(require_verified_email)],
+)
 def run_batch(req: RunBatchRequest, request: Request):
     """Run a batch evaluation and return aggregated metrics."""
     org_id, _, _ = get_request_principal(request)
@@ -223,7 +250,10 @@ def run_batch(req: RunBatchRequest, request: Request):
 
     try:
         batch_result = runner.run_batch(
-            req.scenario_path, model, req.num_runs, req.master_seed,
+            req.scenario_path,
+            model,
+            req.num_runs,
+            req.master_seed,
         )
     except Exception as e:
         with session_scope() as session:
@@ -237,7 +267,9 @@ def run_batch(req: RunBatchRequest, request: Request):
         batch_repo = BatchJobRepository(session)
 
         for result in batch_result.per_run_results:
-            run_repo.save_result(scenario_id, result, batch_job_id=job_id, org_id=org_id)
+            run_repo.save_result(
+                scenario_id, result, batch_job_id=job_id, org_id=org_id
+            )
 
         batch_repo.mark_completed(job_id, batch_result.aggregated)
 
@@ -247,14 +279,12 @@ def run_batch(req: RunBatchRequest, request: Request):
         model_name=batch_result.model_name,
         num_runs=batch_result.num_runs,
         aggregated=AggregatedResponse(**agg.to_dict()),
-        per_run=[
-            MetricsResponse(**r.to_dict())
-            for r in batch_result.per_run_results
-        ],
+        per_run=[MetricsResponse(**r.to_dict()) for r in batch_result.per_run_results],
     )
 
 
 # ── Jobs ─────────────────────────────────────────────────────────────────
+
 
 @jobs_router.get("/", response_model=List[BatchJobResponse])
 def list_jobs(request: Request, limit: int = Query(20, ge=1, le=100)):
@@ -278,9 +308,12 @@ def get_job(job_id: int, request: Request):
 
 # ── Results ──────────────────────────────────────────────────────────────
 
+
 @results_router.get("/model/{model_name}", response_model=List[RunRecordResponse])
 def get_results_by_model(
-    model_name: str, request: Request, limit: int = Query(100, ge=1, le=1000),
+    model_name: str,
+    request: Request,
+    limit: int = Query(100, ge=1, le=1000),
 ):
     org_id, _, _ = get_request_principal(request)
     with session_scope() as session:
@@ -299,6 +332,7 @@ def get_results_by_batch(batch_job_id: int, request: Request):
 
 
 # ── Runs (live streaming) ────────────────────────────────────────────────
+
 
 class StartRunRequest(BaseModel):
     scenario_path: str
@@ -338,8 +372,12 @@ class RunStatusResponse(BaseModel):
     collision_occurred: bool = False
 
 
-@runs_router.post("/", response_model=StartRunResponse, status_code=201,
-                  dependencies=[Depends(require_verified_email)])
+@runs_router.post(
+    "/",
+    response_model=StartRunResponse,
+    status_code=201,
+    dependencies=[Depends(require_verified_email)],
+)
 async def start_run(req: StartRunRequest, request: Request):
     """Launch a live simulation run. Clients connect to the returned
     ``ws_url`` (with ``?token=<jwt>``) to receive 50 Hz tick frames."""
@@ -421,18 +459,16 @@ async def create_ws_ticket(run_id: str, request: Request):
 async def list_live_runs(request: Request):
     org_id, _, _ = get_request_principal(request)
     from arep.api.sim_registry import get_registry
+
     runs = await get_registry().list()
-    return [
-        RunStatusResponse(**r.to_dict())
-        for r in runs
-        if r.org_id == org_id
-    ]
+    return [RunStatusResponse(**r.to_dict()) for r in runs if r.org_id == org_id]
 
 
 @runs_router.get("/{run_id}", response_model=RunStatusResponse)
 async def get_live_run(run_id: str, request: Request):
     org_id, _, _ = get_request_principal(request)
     from arep.api.sim_registry import get_registry
+
     run = await get_registry().get(run_id)
     if run is None or run.org_id != org_id:
         raise HTTPException(404, "Run not found")
@@ -443,6 +479,7 @@ async def get_live_run(run_id: str, request: Request):
 async def cancel_live_run(run_id: str, request: Request):
     org_id, _, _ = get_request_principal(request)
     from arep.api.sim_registry import get_registry
+
     registry = get_registry()
     run = await registry.get(run_id)
     if run is None or run.org_id != org_id:
@@ -455,8 +492,11 @@ async def cancel_live_run(run_id: str, request: Request):
 
 # ── Async batch (P1.3) ───────────────────────────────────────────────────
 
+
 @runs_router.post(
-    "/batch", response_model=BatchEnqueueResponse, status_code=202,
+    "/batch",
+    response_model=BatchEnqueueResponse,
+    status_code=202,
     dependencies=[Depends(require_verified_email)],
 )
 def enqueue_batch(req: RunBatchRequest, request: Request):
@@ -489,9 +529,11 @@ def enqueue_batch(req: RunBatchRequest, request: Request):
             org_repo = OrganisationRepository(db)
             if not org_repo.deduct_credits(org_id, req.num_runs):
                 raise HTTPException(
-                    402, f"Insufficient run credits (need {req.num_runs})",
+                    402,
+                    f"Insufficient run credits (need {req.num_runs})",
                 )
-            credits_remaining = org_repo.get_by_id(org_id).run_credits
+            org = org_repo.get_by_id(org_id)
+            credits_remaining = org.run_credits if org is not None else 0
         else:
             credits_remaining = 0
 
@@ -523,6 +565,7 @@ def enqueue_batch(req: RunBatchRequest, request: Request):
     # can still import this module.
     try:
         from arep.worker.tasks import run_single_simulation
+
         for i in range(req.num_runs):
             run_single_simulation.delay(
                 batch_id=batch_id,
@@ -554,7 +597,8 @@ def enqueue_batch(req: RunBatchRequest, request: Request):
 
 
 @runs_router.get(
-    "/batch/{batch_id}/status", response_model=BatchProgressResponse,
+    "/batch/{batch_id}/status",
+    response_model=BatchProgressResponse,
 )
 def get_batch_status(batch_id: int, request: Request):
     """Live progress for an async batch job."""

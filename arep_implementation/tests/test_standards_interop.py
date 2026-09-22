@@ -23,10 +23,10 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arep.maps.xodr_parser import OpenDRIVEParser          # noqa: E402
+from arep.maps.xodr_parser import OpenDRIVEParser  # noqa: E402
 from arep.scenario.osc_exporter import OpenSCENARIOExporter  # noqa: E402
 from arep.scenario.osc_importer import OpenSCENARIOImporter  # noqa: E402
-from arep.scenario.parser import ScenarioParser            # noqa: E402
+from arep.scenario.parser import ScenarioParser  # noqa: E402
 
 LON003 = "../scenarios/lon/LON-003_emergency_stop.yaml"
 
@@ -61,8 +61,9 @@ XODR = """<?xml version="1.0"?>
 
 @pytest.fixture
 def xodr_file():
-    with tempfile.NamedTemporaryFile("w", suffix=".xodr", delete=False,
-                                     encoding="utf-8") as handle:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".xodr", delete=False, encoding="utf-8"
+    ) as handle:
         handle.write(XODR)
         path = handle.name
     yield path
@@ -70,6 +71,7 @@ def xodr_file():
 
 
 # -- OpenDRIVE ------------------------------------------------------------
+
 
 def test_a_map_becomes_a_road_graph(xodr_file):
     graph = OpenDRIVEParser().parse(xodr_file)
@@ -107,8 +109,8 @@ def test_junction_right_of_way_defaults_to_yield(xodr_file):
     """Assuming priority the map does not grant is the dangerous default."""
     graph = OpenDRIVEParser().parse(xodr_file)
     junction = graph.junctions["junction_10"]
-    assert junction.right_of_way["road_1"] == "priority"   # declared high
-    assert junction.right_of_way["road_2"] == "yield"      # not declared
+    assert junction.right_of_way["road_1"] == "priority"  # declared high
+    assert junction.right_of_way["road_2"] == "yield"  # not declared
 
 
 def test_a_signal_marks_the_junction_as_signalised(xodr_file):
@@ -119,9 +121,12 @@ def test_a_signal_marks_the_junction_as_signalised(xodr_file):
 def test_unsupported_geometry_is_skipped_and_reported(caplog):
     """A vendor map will contain spirals this subset does not model. Refusing
     the whole file would make the importer useless for its real inputs."""
-    xodr = XODR.replace('<arc curvature="0.02"/>', "<spiral curvStart='0' curvEnd='0.1'/>")
-    with tempfile.NamedTemporaryFile("w", suffix=".xodr", delete=False,
-                                     encoding="utf-8") as handle:
+    xodr = XODR.replace(
+        '<arc curvature="0.02"/>', "<spiral curvStart='0' curvEnd='0.1'/>"
+    )
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".xodr", delete=False, encoding="utf-8"
+    ) as handle:
         handle.write(xodr)
         path = handle.name
     try:
@@ -139,8 +144,9 @@ def test_a_missing_map_file_raises():
 
 
 def test_malformed_xml_says_so():
-    with tempfile.NamedTemporaryFile("w", suffix=".xodr", delete=False,
-                                     encoding="utf-8") as handle:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".xodr", delete=False, encoding="utf-8"
+    ) as handle:
         handle.write("<OpenDRIVE><road>")
         path = handle.name
     try:
@@ -153,8 +159,9 @@ def test_malformed_xml_says_so():
 def test_a_map_with_no_usable_roads_raises_rather_than_returning_empty():
     """An empty graph would make every position off-road, which reads as a
     model failure rather than a bad import."""
-    with tempfile.NamedTemporaryFile("w", suffix=".xodr", delete=False,
-                                     encoding="utf-8") as handle:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".xodr", delete=False, encoding="utf-8"
+    ) as handle:
         handle.write("<OpenDRIVE><header/></OpenDRIVE>")
         path = handle.name
     try:
@@ -166,8 +173,9 @@ def test_a_map_with_no_usable_roads_raises_rather_than_returning_empty():
 
 def test_an_imported_map_works_with_the_simulation():
     """The point of the importer: the result is a RoadGraph like any other."""
-    with tempfile.NamedTemporaryFile("w", suffix=".xodr", delete=False,
-                                     encoding="utf-8") as handle:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".xodr", delete=False, encoding="utf-8"
+    ) as handle:
         handle.write(XODR)
         path = handle.name
     try:
@@ -182,6 +190,7 @@ def test_an_imported_map_works_with_the_simulation():
 
 
 # -- OpenSCENARIO export --------------------------------------------------
+
 
 def test_export_names_the_scenario_and_its_actors():
     scenario, _ = ScenarioParser().parse_file(LON003)
@@ -217,9 +226,10 @@ def test_export_produces_a_safe_identifier():
     cannot."""
     scenario, _ = ScenarioParser().parse_file(LON003)
     osc = OpenSCENARIOExporter().export(scenario)
-    declaration = next(line for line in osc.splitlines()
-                       if line.startswith("scenario "))
-    identifier = declaration[len("scenario "):-1]
+    declaration = next(
+        line for line in osc.splitlines() if line.startswith("scenario ")
+    )
+    identifier = declaration[len("scenario ") : -1]
     assert identifier.replace("_", "").isalnum()
 
 
@@ -232,6 +242,7 @@ def test_export_to_file_writes_it(tmp_path):
 
 
 # -- OpenSCENARIO import --------------------------------------------------
+
 
 def test_import_reads_actors_and_behaviour():
     osc = """
@@ -329,8 +340,9 @@ def test_export_then_import_preserves_the_essentials():
     imported = OpenSCENARIOImporter().import_string(osc, source="round-trip")
 
     assert imported.name.startswith("LON_003")
-    assert [o.id for o in imported.traffic_objects] == \
-           [o.id for o in original.traffic_objects]
+    assert [o.id for o in imported.traffic_objects] == [
+        o.id for o in original.traffic_objects
+    ]
 
     npc = imported.traffic_objects[0]
     assert npc.behavior.parameters["bt_type"] == "hesitant_brake"
@@ -345,6 +357,6 @@ def test_the_round_trip_is_lossy_and_says_so():
         OpenSCENARIOExporter().export(original),
     )
     assert original.parameterization
-    assert not imported.parameterization, (
-        "if this starts surviving, update the docstring that says it does not"
-    )
+    assert (
+        not imported.parameterization
+    ), "if this starts surviving, update the docstring that says it does not"

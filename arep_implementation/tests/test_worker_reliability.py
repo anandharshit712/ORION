@@ -51,26 +51,40 @@ def spy(monkeypatch):
     """Capture refunds and failure bookkeeping instead of touching a database."""
     calls = {"refunds": [], "failures": [], "saved": []}
 
-    monkeypatch.setattr(tasks, "_refund_credit",
-                        lambda org_id: calls["refunds"].append(org_id))
+    monkeypatch.setattr(
+        tasks, "_refund_credit", lambda org_id: calls["refunds"].append(org_id)
+    )
     # Signature carries the seed since the failure ledger keys on (batch, seed).
-    monkeypatch.setattr(tasks, "_fail_run",
-                        lambda batch_id, seed, org_id, exc: calls["failures"].append(
-                            (batch_id, seed, org_id, str(exc))))
+    monkeypatch.setattr(
+        tasks,
+        "_fail_run",
+        lambda batch_id, seed, org_id, exc: calls["failures"].append(
+            (batch_id, seed, org_id, str(exc))
+        ),
+    )
     return calls
 
 
 @pytest.fixture
 def no_existing_run(monkeypatch):
     """Idempotency guard finds nothing, so the task proceeds."""
+
     class _Session:
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
 
     class _Repo:
-        def __init__(self, _db): pass
-        def get_by_batch_and_seed(self, batch_id, seed): return None
-        def save_result(self, *a, **k): return None
+        def __init__(self, _db):
+            pass
+
+        def get_by_batch_and_seed(self, batch_id, seed):
+            return None
+
+        def save_result(self, *a, **k):
+            return None
 
     monkeypatch.setattr(tasks, "session_scope", lambda: _Session())
     monkeypatch.setattr(tasks, "RunRepository", _Repo)
@@ -84,15 +98,19 @@ _run_single = tasks.execute_single_run
 
 def _run(task_self, **overrides):
     kwargs = dict(
-        batch_id=1, scenario_id=1,
+        batch_id=1,
+        scenario_id=1,
         scenario_path="scenarios/basic/straight_road_lead_vehicle.yaml",
-        model_name="EmergencyBrake", seed=42, org_id="org-a",
+        model_name="EmergencyBrake",
+        seed=42,
+        org_id="org-a",
     )
     kwargs.update(overrides)
     return _run_single(task_self, **kwargs)
 
 
 # -- Retry policy ---------------------------------------------------------
+
 
 def test_retry_policy_matches_the_spec():
     """5s / 15s / 60s, three attempts after the first."""
@@ -101,15 +119,20 @@ def test_retry_policy_matches_the_spec():
 
 
 def test_a_transient_database_error_is_retried_without_refunding(
-    monkeypatch, spy, no_existing_run,
+    monkeypatch,
+    spy,
+    no_existing_run,
 ):
     """The acceptance criterion: a dropped connection must not lose the run.
 
     A refund here would hand back a credit for a run that is still going to
     happen — and again on the next attempt.
     """
+
     def explode(*a, **k):
-        raise OperationalError("SELECT 1", {}, Exception("server closed the connection"))
+        raise OperationalError(
+            "SELECT 1", {}, Exception("server closed the connection")
+        )
 
     monkeypatch.setattr(tasks, "resolve_model", explode)
     task = _StubTask(retries=0)
@@ -137,9 +160,12 @@ def test_backoff_grows_with_the_attempt_number(monkeypatch, spy, no_existing_run
 
 
 def test_the_final_transient_failure_refunds_exactly_once(
-    monkeypatch, spy, no_existing_run,
+    monkeypatch,
+    spy,
+    no_existing_run,
 ):
     """Retries exhausted: now the customer gets their credit back, once."""
+
     def explode(*a, **k):
         raise OperationalError("SELECT 1", {}, Exception("still gone"))
 
@@ -156,6 +182,7 @@ def test_the_final_transient_failure_refunds_exactly_once(
 
 def test_a_deterministic_failure_is_not_retried(monkeypatch, spy, no_existing_run):
     """A bad model fails the same way three more times and bills for each."""
+
     def explode(*a, **k):
         raise ValueError("unknown model 'NotAModel'")
 
@@ -188,6 +215,7 @@ def test_a_sandbox_violation_is_not_retried(monkeypatch, spy, no_existing_run):
 
 # -- Idempotency ----------------------------------------------------------
 
+
 def test_a_redelivered_task_does_not_run_twice(monkeypatch, spy):
     """acks_late redelivers whenever a worker dies mid-task.
 
@@ -197,20 +225,25 @@ def test_a_redelivered_task_does_not_run_twice(monkeypatch, spy):
     ran = []
 
     class _Session:
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
 
     class _RepoWithExistingRow:
-        def __init__(self, _db): pass
+        def __init__(self, _db):
+            pass
+
         def get_by_batch_and_seed(self, batch_id, seed):
-            return object()          # already recorded
+            return object()  # already recorded
+
         def save_result(self, *a, **k):
             ran.append("saved")
 
     monkeypatch.setattr(tasks, "session_scope", lambda: _Session())
     monkeypatch.setattr(tasks, "RunRepository", _RepoWithExistingRow)
-    monkeypatch.setattr(tasks, "resolve_model",
-                        lambda *a, **k: ran.append("resolved"))
+    monkeypatch.setattr(tasks, "resolve_model", lambda *a, **k: ran.append("resolved"))
 
     result = _run(_StubTask())
 
@@ -240,23 +273,33 @@ def test_repository_lookup_distinguishes_seeds(tmp_path):
 
     try:
         with conn_mod.session_scope() as db:
-            db.add(RunRecord(
-                scenario_id=1, batch_job_id=7, model_name="m", master_seed=1,
-                duration=1.0, composite_score=0.5, safety_score=0.5,
-                compliance_score=0.5, stability_score=0.5, reactivity_score=0.5,
-            ))
+            db.add(
+                RunRecord(
+                    scenario_id=1,
+                    batch_job_id=7,
+                    model_name="m",
+                    master_seed=1,
+                    duration=1.0,
+                    composite_score=0.5,
+                    safety_score=0.5,
+                    compliance_score=0.5,
+                    stability_score=0.5,
+                    reactivity_score=0.5,
+                )
+            )
 
         with conn_mod.session_scope() as db:
             repo = RunRepository(db)
             assert repo.get_by_batch_and_seed(7, 1) is not None
-            assert repo.get_by_batch_and_seed(7, 2) is None      # other seed
-            assert repo.get_by_batch_and_seed(8, 1) is None      # other batch
+            assert repo.get_by_batch_and_seed(7, 2) is None  # other seed
+            assert repo.get_by_batch_and_seed(8, 1) is None  # other batch
     finally:
         conn_mod._engine = None
         conn_mod._SessionFactory = None
 
 
 # -- Failure idempotency (closing the D-08 residual) ----------------------
+
 
 def test_a_failure_is_counted_and_refunded_only_once(tmp_path):
     """A redelivered failing task used to refund a second credit.
@@ -276,18 +319,34 @@ def test_a_failure_is_counted_and_refunded_only_once(tmp_path):
 
     try:
         with conn_mod.session_scope() as db:
-            db.add(OrganisationRecord(
-                id="org-fail", name="Fail Org", slug="fail-org", run_credits=10,
-            ))
-            db.add(BatchJobRecord(
-                id=1, org_id="org-fail", scenario_name="s", model_name="m",
-                num_runs=3, master_seed=1, status="queued",
-            ))
+            db.add(
+                OrganisationRecord(
+                    id="org-fail",
+                    name="Fail Org",
+                    slug="fail-org",
+                    run_credits=10,
+                )
+            )
+            db.add(
+                BatchJobRecord(
+                    id=1,
+                    org_id="org-fail",
+                    scenario_name="s",
+                    model_name="m",
+                    num_runs=3,
+                    master_seed=1,
+                    status="queued",
+                )
+            )
 
         def credits() -> int:
             with conn_mod.session_scope() as db:
-                return db.query(OrganisationRecord).filter_by(
-                    id="org-fail").first().run_credits
+                return (
+                    db.query(OrganisationRecord)
+                    .filter_by(id="org-fail")
+                    .first()
+                    .run_credits
+                )
 
         def failed_count() -> int:
             with conn_mod.session_scope() as db:
@@ -322,20 +381,37 @@ def test_distinct_seeds_each_count_their_own_failure(tmp_path):
 
     try:
         with conn_mod.session_scope() as db:
-            db.add(OrganisationRecord(
-                id="org-multi", name="Multi", slug="multi-org", run_credits=0,
-            ))
-            db.add(BatchJobRecord(
-                id=2, org_id="org-multi", scenario_name="s", model_name="m",
-                num_runs=3, master_seed=1, status="queued",
-            ))
+            db.add(
+                OrganisationRecord(
+                    id="org-multi",
+                    name="Multi",
+                    slug="multi-org",
+                    run_credits=0,
+                )
+            )
+            db.add(
+                BatchJobRecord(
+                    id=2,
+                    org_id="org-multi",
+                    scenario_name="s",
+                    model_name="m",
+                    num_runs=3,
+                    master_seed=1,
+                    status="queued",
+                )
+            )
 
         for seed in (10, 11, 12):
             tasks._fail_run(2, seed, "org-multi", ValueError("boom"))
 
         with conn_mod.session_scope() as db:
-            assert db.query(OrganisationRecord).filter_by(
-                id="org-multi").first().run_credits == 3
+            assert (
+                db.query(OrganisationRecord)
+                .filter_by(id="org-multi")
+                .first()
+                .run_credits
+                == 3
+            )
             assert db.query(BatchJobRecord).filter_by(id=2).first().runs_failed == 3
     finally:
         conn_mod._engine = None

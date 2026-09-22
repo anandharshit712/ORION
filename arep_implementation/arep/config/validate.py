@@ -13,6 +13,7 @@ Behaviour by environment (``ORION_ENV``):
 Called from the FastAPI lifespan (``api/app.py``) and reused by ``api/auth.py``
 and ``database/connection.py`` so all three agree on the same resolution rules.
 """
+
 from __future__ import annotations
 
 import os
@@ -145,7 +146,8 @@ def resolve_cors_origins() -> list[str]:
         if "*" in origins:
             logger.warning(
                 "CORS allow_origins=* in dev (ORION_ENV=%s) — every origin may "
-                "call this API with credentials. Never ship this.", get_env(),
+                "call this API with credentials. Never ship this.",
+                get_env(),
             )
         return origins
 

@@ -26,6 +26,7 @@ def client():
     os.environ["ORION_DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
@@ -61,20 +62,27 @@ def sent_links(monkeypatch):
 
 
 def _signup(client, email: str, username: str) -> dict:
-    r = client.post("/api/auth/signup", json={
-        "email": email,
-        "username": username,
-        "password": "correct-horse-battery",
-        "org_name": f"{username} Org",
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": username,
+            "password": "correct-horse-battery",
+            "org_name": f"{username} Org",
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()
 
 
 def _login(client, email: str) -> str:
-    r = client.post("/api/auth/login", json={
-        "identifier": email, "password": "correct-horse-battery",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": email,
+            "password": "correct-horse-battery",
+        },
+    )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
 
@@ -88,6 +96,7 @@ def _token_from(link: str) -> str:
 
 
 # -- Signup leaves the address unverified ---------------------------------
+
 
 def test_signup_creates_an_unverified_user(client, sent_links):
     body = _signup(client, "unverified@example.com", "unverified")
@@ -118,16 +127,21 @@ def test_unverified_user_can_read(client, sent_links):
 
 # -- The gate (the acceptance criterion) ----------------------------------
 
+
 def test_unverified_start_run_is_403_with_a_clear_message(client, sent_links):
     """The D-04 acceptance criterion."""
     _signup(client, "norun@example.com", "norun")
     token = _login(client, "norun@example.com")
 
-    r = client.post("/api/runs/", headers=_auth(token), json={
-        "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
-        "model_name": "EmergencyBrake",
-        "master_seed": 42,
-    })
+    r = client.post(
+        "/api/runs/",
+        headers=_auth(token),
+        json={
+            "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
+            "model_name": "EmergencyBrake",
+            "master_seed": 42,
+        },
+    )
     assert r.status_code == 403
     detail = r.json()["detail"]
     assert "not verified" in detail.lower()
@@ -137,10 +151,16 @@ def test_unverified_start_run_is_403_with_a_clear_message(client, sent_links):
 def test_unverified_cannot_enqueue_a_batch(client, sent_links):
     _signup(client, "nobatch@example.com", "nobatch")
     token = _login(client, "nobatch@example.com")
-    r = client.post("/api/runs/batch", headers=_auth(token), json={
-        "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
-        "model_name": "EmergencyBrake", "num_runs": 2, "master_seed": 1,
-    })
+    r = client.post(
+        "/api/runs/batch",
+        headers=_auth(token),
+        json={
+            "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
+            "model_name": "EmergencyBrake",
+            "num_runs": 2,
+            "master_seed": 1,
+        },
+    )
     assert r.status_code == 403
 
 
@@ -155,23 +175,35 @@ def test_unverified_cannot_mint_an_api_key(client, sent_links):
 def test_unverified_cannot_register_a_model(client, sent_links):
     _signup(client, "nomodel@example.com", "nomodel")
     token = _login(client, "nomodel@example.com")
-    r = client.post("/api/models/register", headers=_auth(token), json={
-        "name": "m", "version": "v1", "image_uri": "example.com/m:v1",
-    })
+    r = client.post(
+        "/api/models/register",
+        headers=_auth(token),
+        json={
+            "name": "m",
+            "version": "v1",
+            "image_uri": "example.com/m:v1",
+        },
+    )
     assert r.status_code == 403
 
 
 def test_unverified_evaluate_is_blocked(client, sent_links):
     _signup(client, "noeval@example.com", "noeval")
     token = _login(client, "noeval@example.com")
-    r = client.post("/evaluate/single", headers=_auth(token), json={
-        "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
-        "model_name": "EmergencyBrake", "master_seed": 1,
-    })
+    r = client.post(
+        "/evaluate/single",
+        headers=_auth(token),
+        json={
+            "scenario_path": "scenarios/basic/straight_road_lead_vehicle.yaml",
+            "model_name": "EmergencyBrake",
+            "master_seed": 1,
+        },
+    )
     assert r.status_code == 403
 
 
 # -- Verifying opens the gate ---------------------------------------------
+
 
 def test_verifying_unlocks_the_blocked_routes(client, sent_links):
     _signup(client, "willverify@example.com", "willverify")
@@ -181,10 +213,17 @@ def test_verifying_unlocks_the_blocked_routes(client, sent_links):
     assert r.status_code == 200
 
     token = _login(client, "willverify@example.com")
-    assert client.get("/api/auth/me", headers=_auth(token)).json()["email_verified"] is True
+    assert (
+        client.get("/api/auth/me", headers=_auth(token)).json()["email_verified"]
+        is True
+    )
     # API key creation was 403 before verifying; it must work now.
-    assert client.post("/api/keys/", headers=_auth(token),
-                       json={"label": "legit"}).status_code == 201
+    assert (
+        client.post(
+            "/api/keys/", headers=_auth(token), json={"label": "legit"}
+        ).status_code
+        == 201
+    )
 
 
 def test_verification_token_is_single_use(client, sent_links):
@@ -237,11 +276,14 @@ def test_only_the_hash_is_stored(client, sent_links):
 
 # -- Resend does not leak who has an account ------------------------------
 
+
 def test_resend_answers_identically_for_unknown_addresses(client, sent_links):
-    known = client.post("/api/auth/resend-verification",
-                        json={"email": "unverified@example.com"})
-    unknown = client.post("/api/auth/resend-verification",
-                          json={"email": "nobody-at-all@example.com"})
+    known = client.post(
+        "/api/auth/resend-verification", json={"email": "unverified@example.com"}
+    )
+    unknown = client.post(
+        "/api/auth/resend-verification", json={"email": "nobody-at-all@example.com"}
+    )
     assert known.status_code == unknown.status_code == 200
     assert known.json() == unknown.json()
 
@@ -252,7 +294,9 @@ def test_resend_answers_identically_for_verified_addresses(client, sent_links):
     client.post("/api/auth/verify-email", json={"token": _token_from(link)})
 
     before = len(sent_links)
-    r = client.post("/api/auth/resend-verification", json={"email": "already@example.com"})
+    r = client.post(
+        "/api/auth/resend-verification", json={"email": "already@example.com"}
+    )
     assert r.status_code == 200
     assert len(sent_links) == before, "a verified address must not be re-mailed"
 
@@ -264,6 +308,7 @@ def test_resend_issues_a_working_new_token(client, sent_links):
     # Clear the throttle window so the resend is allowed.
     from arep.database.connection import session_scope
     from arep.database.models import UserRecord
+
     with session_scope() as session:
         user = session.query(UserRecord).filter_by(email="resend@example.com").first()
         user.verification_sent_at = dt.datetime.utcnow() - dt.timedelta(hours=2)
@@ -273,10 +318,14 @@ def test_resend_issues_a_working_new_token(client, sent_links):
     assert second_token != first_token
 
     # The replaced token must be dead, and the new one must work.
-    assert client.post("/api/auth/verify-email",
-                       json={"token": first_token}).status_code == 400
-    assert client.post("/api/auth/verify-email",
-                       json={"token": second_token}).status_code == 200
+    assert (
+        client.post("/api/auth/verify-email", json={"token": first_token}).status_code
+        == 400
+    )
+    assert (
+        client.post("/api/auth/verify-email", json={"token": second_token}).status_code
+        == 200
+    )
 
 
 def test_resend_is_throttled_per_user(client, sent_links):
@@ -285,8 +334,9 @@ def test_resend_is_throttled_per_user(client, sent_links):
     before = len(sent_links)
 
     for _ in range(3):
-        r = client.post("/api/auth/resend-verification",
-                        json={"email": "throttle@example.com"})
-        assert r.status_code == 200          # never reveals the throttle
+        r = client.post(
+            "/api/auth/resend-verification", json={"email": "throttle@example.com"}
+        )
+        assert r.status_code == 200  # never reveals the throttle
 
     assert len(sent_links) == before, "signup just mailed; resends must be held back"

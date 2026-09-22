@@ -13,8 +13,12 @@ import numpy as np
 
 from arep.config import SimulationConfig
 from arep.core.state import (
-    WorldState, VehicleState, Vector2D,
-    TrafficLightInfo, LaneInfo, ObjectType,
+    WorldState,
+    VehicleState,
+    Vector2D,
+    TrafficLightInfo,
+    LaneInfo,
+    ObjectType,
 )
 from arep.core.random_manager import RandomManager
 from arep.scenario.schema import ScenarioDefinition
@@ -22,7 +26,6 @@ from arep.scenario.parameterizer import ScenarioParameterizer
 from arep.utils.exceptions import ScenarioParseError
 from arep.utils.logging_config import get_logger
 from arep.simulation.world import WorldManager
-
 
 # Mapping from string type to ObjectType enum
 _TYPE_MAP = {
@@ -119,7 +122,8 @@ class ScenarioExecutor:
         )
 
     def _create_traffic_objects(
-        self, scenario: ScenarioDefinition,
+        self,
+        scenario: ScenarioDefinition,
     ) -> List[VehicleState]:
         objects = []
         for obj_def in scenario.traffic_objects:
@@ -127,17 +131,19 @@ class ScenarioExecutor:
             obj_type = _TYPE_MAP.get(obj_def.type, ObjectType.CAR)
             length, width = _DIMENSIONS.get(obj_type, (4.5, 2.0))
 
-            objects.append(VehicleState(
-                position=Vector2D(init.x, init.y),
-                heading=init.heading,
-                velocity=init.velocity,
-                acceleration=0.0,
-                length=length,
-                width=width,
-                wheelbase=2.7,
-                object_type=obj_type,
-                object_id=obj_def.id,
-            ))
+            objects.append(
+                VehicleState(
+                    position=Vector2D(init.x, init.y),
+                    heading=init.heading,
+                    velocity=init.velocity,
+                    acceleration=0.0,
+                    length=length,
+                    width=width,
+                    wheelbase=2.7,
+                    object_type=obj_type,
+                    object_id=obj_def.id,
+                )
+            )
         return objects
 
     def _create_road_graph(self, scenario: ScenarioDefinition):
@@ -186,7 +192,9 @@ class ScenarioExecutor:
         return graph
 
     def _create_lanes(
-        self, scenario: ScenarioDefinition, road_graph=None,
+        self,
+        scenario: ScenarioDefinition,
+        road_graph=None,
     ) -> List[LaneInfo]:
         """Lane centerlines for the scenario.
 
@@ -198,12 +206,14 @@ class ScenarioExecutor:
             lanes: List[LaneInfo] = []
             for segment in road_graph.segments.values():
                 for lane_idx in range(segment.lane_count):
-                    lanes.append(LaneInfo(
-                        lane_id=f"{segment.segment_id}_lane_{lane_idx}",
-                        centerline_points=segment.get_lane_centerline(lane_idx),
-                        width=segment.lane_width,
-                        speed_limit=segment.speed_limit,
-                    ))
+                    lanes.append(
+                        LaneInfo(
+                            lane_id=f"{segment.segment_id}_lane_{lane_idx}",
+                            centerline_points=segment.get_lane_centerline(lane_idx),
+                            width=segment.lane_width,
+                            speed_limit=segment.speed_limit,
+                        )
+                    )
             return lanes
 
         road = scenario.road
@@ -228,22 +238,22 @@ class ScenarioExecutor:
             lane_y = lane_idx * road.lane_width
 
             # Straight centerline (1 km)
-            centerline = [
-                Vector2D(float(x), lane_y)
-                for x in np.linspace(0, 1000, 100)
-            ]
+            centerline = [Vector2D(float(x), lane_y) for x in np.linspace(0, 1000, 100)]
 
-            lanes.append(LaneInfo(
-                lane_id=f"lane_{lane_idx}",
-                centerline_points=centerline,
-                width=road.lane_width,
-                speed_limit=road.speed_limit,
-            ))
+            lanes.append(
+                LaneInfo(
+                    lane_id=f"lane_{lane_idx}",
+                    centerline_points=centerline,
+                    width=road.lane_width,
+                    speed_limit=road.speed_limit,
+                )
+            )
 
         return lanes
 
     def _build_npc_behaviors(
-        self, scenario: ScenarioDefinition,
+        self,
+        scenario: ScenarioDefinition,
     ) -> dict:
         """Build the npc_behaviors registry from traffic object behavior definitions."""
         registry = {}

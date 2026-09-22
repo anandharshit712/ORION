@@ -108,7 +108,8 @@ class OpenDRIVEParser:
             # A road inside a junction is an arm; OpenDRIVE marks that with a
             # junction attribute of something other than "-1".
             segment_type=(
-                "intersection_arm" if road_el.get("junction", "-1") != "-1"
+                "intersection_arm"
+                if road_el.get("junction", "-1") != "-1"
                 else "straight"
             ),
             centerline=centerline,
@@ -134,10 +135,11 @@ class OpenDRIVEParser:
             if length <= 0:
                 continue
 
+            arc = geometry.find("arc")
             if geometry.find("line") is not None:
                 piece = self._discretise_line(x, y, heading, length)
-            elif geometry.find("arc") is not None:
-                curvature = float(geometry.find("arc").get("curvature", "0"))
+            elif arc is not None:
+                curvature = float(arc.get("curvature", "0"))
                 piece = self._discretise_arc(x, y, heading, length, curvature)
             else:
                 # poly3 / paramPoly3 / spiral. Straight-lining them would put
@@ -145,7 +147,9 @@ class OpenDRIVEParser:
                 # geometry is worse than an absent segment.
                 kinds = [child.tag for child in geometry]
                 logger.warning(
-                    "Road %s: unsupported geometry %s — skipped", road_id, kinds,
+                    "Road %s: unsupported geometry %s — skipped",
+                    road_id,
+                    kinds,
                 )
                 continue
 
@@ -220,14 +224,21 @@ class OpenDRIVEParser:
                 continue
             geometry = road_el.find("planView/geometry")
             if geometry is not None:
-                positions.append(Vector2D(
-                    float(geometry.get("x", "0")), float(geometry.get("y", "0")),
-                ))
+                positions.append(
+                    Vector2D(
+                        float(geometry.get("x", "0")),
+                        float(geometry.get("y", "0")),
+                    )
+                )
 
-        position = Vector2D(
-            sum(p.x for p in positions) / len(positions),
-            sum(p.y for p in positions) / len(positions),
-        ) if positions else Vector2D(0.0, 0.0)
+        position = (
+            Vector2D(
+                sum(p.x for p in positions) / len(positions),
+                sum(p.y for p in positions) / len(positions),
+            )
+            if positions
+            else Vector2D(0.0, 0.0)
+        )
 
         has_signal = any(
             road_el.find("signals/signal") is not None
@@ -264,8 +275,7 @@ class OpenDRIVEParser:
         dx = math.cos(heading)
         dy = math.sin(heading)
         return [
-            Vector2D(x0 + dx * i * CENTERLINE_STEP_M,
-                     y0 + dy * i * CENTERLINE_STEP_M)
+            Vector2D(x0 + dx * i * CENTERLINE_STEP_M, y0 + dy * i * CENTERLINE_STEP_M)
             for i in range(n)
         ]
 
@@ -293,10 +303,12 @@ class OpenDRIVEParser:
         for index in range(steps):
             travelled = min(index * CENTERLINE_STEP_M, length)
             angle = heading + travelled * curvature
-            points.append(Vector2D(
-                centre_x + radius * math.sin(angle),
-                centre_y - radius * math.cos(angle),
-            ))
+            points.append(
+                Vector2D(
+                    centre_x + radius * math.sin(angle),
+                    centre_y - radius * math.cos(angle),
+                )
+            )
         return points
 
     @staticmethod

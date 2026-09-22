@@ -38,23 +38,27 @@ logger = get_logger("analysis.failure_clustering")
 @dataclass
 class FaultCondition:
     """A cluster of failed runs sharing similar parameter values."""
-    description: str            # Human-readable e.g. "NPC initial_x < 28m AND ego_speed > 14 m/s"
-    failure_rate: float         # Fraction of runs in this region that FAILed (0.0–1.0)
-    run_count: int              # Total runs in this cluster
-    dominant_event: str         # "collision" | "off_road" | "timeout" | ...
-    example_run_id: str         # The worst (lowest composite score) run_id in this cluster
-    parameter_means: dict = field(default_factory=dict)  # param_name → mean value in cluster
+
+    description: str  # Human-readable e.g. "NPC initial_x < 28m AND ego_speed > 14 m/s"
+    failure_rate: float  # Fraction of runs in this region that FAILed (0.0–1.0)
+    run_count: int  # Total runs in this cluster
+    dominant_event: str  # "collision" | "off_road" | "timeout" | ...
+    example_run_id: str  # The worst (lowest composite score) run_id in this cluster
+    parameter_means: dict = field(
+        default_factory=dict
+    )  # param_name → mean value in cluster
 
 
 @dataclass
 class FailureReport:
     """Complete failure analysis for a batch run."""
+
     batch_id: str
     total_runs: int
     fail_runs: int
     pass_runs: int
-    fault_conditions: List[FaultCondition]    # Ordered by failure_rate desc
-    safe_region_description: str             # e.g. "Model is safe when NPC initial_x > 35m"
+    fault_conditions: List[FaultCondition]  # Ordered by failure_rate desc
+    safe_region_description: str  # e.g. "Model is safe when NPC initial_x > 35m"
     analysis_method: str = "dbscan"
 
     @property
@@ -100,7 +104,10 @@ class FailureClusterer:
 
         if not runs:
             return FailureReport(
-                batch_id=str(batch_id), total_runs=0, fail_runs=0, pass_runs=0,
+                batch_id=str(batch_id),
+                total_runs=0,
+                fail_runs=0,
+                pass_runs=0,
                 fault_conditions=[],
                 safe_region_description="No runs recorded for this batch.",
             )
@@ -150,7 +157,9 @@ class FailureClusterer:
     # ── Internals ────────────────────────────────────────────────────
 
     def _parameter_vectors(
-        self, scenario_path: str, failures: List[dict],
+        self,
+        scenario_path: str,
+        failures: List[dict],
     ) -> Tuple[List[List[float]], List[str]]:
         """Reconstruct each failed run's concrete parameter values from its seed."""
         import copy
@@ -206,21 +215,24 @@ class FailureClusterer:
         conditions: List[FaultCondition] = []
         for label in sorted(set(labels)):
             if label == -1:
-                continue        # DBSCAN noise: failures with no shared pattern
+                continue  # DBSCAN noise: failures with no shared pattern
             members = [i for i, value in enumerate(labels) if value == label]
             cluster_rows = raw[members]
-            means = {name: float(cluster_rows[:, j].mean())
-                     for j, name in enumerate(names)}
+            means = {
+                name: float(cluster_rows[:, j].mean()) for j, name in enumerate(names)
+            }
             worst = min(members, key=lambda i: failures[i]["composite_score"])
 
-            conditions.append(FaultCondition(
-                description=self._build_description(means, ranges),
-                failure_rate=_regional_failure_rate(len(members), all_runs),
-                run_count=len(members),
-                dominant_event=_dominant_event([failures[i] for i in members]),
-                example_run_id=failures[worst]["run_id"],
-                parameter_means=means,
-            ))
+            conditions.append(
+                FaultCondition(
+                    description=self._build_description(means, ranges),
+                    failure_rate=_regional_failure_rate(len(members), all_runs),
+                    run_count=len(members),
+                    dominant_event=_dominant_event([failures[i] for i in members]),
+                    example_run_id=failures[worst]["run_id"],
+                    parameter_means=means,
+                )
+            )
 
         conditions.sort(key=lambda c: (c.failure_rate, c.run_count), reverse=True)
         return conditions
@@ -280,12 +292,14 @@ class FailureClusterer:
                 "parameter space."
             )
         return (
-            "No failures were observed when " + "; and ".join(inverted)
+            "No failures were observed when "
+            + "; and ".join(inverted)
             + ". This describes the sampled space only, not a safety guarantee."
         )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
 
 def _is_failure(run: dict) -> bool:
     """A run failed if it hit something or left the road.
@@ -342,7 +356,7 @@ def _dominant_event(cluster: List[dict]) -> str:
     for run in cluster:
         key = "collision" if run["collision"] else run["termination_reason"]
         counts[key] = counts.get(key, 0) + 1
-    return max(counts, key=counts.get) if counts else "unknown"
+    return max(counts, key=lambda k: counts[k]) if counts else "unknown"
 
 
 def _fmt(value: float) -> str:

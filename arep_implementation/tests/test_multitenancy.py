@@ -31,6 +31,7 @@ def client():
 
     # Force reinit of the engine with our test DB before importing app
     from arep.database import connection as conn_mod
+
     conn_mod._engine = None
     conn_mod._SessionFactory = None
     conn_mod.init_database(url=f"sqlite:///{db_path}")
@@ -52,13 +53,16 @@ def client():
 
 
 def _signup(client, email: str, username: str, slug: str) -> dict:
-    r = client.post("/api/auth/signup", json={
-        "email": email,
-        "username": username,
-        "password": "password123",
-        "org_name": f"{username} org",
-        "org_slug": slug,
-    })
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "email": email,
+            "username": username,
+            "password": "password123",
+            "org_name": f"{username} org",
+            "org_slug": slug,
+        },
+    )
     assert r.status_code == 201, r.text
     # D-04: signup leaves the address unverified, which blocks key creation and
     # model upload. These tests are about org isolation, not verification.
@@ -67,16 +71,20 @@ def _signup(client, email: str, username: str, slug: str) -> dict:
 
 
 def _login(client, identifier: str) -> tuple[str, str, str]:
-    r = client.post("/api/auth/login", json={
-        "identifier": identifier,
-        "password": "password123",
-    })
+    r = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": identifier,
+            "password": "password123",
+        },
+    )
     assert r.status_code == 200, r.text
     j = r.json()
     return j["access_token"], j["org_id"], j["role"]
 
 
 # ── Tests ────────────────────────────────────────────────────────────────
+
 
 def _expected_new_org_grant() -> tuple[str, int]:
     """Plan + credits a freshly signed-up org should get, per current billing config.
@@ -85,6 +93,7 @@ def _expected_new_org_grant() -> tuple[str, int]:
     Mirrors the logic in api/auth.py signup so this test survives the billing flip.
     """
     from arep.config import get_config
+
     cfg = get_config()
     if cfg.billing.billing_enabled:
         return "free", 50
@@ -182,12 +191,14 @@ def test_org_isolation_keys_listing(client):
 
     # Frank creates a key
     client.post(
-        "/api/keys/", json={"label": "frank-key"},
+        "/api/keys/",
+        json={"label": "frank-key"},
         headers={"Authorization": f"Bearer {token_f}"},
     )
     # Gina creates a key
     client.post(
-        "/api/keys/", json={"label": "gina-key"},
+        "/api/keys/",
+        json={"label": "gina-key"},
         headers={"Authorization": f"Bearer {token_g}"},
     )
 
@@ -210,7 +221,8 @@ def test_cross_org_api_key_cannot_revoke(client):
 
     # Hank creates a key
     r = client.post(
-        "/api/keys/", json={"label": "hank-secret"},
+        "/api/keys/",
+        json={"label": "hank-secret"},
         headers={"Authorization": f"Bearer {token_h}"},
     )
     hank_key_id = r.json()["id"]

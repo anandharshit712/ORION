@@ -57,8 +57,11 @@ class OpenSCENARIOExporter:
 
         lines += self._parameter_block(scenario)
         lines.append(f"scenario {_identifier(scenario.name)}:")
-        lines.append(f"    # {scenario.description.strip()}" if scenario.description
-                     else "    # (no description)")
+        lines.append(
+            f"    # {scenario.description.strip()}"
+            if scenario.description
+            else "    # (no description)"
+        )
         lines.append("")
 
         # Actors. The ego is always present; NPCs come from the traffic list.
@@ -69,12 +72,8 @@ class OpenSCENARIOExporter:
         lines.append("")
 
         lines.append("    do parallel:")
-        lines.append(
-            "        ego.drive() with:"
-        )
-        lines.append(
-            f"            speed({scenario.ego_initial.velocity:.2f}mps)"
-        )
+        lines.append("        ego.drive() with:")
+        lines.append(f"            speed({scenario.ego_initial.velocity:.2f}mps)")
 
         for obj in scenario.traffic_objects:
             lines += self._actor_act(obj)
@@ -104,9 +103,7 @@ class OpenSCENARIOExporter:
 
         lines = ["# Parameter ranges carried over from the AREP scenario."]
         for name, spec in sorted(_flatten_ranges(scenario.parameterization)):
-            lines.append(
-                f"#   {name}: [{spec['min']}, {spec['max']}]"
-            )
+            lines.append(f"#   {name}: [{spec['min']}, {spec['max']}]")
         lines.append("")
         return lines
 
@@ -130,9 +127,11 @@ class OpenSCENARIOExporter:
             lines.append(f"{indent}    speed({obj.initial.velocity:.2f}mps)")
         elif params.get("bt_type") in ("hesitant_brake",):
             decel = params.get("final_decel", -8.0)
-            decel_value = decel.get("min") if isinstance(decel, dict) else decel
+            decel_value = decel.get("min", -8.0) if isinstance(decel, dict) else decel
             lines.append(f"{indent}{name}.brake() with:")
-            lines.append(f"{indent}    deceleration({abs(float(decel_value)):.2f}mpsps)")
+            lines.append(
+                f"{indent}    deceleration({abs(float(decel_value)):.2f}mpsps)"
+            )
             lines.append(
                 f"{indent}# ORION also models a randomised hesitation phase here, "
                 f"which OSC2 has no direct equivalent for."
@@ -152,7 +151,7 @@ class OpenSCENARIOExporter:
     def _trigger_clause(params: dict) -> str:
         trigger_type = params.get("trigger_type")
         value = params.get("trigger_value")
-        if trigger_type is None or isinstance(value, dict):
+        if trigger_type is None or value is None or isinstance(value, dict):
             return ""
         if trigger_type == "time":
             return f"elapsed({float(value):.2f}s)"
@@ -161,7 +160,6 @@ class OpenSCENARIOExporter:
         if trigger_type == "proximity":
             return f"distance_to(ego) < {float(value):.2f}m"
         return ""
-
 
 
 def _identifier(text: str) -> str:
