@@ -1,7 +1,7 @@
 # How ORION Evaluates Your Model
 
-**Status**: current as of Phase 0.5. Every formula, weight and threshold below is
-taken from the code, and the file paths are given so you can check.
+**Status**: current as of the Phase 1.5 lane-geometry correction. Every formula, weight and
+threshold below is taken from the code, and the file paths are given so you can check.
 
 This document exists so that a safety reviewer can decide how much weight to put on
 an ORION score without reading the source. It states what each number measures, how
@@ -260,3 +260,36 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
 | 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |
+| 1.5-fix | One lane-centre formula for the flat road and the road graph | Lane compliance rises from 0.0 to 1.0 on the 15 scenarios that start the ego at y=-1.75; composite rises by exactly +0.100 for each. INT-003 rises +0.050 from dropping a lateral `ego_x_jitter` wider than its lane. The 5 templated scenarios are unchanged. |
+
+### The 1.5 lane-geometry correction
+
+Worth stating plainly, because it moved more scores than anything since 0.5.
+
+Two pieces of code computed lane centres and disagreed. The flat straight road put lane 0 on
+`y = 0`; the road graph introduced in Phase 1.5 put it on `y = -1.75`, the carriageway being
+centred on the origin. A scenario therefore sat on different geometry depending on whether it
+happened to declare a `template`.
+
+15 of the 21 production scenarios start the ego at `y = -1.75` and do not declare a template.
+On a 3.5 m lane whose centre was taken to be `y = 0`, the in-lane test
+`|offset| + half_width <= lane_width / 2` evaluates to `1.75 + 1.0 <= 1.75` — false at every
+timestep, for every model, in every run. Those scenarios scored a lane-compliance fraction of
+exactly **0.0** for reasons that had nothing to do with how the model drove.
+
+Measured against `emergency_brake` over the whole library, the correction raises composite by
+exactly **+0.100** on each of the 15, leaves the 5 correctly-templated scenarios untouched, and
+raises INT-003 by +0.050. Mean across the library: +0.0736.
+
+It survived because the test suite runs on the two v1 fixtures in `scenarios/basic/`, and those
+are the only scenarios in the repository that drive along `y = 0` — the exact case the 0.5
+change was written against.
+
+Fixed by giving both builders the same formula, `(i - (n-1)/2) * lane_width`, moving the two
+fixtures into lane 0, and adding two invariants to `tests/test_scenario_library.py`: the
+builders must agree, and every scenario in the library must start the ego inside its lane. The
+second caught a separate defect in INT-003, which applied a ±4 m `ego_x_jitter` on an arm the
+ego climbs heading north — lateral jitter wider than the lane, placing the ego in oncoming
+traffic before the run began.
+
+**Scores produced before this change are not comparable with scores produced after it.**

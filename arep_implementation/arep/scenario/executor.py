@@ -220,22 +220,20 @@ class ScenarioExecutor:
         lanes = []
 
         for lane_idx in range(road.lanes):
-            # Lane 0 is centred on y=0 and further lanes sit to its left
-            # (Phase 0.5, D-05).
+            # The carriageway is centred on y=0, so for two 3.5 m lanes the
+            # centres are y=-1.75 and y=+1.75. This is the same formula
+            # RoadSegment.get_lane_centerline uses, deliberately: a scenario
+            # must not sit on different lane geometry depending on whether it
+            # happens to declare a `template`.
             #
-            # This used to centre the whole carriageway on y=0, which for an
-            # even lane count put the *boundary* between lanes at y=0 — while
-            # every scenario in the library places the ego and its traffic at
-            # y=0 and treats it as the travel line. Under the old layout a
-            # correctly driven car straddled the lane line for the entire run,
-            # which was invisible while lane compliance was hardcoded to 1.0 and
-            # scored 0% the moment it was computed for real.
-            #
-            # Reading y=0 as the centre of lane 0 matches what the scenarios
-            # mean: a "lead_vehicle" at y=0 is a vehicle ahead *in my lane*.
-            # It also leaves every stored position untouched, so relative
-            # geometry — and therefore every collision scenario — is unchanged.
-            lane_y = lane_idx * road.lane_width
+            # Phase 0.5 briefly made lane 0 sit on y=0 instead, on the premise
+            # that "every scenario places the ego at y=0". That was true only of
+            # the two v1 fixtures in scenarios/basic/ — which is what the test
+            # suite runs. 15 of the 21 production scenarios place the ego at
+            # y=-1.75, so under that layout they straddled the lane line for
+            # their whole run and scored a lane-compliance fraction of exactly
+            # 0.0, costing ~0.08 composite each for no behavioural reason.
+            lane_y = (lane_idx - (road.lanes - 1) / 2.0) * road.lane_width
 
             # Straight centerline (1 km)
             centerline = [Vector2D(float(x), lane_y) for x in np.linspace(0, 1000, 100)]

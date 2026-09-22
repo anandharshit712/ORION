@@ -197,11 +197,16 @@ def test_a_drifting_model_scores_below_a_straight_one():
     assert drifting.compliance_score < straight.compliance_score
 
 
-def test_lane_zero_is_centred_on_the_travel_line():
-    """Scenarios place ego and traffic at y=0 and mean "in my lane" by it.
+def test_the_carriageway_is_centred_on_the_origin():
+    """Lane centres sit at +/-(lane_width/2) for a two-lane road.
 
-    With the carriageway centred instead, y=0 was the boundary between two
-    lanes and a correctly driven car straddled it for the whole run.
+    This is the same formula RoadSegment.get_lane_centerline uses, and it has
+    to be: a scenario must not land on different geometry depending on whether
+    it declares a `template`. Phase 0.5 briefly put lane 0 on y=0 instead, on
+    the premise that every scenario drives along y=0 — true only of the two v1
+    fixtures the suite runs. The 15 production scenarios that start the ego at
+    y=-1.75 then straddled the lane line for their whole run and scored a
+    lane-compliance fraction of exactly 0.0.
     """
     from arep.config import get_config
     from arep.scenario.parser import ScenarioParser
@@ -210,8 +215,8 @@ def test_lane_zero_is_centred_on_the_travel_line():
     scenario, _hash = ScenarioParser().parse_file(
         "scenarios/basic/straight_road_lead_vehicle.yaml"
     )
-    lanes = ScenarioExecutor(get_config())._create_lanes(scenario)
+    lanes = ScenarioExecutor(get_config().simulation)._create_lanes(scenario)
 
-    assert lanes[0].centerline_points[0].y == 0.0
     assert len(lanes) == 2
-    assert lanes[1].centerline_points[0].y == LANE_WIDTH
+    assert lanes[0].centerline_points[0].y == -LANE_WIDTH / 2.0
+    assert lanes[1].centerline_points[0].y == LANE_WIDTH / 2.0

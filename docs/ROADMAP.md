@@ -104,18 +104,18 @@ Full competitor scoring and the four moats: [MARKET.md](MARKET.md).
 | Scenario schema + YAML parser + parameterizer | ✅ | `scenario/` |
 | 5 NPC behavior trees | ✅ | `simulation/npc_bt.py` — `hesitant_brake`, `hesitant_cut_in`, `adaptive_tailgate`, `cautious_pedestrian`, `erratic_pedestrian` |
 | `WorldManager` + `SimulationEngine` | ✅ | `simulation/world.py`, `engine.py` |
-| 4-metric evaluation + Wilson / t-dist CIs in aggregator | ⚠ | `evaluation/`, `statistics/` — lane compliance is a stub (D-05), TTC is constant-velocity (D-11) |
+| 4-metric evaluation + Wilson / t-dist CIs in aggregator | ⚠ | `evaluation/`, `statistics/` — D-05 and D-11 closed; CIs are computed but still not surfaced to the API or dashboard (2.1 remainder) |
 | FastAPI backend + auth + routes | ✅ | `api/` — CORS whitelist, slowapi rate limits, security headers, router-level auth (D-03 + D-07 closed) |
 | React + Three.js + Vite frontend ("Mission Control" design system) | ✅ | `orion-frontend/src/` — session is an httpOnly cookie, no token in JS (D-04 closed) |
 | SQLAlchemy models + Postgres config + Alembic | ✅ | `database/`, `config/` |
-| 18 scenario YAMLs, all v2.0, across all 6 categories | ✅ | `scenarios/` |
-| WebSocket telemetry + R3F live viewer | ⚠ | `api/ws.py`, `sim_registry.py`, `SimulationViewer.jsx` — ticket auth (D-04 closed); `time.time()` still in frame (D-06) |
+| 21 scenario YAMLs, all v2.0, across all 6 categories | ✅ | `scenarios/` — all execute; 18 pass against `emergency_brake`, the other 3 need steering and fail correctly |
+| WebSocket telemetry + R3F live viewer | ✅ | `api/ws.py`, `sim_registry.py`, `SimulationViewer.jsx` — ticket auth (D-04) and canonical frames (D-06) both closed |
 | Multi-tenancy: orgs, roles, API keys, org-scoped routes | ✅ | `OrgAuthMiddleware`, `/api/orgs/*`, `/api/keys/*` |
-| Model submission (cloudpickle SDK + Docker) | ⚠ | `api/models_routes.py`, `models/resolver.py`, `orion-sdk/` — cloudpickle path is an RCE vector (D-01) |
-| Async batch queue (Celery + Redis, atomic credit deduction) | ⚠ | `worker/` — `max_retries=0` (D-08) |
+| Model submission (cloudpickle SDK + Docker) | ⚠ | `api/models_routes.py`, `models/resolver.py`, `orion-sdk/` — cloudpickle gated per-org and sandboxed; Docker path starts a real hardened container. gVisor (0.2 Step 2) still required before open signup |
+| Async batch queue (Celery + Redis, atomic credit deduction) | ✅ | `worker/` — retries with backoff, idempotent on (batch_id, seed) (D-08 closed) |
 | Auth: bcrypt, hashed single-use reset tokens, superadmin | ✅ | `api/auth.py`, `api/admin.py` |
 | Secret / DB resolution with fail-fast startup validation | ✅ | `config/validate.py` — closes D-02 |
-| CI: test + lint + docker-build | ⚠ | `.github/workflows/` — no coverage gate, SQLite not Postgres (D-09, D-13) |
+| CI: test + lint + docker-build + self-eval | ✅ | `.github/workflows/` — coverage gate at 70%, Postgres job with an Alembic round trip (D-09, D-13 closed) |
 | Dev startup scripts | ✅ | `start.sh`, `start.bat`, `start.ps1` |
 
 **Frozen contracts** (do not redefine elsewhere): `SimulationEngine.get_tick_frame()` is the
@@ -141,7 +141,11 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-12 | ~~Weight transfer uses previous-step acceleration~~ | LOW | 0.5 — **done** |
 | D-13 | ~~SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev~~ | MED | 0.6 — **done** (CI job on Postgres + Alembic round trip) |
 
-**Current position**: Phase 0 is **complete** except 0.2 Step 2 (gVisor/Firecracker), which is gated on open self-serve signup rather than on this phase. Twelve of thirteen register defects are closed; D-11 is documented with the fix scheduled for 2.1. Next: Phase 1.4 (Stripe billing) and 1.5 (road topology).
+**Current position**: Phases 0 and 1 are **complete** except 0.2 Step 2 (gVisor/Firecracker), which is gated on open self-serve signup rather than on this phase. All thirteen register defects are closed. Phase 2-4 analysis, reporting and interop modules are implemented.
+
+Stripe holds placeholder price IDs and has had no live round trip, because Stripe signup is invite-only in India and requires a registered company. This blocks nothing: `billing_enabled` defaults to false and credits are granted by hand via `POST /api/admin/orgs/{id}/credits`.
+
+**Next: wire the dashboard.** Six of seven sections still render the `ComingSoon` panel while the APIs behind them exist, so nothing built in Phases 2-4 is reachable from a browser. Then surface the confidence intervals (2.1 remainder), then deterministic replay (2.5).
 
 ---
 
