@@ -65,7 +65,14 @@
 .metric-val { font-family: var(--ff-mono); font-weight: 700; font-size: 34px; line-height: 1; color: var(--text); }
 .metric-val.is-amber { color: var(--amber); }
 .metric-bar { height: 5px; background: var(--bg-inset); position: relative; }
-.metric-bar i { position: absolute; left: 0; top: 0; height: 100%; transition: width 0.6s var(--ease); }
+/* Driven by --p (0..1) and scaled, not widened: animating width relayouts the
+   panel on every refresh. Matches .batch-progress. */
+.metric-bar i {
+  position: absolute; left: 0; top: 0; height: 100%; width: 100%;
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  transition: transform 0.6s var(--ease);
+}
 .metric-bar i.amber { background: var(--amber); }
 .metric-bar i.cyan { background: var(--cyan); }
 
