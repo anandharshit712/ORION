@@ -120,6 +120,39 @@ Plain JSX throughout. A progressive migration is Phase 5 work.
 
 ## Scoring and analysis
 
+### CMA-ES does not beat the random-search baseline
+Acceptance criterion 2.3 asks that CMA-ES outperform random search over 50 evaluations. It
+does not. Measured on LON-003 with `EmergencyBrake`, 50 evaluations each:
+
+| optimizer | best fitness | evaluations |
+| --- | --- | --- |
+| CMA-ES | 1.57 | 50 (found no collision) |
+| Random | **13.51** | 30 (stopped — found one) |
+
+Most likely a budget problem: the search space has 8 dimensions, and 50 evaluations is far
+too few for CMA-ES to build a useful covariance, so it is still exploring while random
+search gets lucky. Needs either a much larger budget before the comparison means anything,
+or a smaller default search space.
+
+**Do not claim CMA-ES superiority in customer-facing material until this passes.** The
+search is still useful — it finds and reproduces counter-examples — it is just not yet
+demonstrably better than sampling.
+
+### Adversarial search has no API, tier gate or credit accounting
+`arep/search/` is CLI and library only. `POST /api/search` does not exist, and neither does
+the "Pro tier and above, consumes `max_evals` credits" rule the roadmap specifies.
+
+### Model comparison has no API or PDF download
+`RegressionDetector` works and the HTML report renders, but `POST /api/compare`,
+`GET /api/compare/{id}/results` and `GET /api/compare/{id}/report.pdf` do not exist, so
+comparison is CLI-only and uncharged.
+
+### Interop fixtures are not committed
+Two acceptance criteria name third-party files that are absent:
+`tests/fixtures/TownSimple.xodr` (4.2) and the ASAM `CutIn.osc` sample (4.4). Both parsers
+are tested against generated or round-tripped input instead, so neither has been exercised
+against a file this project did not write.
+
 ### Deterministic replay (2.5)
 `FrameHasher` records a per-run digest on `RunRecord.frame_hash` for both live and batch
 runs, but nothing replays from it. Closes the `RunPage` stub.

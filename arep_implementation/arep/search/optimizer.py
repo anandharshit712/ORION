@@ -148,11 +148,21 @@ class CMAESOptimizer:
                 if objective.falsification_found:
                     break
 
-            strategy.tell(candidates[: len(costs)], costs)
-
             if objective.falsification_found:
+                # Stop without telling CMA-ES about this generation. The inner
+                # loop broke early, so `costs` is shorter than the population
+                # cma proposed, and cma rejects a truncated one outright
+                # ("population size 1 is too small"). Since the search ends here
+                # anyway there is nothing to update the distribution for, and
+                # the counter-example is already recorded on the objective.
+                #
+                # This fired exactly on success, which is the worst place for it:
+                # the tests exercised CMA-ES with a model that never collides,
+                # so the crash only appeared once the search actually worked.
                 logger.info("Falsification found after %d evaluations", evaluations)
                 break
+
+            strategy.tell(candidates, costs)
 
         return self._result(
             objective, evaluations, "cma-es", converged=bool(strategy.stop())
