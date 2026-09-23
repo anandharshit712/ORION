@@ -1,0 +1,36 @@
+# Line endings.
+#
+# core.autocrlf=true on a Windows checkout rewrites committed LF files to CRLF.
+# For a shell script that is fatal rather than cosmetic: bash reads the trailing
+# \r as part of the last token, so `set -euo pipefail` becomes `pipefail\r` and
+# the script dies on line 1 with an error message the carriage return then
+# scrambles. setup_docker_wsl.sh shipped broken exactly this way.
+#
+# Anything executed by a Linux interpreter -- directly, in WSL, or in a
+# container -- must stay LF regardless of the platform it is checked out on.
+
+* text=auto
+
+*.sh        text eol=lf
+*.bash      text eol=lf
+Dockerfile  text eol=lf
+*.Dockerfile text eol=lf
+Makefile    text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# Windows-native scripts want CRLF.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Never touch binaries.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.pkl       binary
+*.gz        binary
+*.zip       binary
