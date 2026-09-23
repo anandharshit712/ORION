@@ -314,6 +314,29 @@ img, video, canvas, svg { display: block; max-width: 100%; }
 .chip-done { color: var(--cyan); border-color: var(--cyan); }
 .chip-error { color: var(--fail); border-color: var(--fail); }
 
+/* ══ Segmented control / tabs (docs/UI_DESIGN.md §9.13) ════════════════ */
+.section-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-4);
+}
+
+.seg-control { display: flex; align-items: stretch; gap: 2px; flex-wrap: wrap; }
+
+.seg-btn {
+  appearance: none; background: transparent; cursor: pointer;
+  font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-2);
+  padding: 8px 12px; border: none;
+  border-bottom: 2px solid transparent;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.is-active { color: var(--text); border-bottom-color: var(--amber); }
+.seg-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+.seg-count { color: var(--text-mute); margin-left: 4px; }
+.seg-btn.is-active .seg-count { color: var(--amber); }
+
 /* ══ Data table ════════════════════════════════════════════════════════ */
 .data-table { width: 100%; border-collapse: collapse; font-family: var(--ff-mono); font-size: 12px; }
 .data-table thead th {

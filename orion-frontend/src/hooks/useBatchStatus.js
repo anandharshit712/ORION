@@ -4,7 +4,7 @@
 // Auto-stops polling to avoid memory leaks.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import api from '../services/api';
+import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const POLL_INTERVAL_MS = 2000;

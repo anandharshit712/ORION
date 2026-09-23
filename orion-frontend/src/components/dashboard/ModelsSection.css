@@ -1,0 +1,46 @@
+/* ══ ModelsSection — model panels (docs/UI_DESIGN.md §11.4) ════════════ */
+
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+
+.model-detail { margin-top: var(--space-3); padding: 16px; }
+
+.model-detail-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); margin-bottom: 12px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+
+.model-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+.model-detail-grid > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.model-detail-grid > div.is-wide { grid-column: 1 / -1; }
+.model-detail-grid dd { margin: 0; color: var(--text); font-size: 13px; }
+
+/* The hash is the artefact's identity — wrap it rather than truncating, so it
+   can be compared against a local sha256sum. */
+.model-hash { word-break: break-all; font-size: 11px; color: var(--text-2); }
+
+.model-detail-error {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 12px; padding: 8px 12px;
+  border-left: 2px solid var(--fail);
+  background: var(--bg-inset);
+  color: var(--fail); font-size: 12px;
+}
+
+.builtin-panel { margin-top: var(--space-3); padding: 16px; }
+.builtin-hint { margin: 6px 0 12px; color: var(--text-mute); font-size: 13px; }
+.builtin-hint code {
+  font-family: var(--ff-mono); font-size: 12px;
+  color: var(--cyan); background: var(--bg-inset);
+  padding: 1px 5px; border-radius: var(--radius-sm);
+}
+.builtin-list { display: flex; flex-wrap: wrap; gap: 6px; }
