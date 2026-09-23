@@ -764,7 +764,7 @@ Artefact fetching verifies the recorded SHA-256 before returning bytes that get 
 
 ### Deferred (Phase 2+, see `docs/ROADMAP.md`)
 
-- **Statistical CIs surfaced to API/dashboard (2.1)** — aggregator computes Wilson/t-dist CIs internally; batch results API and dashboard show point estimates only.
+- ~~**Statistical CIs surfaced to API/dashboard (2.1)**~~ — **DONE.** `ScoreDistribution` (mean, sample std, 95% interval, 5/25/75/95 percentiles, min/max, n) per metric; `GET /api/runs/batch/{id}/results` recomputes from the stored run rows, not the batch-job scalars, so an old batch summarises the same way as a new one. **A mean must never ship without its n** — `ScoreCard` takes `ciLow`/`ciHigh`/`n`, and below 5 scored runs the response is flagged `low_confidence` and every card says so in words. Collision rate uses Wilson, not the normal approximation, which reports lower bounds below zero exactly where a good model sits. Worst/best runs are named by **seed** (re-runnable) and a collision outranks a low composite. See `docs/METHODOLOGY.md` §8.5.
 - **Failure clustering (2.2)**, **adversarial search (2.3)**, **model comparison + PDF (2.4)**.
 - **Deterministic replay (2.5)** — promoted from Phase 5; depends on Phase 0.5 frame hash. Closes `RunPage` stub.
 - **CompositeEvaluator wired to live runs** — dashboard scores are per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
