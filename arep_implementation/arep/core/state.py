@@ -210,34 +210,58 @@ class LaneInfo:
         """
         Find the closest point on the lane centerline to a given position.
 
-        Uses brute-force search over centerline segments.
-        Deterministic: iterates in list order.
+        Brute-force over centerline segments, deterministic in list order.
+
+        Written with scalars rather than Vector2D arithmetic, and not for
+        style: this is the hottest function in the simulator by a wide margin.
+        A profile of one 30-second run put 16.0 of 17.2 seconds inside it —
+        93% — because it is called several times per step by
+        ``get_current_lane``, ``get_speed_limit``, ``check_off_road``, the
+        observation builder and the metric collector, and each call walked every
+        segment of every lane allocating four Vector2D objects per segment. That
+        was 5.8 million ``__sub__`` calls for a single run.
+
+        The arithmetic is unchanged — the same dot product, the same clamp, the
+        same squared distances in the same order — so results are bit-identical.
+        The frame hash is what proves it: `tests/test_frame_determinism.py`
+        pins digests that would move if any of this drifted.
         """
-        if not self.centerline_points:
+        points = self.centerline_points
+        if not points:
             return position
 
-        best_point = self.centerline_points[0]
-        best_dist_sq = (position - best_point).norm_squared()
+        px, py = position.x, position.y
 
-        for i in range(len(self.centerline_points) - 1):
-            p1 = self.centerline_points[i]
-            p2 = self.centerline_points[i + 1]
+        first = points[0]
+        best_x, best_y = first.x, first.y
+        dx, dy = px - best_x, py - best_y
+        best_dist_sq = dx * dx + dy * dy
 
-            # Project position onto segment p1 → p2
-            seg = p2 - p1
-            seg_len_sq = seg.norm_squared()
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            p2 = points[i + 1]
+            x1, y1 = p1.x, p1.y
+
+            # Project position onto segment p1 → p2.
+            sx, sy = p2.x - x1, p2.y - y1
+            seg_len_sq = sx * sx + sy * sy
             if seg_len_sq < 1e-12:
-                candidate = p1
+                cx, cy = x1, y1
             else:
-                t = max(0.0, min(1.0, (position - p1).dot(seg) / seg_len_sq))
-                candidate = p1 + seg * t
+                t = ((px - x1) * sx + (py - y1) * sy) / seg_len_sq
+                if t < 0.0:
+                    t = 0.0
+                elif t > 1.0:
+                    t = 1.0
+                cx, cy = x1 + sx * t, y1 + sy * t
 
-            dist_sq = (position - candidate).norm_squared()
+            ddx, ddy = px - cx, py - cy
+            dist_sq = ddx * ddx + ddy * ddy
             if dist_sq < best_dist_sq:
                 best_dist_sq = dist_sq
-                best_point = candidate
+                best_x, best_y = cx, cy
 
-        return best_point
+        return Vector2D(best_x, best_y)
 
     def get_lateral_offset(self, position: Vector2D) -> float:
         """Unsigned distance from position to the closest centerline point."""

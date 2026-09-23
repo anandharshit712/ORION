@@ -24,6 +24,7 @@ from arep.api.auth import auth_router
 from arep.api.billing import billing_router
 from arep.api.middleware import OrgAuthMiddleware, SecurityHeadersMiddleware
 from arep.api.ratelimit import limiter, rate_limit_exceeded_handler
+from arep.api.compare import compare_router
 from arep.api.models_routes import models_api_router
 from arep.api.orgs import keys_router, orgs_router
 from arep.api.routes import (
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(orgs_router)
     app.include_router(keys_router)
     app.include_router(models_api_router)
+    app.include_router(compare_router)
     app.include_router(health_router)
     app.include_router(models_router)
     app.include_router(scenarios_router)
