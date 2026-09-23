@@ -51,10 +51,15 @@ sudo service docker start >/dev/null 2>&1 || true
 echo "==> 4/4  gVisor (runsc)"
 # No account, no licence key -- Apache-2.0 binaries published by Google.
 #
-# Installed straight from the release bucket rather than through the apt repo.
-# apt needs the dpkg lock, which unattended-upgrades holds on every fresh WSL
-# boot, and that is what broke this step the first time round. The download is
-# checksum-verified, which is the property that actually matters here.
+# Installed from the release bucket rather than the apt repo: apt needs the dpkg
+# lock, which unattended-upgrades holds on every fresh WSL boot, and that is what
+# blocked this step the first time. The download is checksum-verified, which is
+# the property that actually matters.
+#
+# gVisor ships a tarball, not bare binaries -- an earlier version of this script
+# fetched .../x86_64/runsc directly and got four 404s. The archive also contains
+# a gvisor-bin/ directory of helpers that runsc needs at runtime, so all three
+# entries are installed, not just the two executables.
 if command -v runsc >/dev/null 2>&1; then
     echo "    already installed: $(runsc --version | head -1)"
 else
@@ -63,21 +68,39 @@ else
     WORK="$(mktemp -d)"
     trap 'rm -rf "$WORK"' EXIT
 
-    echo "    downloading runsc for ${ARCH}"
-    (
-        cd "$WORK"
-        curl -fsSL -O "${URL}/runsc" -O "${URL}/runsc.sha512" \
-                    -O "${URL}/containerd-shim-runsc-v1" \
-                    -O "${URL}/containerd-shim-runsc-v1.sha512"
+    echo "    downloading gvisor for ${ARCH} (~166 MB)"
+    curl -fsSL -o "$WORK/gvisor.tar.bz2"        "${URL}/gvisor.tar.bz2"
+    curl -fsSL -o "$WORK/gvisor.tar.bz2.sha512" "${URL}/gvisor.tar.bz2.sha512"
 
-        echo "    verifying checksums"
-        sha512sum -c runsc.sha512
-        sha512sum -c containerd-shim-runsc-v1.sha512
+    echo "    verifying checksum"
+    ( cd "$WORK" && sha512sum -c gvisor.tar.bz2.sha512 )
 
-        sudo install -o root -g root -m 0755 \
-            runsc containerd-shim-runsc-v1 /usr/local/bin/
-    )
-    echo "    installed: $(runsc --version | head -1)"
+    # A minimal Ubuntu has neither bzip2 nor zstd, and installing one would mean
+    # apt -- the thing this step exists to avoid. Python's stdlib decompresses
+    # both, and python3 is always present.
+    echo "    extracting"
+    mkdir -p "$WORK/x"
+    python3 - "$WORK/gvisor.tar.bz2" "$WORK/x" <<'PY'
+import sys, tarfile
+
+archive, destination = sys.argv[1], sys.argv[2]
+with tarfile.open(archive, "r:bz2") as tar:
+    try:
+        # Refuses paths escaping the destination. Added in 3.11.4/3.12; the
+        # archive is checksum-verified either way, this is belt and braces.
+        tar.extractall(destination, filter="data")
+    except TypeError:
+        tar.extractall(destination)
+PY
+
+    sudo cp -a "$WORK/x/runsc" "$WORK/x/containerd-shim-runsc-v1" \
+               "$WORK/x/gvisor-bin" /usr/local/bin/
+    sudo chown -R root:root /usr/local/bin/runsc \
+                            /usr/local/bin/containerd-shim-runsc-v1 \
+                            /usr/local/bin/gvisor-bin
+    sudo chmod 0755 /usr/local/bin/runsc /usr/local/bin/containerd-shim-runsc-v1
+
+    echo "    installed: $(/usr/local/bin/runsc --version | head -1)"
 fi
 
 echo "==> Registering runsc as a Docker runtime"
