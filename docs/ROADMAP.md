@@ -821,8 +821,11 @@ Before charging the first customer:
 >   batch runs, but nothing replays from it yet; `RunPage` is still a stub.
 > - **PDF rendering is unverified on Windows.** WeasyPrint cannot load its GTK libraries here,
 >   so `render_html()` is what the tests exercise; the PDF step runs in Linux CI.
-> - **The container runner is unverified against a live Docker daemon** — the composed
->   `docker run` invocation is unit-tested, the execution path is not.
+> - ~~The container runner is unverified against a live Docker daemon~~ — **closed.**
+>   `tests/test_container_integration.py` starts real containers and probes the boundary from
+>   inside (14 passing against Docker Engine 29.8.1). The two gVisor tests in that file are
+>   still unrun: `runsc` must be registered as a Docker runtime first, which
+>   `scripts/setup_docker_wsl.sh` does.
 > - **OSC2 round trips lose the parameterisation block**, by design, with a test pinning it.
 
 

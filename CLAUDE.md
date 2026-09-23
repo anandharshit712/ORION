@@ -171,8 +171,14 @@ hard wall-clock kill per call and per run.
   under plain runc. Before this, `resolve_model` returned an `HttpModelAdapter` aimed at
   `localhost:<port>` and assumed something else had started a container — nothing had, so the
   path the pickle gate recommends had no boundary at all.
-  **Not yet exercised against a live Docker daemon**: the command construction is unit-tested,
-  the execution path is not.
+  **Exercised against a live Docker daemon** by `tests/test_container_integration.py`
+  (14 passing): containers start, a full evaluation runs through one, and the boundary is
+  probed from the inside rather than by reading the `docker run` string -- no `ORION_*` in the
+  container env, rootfs writes refused, the scratch tmpfs refuses to execute a staged binary,
+  cgroup limits read back, loopback-only port, container removed on close. They skip where no
+  daemon is reachable, so a Windows-side venv will skip them all; run them from WSL. The two
+  gVisor tests remain unrun until `runsc` is registered as a Docker runtime
+  (`scripts/setup_docker_wsl.sh` installs both).
 - `Observation.to_dict()`/`from_dict()` is the wire format for out-of-process models. Extend
   both sides together, or the sandbox and HTTP adapters silently drop fields.
 

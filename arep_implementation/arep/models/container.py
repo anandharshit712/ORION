@@ -24,9 +24,13 @@ model and the host. That is the isolation D-01 step 2 was waiting for. It is opt
 because gVisor is not installed on a development machine, and
 ``require_hardened_runtime`` makes production refuse to run customer code without it.
 
-**Untested against a live Docker daemon.** The command construction is covered by
-unit tests; the execution path has not been exercised on this machine, which has no
-Docker. Treat the first real deployment as the integration test.
+**Verified against a live Docker daemon** (Docker Engine 29.8.1, WSL2):
+``tests/test_container_integration.py`` starts real containers and checks the
+boundary from the inside -- no ``ORION_*`` in the container's environment, writes to
+the rootfs refused, a binary staged in the scratch tmpfs refused execution, the
+cgroup limits the kernel actually applied, loopback-only publishing, and teardown.
+Those tests skip where no Docker daemon is reachable. The gVisor pair is still
+unrun: ``runsc`` has to be registered as a Docker runtime first.
 """
 
 from __future__ import annotations
