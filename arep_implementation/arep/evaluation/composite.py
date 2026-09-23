@@ -12,7 +12,7 @@ Composite Score = weighted average of:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from arep.evaluation.collector import SimulationRecord
 from arep.evaluation.safety import SafetyMetrics, SafetyResult
@@ -34,6 +34,10 @@ class EvaluationResult:
     # (model, scenario, seed) must agree; stored on RunRecord.frame_hash so a
     # customer can re-run and compare rather than take the claim on trust.
     frame_hash: str = ""
+    # Tick frames, populated only when the caller asked for them
+    # (EvaluationRunner(collect_frames=True)). Kept off to_dict() on purpose:
+    # this is a payload for the frame store, not part of a result document.
+    frames: list = field(default_factory=list, repr=False)
 
     # Metadata
     scenario_name: str = ""

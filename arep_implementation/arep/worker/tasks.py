@@ -34,6 +34,7 @@ from arep.database.repository import (
     RunRepository,
     ScenarioRepository,
 )
+from arep.execution.frame_store import should_store, store_frames
 from arep.execution.runner import EvaluationRunner
 from arep.models.examples.example_models import (
     ConstantActionModel,
@@ -170,7 +171,11 @@ def execute_single_run(
 
     try:
         model = resolve_model(model_name, _BUILTIN_MODELS, org_id=org_id)
-        runner = EvaluationRunner()
+        # Frames are collected for every run and kept only for the ones worth
+        # scrubbing (2.5). Collecting is cheap - a 30 s run is ~1,500 dicts held
+        # for the length of one run - and there is no way to know in advance
+        # whether a run will collide, which is the only interesting case.
+        runner = EvaluationRunner(collect_frames=True)
         result = runner.run_single(scenario_path, model, seed)
     except TRANSIENT_ERRORS as exc:
         if task.request.retries < MAX_RETRIES:
@@ -203,12 +208,29 @@ def execute_single_run(
         raise
 
     with session_scope() as db:
-        RunRepository(db).save_result(
+        run_row = RunRepository(db).save_result(
             scenario_id,
             result,
             batch_job_id=batch_id,
             org_id=org_id,
         )
+
+        # Keep the frames only when the run is worth watching. store_frames
+        # never raises: losing playback for one run is a degraded experience,
+        # failing a run that already executed and scored is worse.
+        if should_store(result.safety.collision_occurred, result.termination_reason):
+            db.flush()
+            store_frames(
+                db,
+                run_row.id,
+                result.frames,
+                reason=(
+                    "collision"
+                    if result.safety.collision_occurred
+                    else result.termination_reason or "flagged"
+                ),
+            )
+
         batch_repo = BatchJobRepository(db)
         batch_repo.increment_completed(batch_id)
         batch_repo.finalise_if_done(batch_id)

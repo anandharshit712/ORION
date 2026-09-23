@@ -26,6 +26,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    LargeBinary,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -405,6 +406,44 @@ class RunFailureRecord(Base):
 
     def __repr__(self) -> str:
         return f"<RunFailure batch={self.batch_id} seed={self.master_seed}>"
+
+
+class RunFrameRecord(Base):
+    """Compressed tick frames for one run, so it can be scrubbed without
+    re-simulating (Phase 2.5, stored-frame playback).
+
+    **Not stored for every run.** At 50 Hz a 30-second run is 1,500 frames; a
+    500-run batch would be three quarters of a million. Frames are kept for runs
+    worth scrubbing instantly — the ones that collided, plus anything a customer
+    pins — which on a 2% collision rate is ten runs a batch, not five hundred.
+
+    Seed replay (``POST /api/runs/{id}/replay``) covers everything else and
+    stores nothing, because determinism means the run can always be rebuilt. The
+    only thing stored frames buy is not paying the CPU again, which matters when
+    someone is dragging a scrub bar.
+
+    The payload is gzipped JSON. Frames are extremely repetitive — the same keys
+    every tick — so this compresses by roughly an order of magnitude.
+    """
+
+    __tablename__ = "run_frames"
+
+    run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    frame_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # gzip(json.dumps(frames)). Bytes, not JSON: a text column would store the
+    # base64 of the gzip, which is larger than the JSON it replaced.
+    frames_gzip: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    # Why this run's frames were kept. "collision" is the automatic case;
+    # "pinned" is a customer asking for it.
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="collision")
+    stored_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+
+    def __repr__(self) -> str:
+        return f"<RunFrames run={self.run_id} frames={self.frame_count} {self.reason}>"
 
 
 class WebhookEventRecord(Base):

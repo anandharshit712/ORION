@@ -62,7 +62,16 @@ class EvaluationRunner:
         print(result.aggregated.to_dict())
     """
 
-    def __init__(self, config: Optional[SimulationConfig] = None):
+    def __init__(
+        self,
+        config: Optional[SimulationConfig] = None,
+        collect_frames: bool = False,
+    ):
+        # collect_frames keeps every tick frame in memory for the run so it can
+        # be stored for scrubbable playback (2.5). Off by default: a 30 s run is
+        # 1,500 frames, and a batch does not want that unless the run turns out
+        # to be worth keeping.
+        self.collect_frames = collect_frames
         cfg = config or get_config().simulation
         self.sim_config = cfg
         self.engine = SimulationEngine(cfg)
@@ -131,6 +140,7 @@ class EvaluationRunner:
         # WebSocket path uses, so a batch digest and a live digest of the same
         # (model, scenario, seed) are directly comparable.
         frame_hasher = FrameHasher()
+        frames: list = []
 
         max_steps = int(scenario.duration / self.sim_config.timestep)
 
@@ -156,14 +166,15 @@ class EvaluationRunner:
                     break
 
                 collector.record_step(world, action, previous_world)
-                frame_hasher.update(
-                    self.engine.get_tick_frame(
-                        world,
-                        action=action,
-                        scenario_name=scenario.name,
-                        speed_limit=world.get_speed_limit(),
-                    )
+                frame = self.engine.get_tick_frame(
+                    world,
+                    action=action,
+                    scenario_name=scenario.name,
+                    speed_limit=world.get_speed_limit(),
                 )
+                frame_hasher.update(frame)
+                if self.collect_frames:
+                    frames.append(frame)
 
                 previous_world = world
                 world = self.engine.step(world, action, rng)
@@ -177,7 +188,31 @@ class EvaluationRunner:
         record.master_seed = master_seed
         record.frame_hash = frame_hasher.hexdigest()
 
-        return self.evaluator.evaluate(record)
+        evaluated = self.evaluator.evaluate(record)
+        evaluated.frame_hash = record.frame_hash
+        if self.collect_frames:
+            # One extra frame for the terminal world, for playback only -
+            # deliberately NOT hashed.
+            #
+            # The hash covers (world the model saw, action it produced), so the
+            # loop never frames the post-step world, and the collision happens
+            # on exactly that step. Without this the stored playback ends one
+            # tick before the impact: the scrub bar stops just short of the
+            # thing the customer opened it to watch, and event_markers finds
+            # nothing to mark.
+            #
+            # Appending to `frames` and not to `frame_hasher` is what keeps the
+            # digest identical to the batch and replay paths.
+            frames.append(
+                self.engine.get_tick_frame(
+                    world,
+                    action=None,
+                    scenario_name=scenario.name,
+                    speed_limit=world.get_speed_limit(),
+                )
+            )
+            evaluated.frames = frames
+        return evaluated
 
     @staticmethod
     def _release_model(model: ModelInterface) -> None:

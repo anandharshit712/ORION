@@ -13,7 +13,7 @@ FastAPI route handlers organized by resource:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -39,12 +39,17 @@ from arep.api.schemas import (
     HistogramBin,
 )
 from arep.database.connection import session_scope
-from arep.database.models import RunRecord, ScenarioRecord
+from arep.database.models import RunFrameRecord, RunRecord, ScenarioRecord
 from arep.database.repository import (
     ScenarioRepository,
     RunRepository,
     BatchJobRepository,
     OrganisationRepository,
+)
+from arep.execution.frame_store import (
+    FrameStoreError,
+    decompress,
+    event_markers,
 )
 from arep.execution.runner import EvaluationRunner
 from arep.models.examples.example_models import (
@@ -511,6 +516,61 @@ async def replay_run(stored_run_id: int, request: Request):
         ws_url=f"/ws/simulation/{live.run_id}",
         original_frame_hash=original_frame_hash,
     )
+
+
+class RunFramesResponse(BaseModel):
+    """Returned by GET /api/runs/{stored_run_id}/frames (Phase 2.5)."""
+
+    run_id: int
+    frame_count: int
+    reason: str
+    # Frame indices worth jumping to, computed server-side so every client
+    # agrees where the events are.
+    markers: Dict[str, Optional[int]]
+    frames: List[Dict[str, Any]]
+
+
+@runs_router.get(
+    "/{stored_run_id}/frames",
+    response_model=RunFramesResponse,
+    summary="Stored tick frames for scrubbable playback",
+)
+def get_run_frames(stored_run_id: int, request: Request):
+    """Tick frames for a stored run, without re-simulating it (Phase 2.5).
+
+    Only runs worth scrubbing have frames: the ones that collided or left the
+    road. Everything else returns 404 and should be replayed from its seed
+    instead, which is exact and costs nothing to store — see
+    `POST /api/runs/{id}/replay`.
+    """
+    org_id, _, _ = get_request_principal(request)
+
+    with session_scope() as db:
+        run = db.get(RunRecord, stored_run_id)
+        if run is None or (org_id is not None and run.org_id != org_id):
+            raise HTTPException(404, "Run not found")
+
+        record = db.get(RunFrameRecord, stored_run_id)
+        if record is None:
+            raise HTTPException(
+                404,
+                "No stored frames for this run. Frames are kept only for runs "
+                "that collided or left the road; replay it from its seed "
+                "instead.",
+            )
+
+        try:
+            frames = decompress(record.frames_gzip)
+        except FrameStoreError as exc:
+            raise HTTPException(500, f"Stored frames are unreadable: {exc}")
+
+        return RunFramesResponse(
+            run_id=stored_run_id,
+            frame_count=record.frame_count,
+            reason=record.reason,
+            markers=event_markers(frames),
+            frames=frames,
+        )
 
 
 class WsTicketResponse(BaseModel):

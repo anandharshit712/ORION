@@ -273,3 +273,116 @@ def test_replay_requires_auth(client):
 
     with TestClient(client.app) as anonymous:
         assert anonymous.post("/api/runs/1/replay").status_code == 401
+
+
+# -- Stored-frame playback -------------------------------------------------
+
+
+COLLIDING = "../scenarios/lon/LON-004_stationary_obstacle.yaml"
+
+
+def _colliding_run(org_id):
+    """A run that actually crashes, with its frames collected and stored."""
+    from arep.database.connection import session_scope
+    from arep.database.repository import RunRepository, ScenarioRepository
+    from arep.execution.frame_store import should_store, store_frames
+    from arep.execution.runner import EvaluationRunner
+    from arep.models.examples.example_models import ConstantActionModel
+    from arep.scenario.parser import ScenarioParser
+
+    result = EvaluationRunner(collect_frames=True).run_single(
+        COLLIDING, ConstantActionModel(throttle=0.5), master_seed=42
+    )
+    assert result.safety.collision_occurred, "fixture stopped colliding"
+
+    scenario_def, content_hash = ScenarioParser().parse_file(COLLIDING)
+    with open(COLLIDING, encoding="utf-8") as fh:
+        yaml_text = fh.read()
+
+    with session_scope() as db:
+        rec = ScenarioRepository(db).upsert(
+            name=scenario_def.name,
+            version=scenario_def.version,
+            content_hash=content_hash,
+            yaml_content=yaml_text,
+            duration=scenario_def.duration,
+            road_type=scenario_def.road.road_type,
+            num_traffic_objects=len(scenario_def.traffic_objects),
+        )
+        run = RunRepository(db).save_result(rec.id, result, org_id=org_id)
+        db.flush()
+        assert should_store(True, result.termination_reason)
+        store_frames(db, run.id, result.frames, reason="collision")
+        return run.id, result
+
+
+def test_collecting_frames_does_not_change_the_digest():
+    """Playback must never alter the thing it is playing back."""
+    from arep.execution.runner import EvaluationRunner
+    from arep.models.examples.example_models import ConstantActionModel
+
+    with_frames = EvaluationRunner(collect_frames=True).run_single(
+        COLLIDING, ConstantActionModel(throttle=0.5), master_seed=42
+    )
+    without = EvaluationRunner().run_single(
+        COLLIDING, ConstantActionModel(throttle=0.5), master_seed=42
+    )
+    assert with_frames.frame_hash == without.frame_hash
+    assert with_frames.frames, "frames were requested but none collected"
+
+
+def test_stored_frames_come_back_with_event_markers(client, account):
+    """The acceptance criterion: a failed run is watchable without
+    re-computation, and jump-to-collision has somewhere to jump to."""
+    headers, org_id = account
+    run_id, result = _colliding_run(org_id)
+
+    r = client.get(f"/api/runs/{run_id}/frames", headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert body["frame_count"] == len(result.frames)
+    assert len(body["frames"]) == len(result.frames)
+    assert body["reason"] == "collision"
+
+    # The terminal frame is appended for playback precisely so this marker
+    # exists; without it the scrub bar stops a tick before the impact.
+    assert body["markers"]["collision"] is not None
+    assert body["markers"]["collision"] == len(result.frames) - 1
+
+
+def test_frames_round_trip_through_compression_unchanged():
+    from arep.execution.frame_store import compress, decompress
+    from arep.execution.runner import EvaluationRunner
+    from arep.models.examples.example_models import ConstantActionModel
+
+    result = EvaluationRunner(collect_frames=True).run_single(
+        COLLIDING, ConstantActionModel(throttle=0.5), master_seed=42
+    )
+    assert decompress(compress(result.frames)) == result.frames
+
+
+def test_a_run_with_no_stored_frames_says_to_replay_instead(client, account):
+    """Most runs have no frames by design. The 404 has to explain that, or it
+    reads as data loss."""
+    headers, org_id = account
+    run_id, _ = _stored_run(org_id, seed=4242)  # EmergencyBrake, no collision
+
+    r = client.get(f"/api/runs/{run_id}/frames", headers=headers)
+    assert r.status_code == 404
+    assert "replay" in r.json()["detail"].lower()
+
+
+def test_another_orgs_frames_are_not_readable(client, account):
+    headers, _ = account
+    orphan_id, _ = _colliding_run(None)
+    assert client.get(f"/api/runs/{orphan_id}/frames", headers=headers).status_code == 404
+
+
+def test_refusing_to_store_an_implausible_number_of_frames():
+    """A run that produced a million frames is a bug upstream; writing it to the
+    database turns that bug into an outage."""
+    from arep.execution.frame_store import MAX_FRAMES, FrameStoreError, compress
+
+    with pytest.raises(FrameStoreError, match="refusing to store"):
+        compress([{"tick": i} for i in range(MAX_FRAMES + 1)])
