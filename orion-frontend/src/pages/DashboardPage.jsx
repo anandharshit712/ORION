@@ -7,6 +7,10 @@ import { BUILD_HASH } from '../utils/constants';
 import HudBar from '../components/common/HudBar';
 import Sidebar from '../components/common/Sidebar';
 import Icon from '../components/common/Icon';
+import RunsSection from '../components/dashboard/RunsSection';
+import BatchesSection from '../components/dashboard/BatchesSection';
+import ModelsSection from '../components/dashboard/ModelsSection';
+import ScenariosSection from '../components/dashboard/ScenariosSection';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, RadarChart, Radar, PolarGrid,
@@ -128,6 +132,16 @@ function ComingSoon({ view }) {
   );
 }
 
+// Sections with a backing endpoint. Anything absent here still renders
+// ComingSoon and stays disabled in the sidebar — the two must agree, or a nav
+// item leads somewhere empty and reads as a fault rather than as unfinished.
+export const SECTIONS = {
+  runs: RunsSection,
+  batches: BatchesSection,
+  models: ModelsSection,
+  scenarios: ScenariosSection,
+};
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const palette = useChartPalette();
@@ -192,15 +206,22 @@ export default function DashboardPage() {
           <header className="dash-head">
             <div>
               <h1>{title}</h1>
-              <div className="dash-sub num">
-                {runs.length} RUNS RECORDED · {loading ? 'LOADING…' : error ? 'ERROR' : 'UP TO DATE'}
+              {/* The run count and freshness belong to the Overview's own fetch.
+                  Showing them above a section that loads its own data would
+                  report the wrong thing's status. */}
+              {view === 'overview' && (
+                <div className="dash-sub num">
+                  {runs.length} RUNS RECORDED · {loading ? 'LOADING…' : error ? 'ERROR' : 'UP TO DATE'}
+                </div>
+              )}
+            </div>
+            {view === 'overview' && (
+              <div className="dash-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => setRefreshCount((c) => c + 1)} disabled={loading}>
+                  <Icon name="refresh" size={14} /> Refresh
+                </button>
               </div>
-            </div>
-            <div className="dash-actions">
-              <button className="btn btn-ghost btn-sm" onClick={() => setRefreshCount((c) => c + 1)} disabled={loading}>
-                <Icon name="refresh" size={14} /> Refresh
-              </button>
-            </div>
+            )}
           </header>
 
           {view === 'overview' ? (
@@ -303,6 +324,11 @@ export default function DashboardPage() {
                 </div>
               </div>
             </>
+          ) : SECTIONS[view] ? (
+            (() => {
+              const Section = SECTIONS[view];
+              return <Section />;
+            })()
           ) : (
             <ComingSoon view={view} />
           )}

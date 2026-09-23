@@ -1,0 +1,67 @@
+/* ══ BatchesSection — batch list + live progress (UI_DESIGN §11.4) ═════ */
+
+.batch-list { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.batch-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.batch-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.batch-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.batch-name {
+  font-family: var(--ff-display);
+  font-size: 15px;
+  color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.batch-model { color: var(--text-mute); }
+
+.batch-live { color: var(--amber); }
+
+/* Thin progress bar (§11.4) — cyan fill, amber once anything has failed, so a
+   partially-failed batch does not read as healthy progress. */
+.batch-progress {
+  height: 3px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+/* Driven by --p (0..1) and scaled rather than widened: animating width on a
+   bar that updates every poll would relayout the card each tick. */
+.batch-progress > i {
+  display: block; height: 100%; width: 100%;
+  background: var(--cyan);
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  transition: transform 300ms ease;
+}
+.batch-progress > i.has-failures { background: var(--amber); }
+
+.batch-counts { display: flex; flex-wrap: wrap; }
+.batch-counts > div {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0 14px; flex: 1 1 auto; min-width: 80px;
+  border-left: 1px solid var(--border);
+}
+.batch-counts > div:first-child { border-left: none; padding-left: 0; }
+.batch-counts .num { font-size: 18px; color: var(--text); }
+.batch-counts .num.is-pass { color: var(--pass); }
+.batch-counts .num.is-fail { color: var(--fail); }
+.batch-counts .num.is-amber { color: var(--amber); }
+
+.batch-error {
+  display: flex; align-items: center; gap: 6px;
+  border-left: 2px solid var(--fail);
+  padding: 8px 12px;
+  background: var(--bg-inset);
+  color: var(--fail);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .batch-counts > div { border-left: none; padding: 0; min-width: 72px; }
+}

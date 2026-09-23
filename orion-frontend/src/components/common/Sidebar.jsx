@@ -12,12 +12,15 @@ import './Sidebar.css';
 // through to an empty page reads as a broken product, while hiding six of seven
 // entries would leave a one-item sidebar that reads as a broken install.
 // Flip a flag to true in the same change that wires the section up.
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { key: 'overview', icon: 'overview', label: 'Overview', ready: true },
-  { key: 'scenarios', icon: 'scenarios', label: 'Scenarios', ready: false },
-  { key: 'runs', icon: 'runs', label: 'Runs', ready: false },
-  { key: 'models', icon: 'models', label: 'Models', ready: false },
-  { key: 'batches', icon: 'batches', label: 'Batches', ready: false },
+  { key: 'scenarios', icon: 'scenarios', label: 'Scenarios', ready: true },
+  { key: 'runs', icon: 'runs', label: 'Runs', ready: true },
+  { key: 'models', icon: 'models', label: 'Models', ready: true },
+  { key: 'batches', icon: 'batches', label: 'Batches', ready: true },
+  // Compare needs a regression endpoint the API does not expose yet
+  // (RegressionDetector is CLI-only), and Settings needs the org/API-key views.
+  // Both stay disabled until there is something behind them.
   { key: 'compare', icon: 'compare', label: 'Compare', ready: false },
   { key: 'settings', icon: 'settings', label: 'Settings', ready: false },
 ];

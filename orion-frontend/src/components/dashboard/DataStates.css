@@ -1,0 +1,53 @@
+/* ══ DataStates — loading / empty / error (docs/UI_DESIGN.md §9.12) ════ */
+
+.data-state {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.data-state-hint {
+  margin: 0;
+  color: var(--text-mute);
+  font-size: 13px;
+  max-width: 46ch;
+}
+
+/* Error: 2px --fail left border and left-aligned, so it reads as a fault
+   rather than as another empty panel (§9.12). */
+.data-state--error {
+  border-left: 2px solid var(--fail);
+  align-items: flex-start;
+  text-align: left;
+}
+.data-state--error .mono-label {
+  color: var(--fail);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Loading: skeleton blocks in the shape of the rows they replace, never a
+   bare spinner. .skeleton in index.css already respects reduced-motion. */
+.data-state--loading {
+  align-items: stretch;
+  text-align: left;
+  gap: 12px;
+}
+
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-row {
+  height: 34px;
+  width: 100%;
+}

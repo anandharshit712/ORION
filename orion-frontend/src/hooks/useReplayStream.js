@@ -4,7 +4,7 @@
 // Used by SimulationViewer when in replay mode (vs live streaming mode).
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import api from '../services/api';
+import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 /**

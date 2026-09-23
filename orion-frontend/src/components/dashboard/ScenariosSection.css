@@ -1,0 +1,64 @@
+/* ══ ScenariosSection — scenario grid (docs/UI_DESIGN.md §11.4) ════════ */
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.scenario-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scenario-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.scenario-id { color: var(--text-mute); font-size: 11px; }
+
+.scenario-name {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.scenario-desc {
+  margin: 0;
+  color: var(--text-mute);
+  font-size: 12.5px;
+  line-height: 1.5;
+  /* Descriptions run to a paragraph in the YAML; three lines is enough to tell
+     scenarios apart without the cards losing a common height. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.scenario-specs {
+  display: flex; flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.scenario-specs > div {
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 1 1 auto; min-width: 66px;
+  padding: 0 10px;
+  border-left: 1px solid var(--border);
+}
+.scenario-specs > div:first-child { border-left: none; padding-left: 0; }
+.scenario-specs .num { font-size: 15px; color: var(--text); }
+.scenario-specs .num em { font-style: normal; font-size: 10px; color: var(--cyan); margin-left: 1px; }
+
+.scenario-hash {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; color: var(--text-mute);
+}

@@ -104,6 +104,18 @@ export const api = {
 
   getBatchJobs: () => request('/jobs/'),
 
+  // Live progress for one batch: counts by state plus the aggregate so far.
+  // Distinct from getBatchJobs, which lists the job rows.
+  getBatchStatus: (batchId) => request(`${API}/runs/batch/${batchId}/status`),
+
+  // Customer models (P1.2). Mounted under /api, unlike /models/ at the root
+  // which is the built-in model catalogue.
+  getModels: () => request(`${API}/models/`),
+
+  getModelDetail: (modelId) => request(`${API}/models/${modelId}`),
+
+  deleteModel: (modelId) => request(`${API}/models/${modelId}`, { method: 'DELETE' }),
+
   // Evaluate
   evaluateSingle: (scenarioName, modelName, seed) =>
     request('/evaluate/single', {

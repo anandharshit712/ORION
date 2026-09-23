@@ -1,0 +1,21 @@
+/* ══ RunsSection — full runs table (docs/UI_DESIGN.md §11.4, §9.7) ═════ */
+
+.runs-section .table-cap .num { color: var(--text-mute); margin-left: 6px; }
+
+.runs-section .data-table tbody tr.is-clickable { cursor: pointer; }
+.runs-section .data-table tbody tr.is-clickable:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+.runs-section .t-scenario {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+/* A run that has not been scored yet shows a dash, not 0.0 — a zero here
+   would read as "scored badly" rather than "not finished". */
+.runs-section .t-pending { color: var(--text-mute); }
