@@ -140,12 +140,16 @@ demonstrably better than sampling.
 
 ### Adversarial search has no API, tier gate or credit accounting
 `arep/search/` is CLI and library only. `POST /api/search` does not exist, and neither does
-the "Pro tier and above, consumes `max_evals` credits" rule the roadmap specifies.
+the "Pro tier and above, consumes `max_evals` credits" rule the roadmap specifies. Held
+pending a pricing decision — charging per *evaluation* means a search that stops on the
+first collision costs almost nothing while a thorough one costs a lot, which may be
+backwards.
 
-### Model comparison has no API or PDF download
-`RegressionDetector` works and the HTML report renders, but `POST /api/compare`,
-`GET /api/compare/{id}/results` and `GET /api/compare/{id}/report.pdf` do not exist, so
-comparison is CLI-only and uncharged.
+### Comparison has no PDF download endpoint
+`POST /api/compare` and `GET /api/compare/{id}` exist and are charged correctly. What is
+missing is `GET /api/compare/{id}/report.pdf`: the generator works and renders every
+section, but WeasyPrint needs GTK, which is absent on Windows, so the endpoint could not be
+exercised here.
 
 ### Interop fixtures are not committed
 Two acceptance criteria name third-party files that are absent:
@@ -153,9 +157,11 @@ Two acceptance criteria name third-party files that are absent:
 are tested against generated or round-tripped input instead, so neither has been exercised
 against a file this project did not write.
 
-### Deterministic replay (2.5)
-`FrameHasher` records a per-run digest on `RunRecord.frame_hash` for both live and batch
-runs, but nothing replays from it. Closes the `RunPage` stub.
+### Deterministic replay — viewer UI only
+Both backend modes are done: `POST /api/runs/{id}/replay` re-simulates from the seed and
+reproduces the original digest, and `GET /api/runs/{id}/frames` serves stored frames for
+runs that collided. What remains is the frontend — the scrub bar, jump-to-event markers and
+the `RunPage` stub. `PlaybackControls` is still a `TODO [P5]` placeholder.
 
 ### Pacejka coefficients are uncalibrated
 Plausible defaults, not fitted to a measured tire. Documented in `docs/METHODOLOGY.md`.

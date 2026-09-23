@@ -1060,7 +1060,7 @@ GET  /api/search/{search_id}/result    { best_params, best_fitness, falsificatio
 
 ---
 
-## 2.4 — Model Comparison & Regression Reports — ⚠ PARTIAL (comparison and HTML report work; no `/api/compare`, no PDF download, no credit accounting)
+## 2.4 — Model Comparison & Regression Reports — ⚠ PARTIAL (comparison, HTTP API and credit accounting done; no PDF download endpoint)
 
 **After**: "Model v2.1 vs v2.0: safety improved 0.08, compliance regressed 0.03."
 
@@ -1084,16 +1084,18 @@ highlights, and the **methodology section from 0.5** — the part a safety revie
 ### Acceptance Criteria
 
 - [x] `EmergencyBrake` vs `ConstantAction` on LON-003 → EmergencyBrake wins — verified
-- [~] Regression correctly flagged — verified (4 metrics regressed, "do not deploy").
-      The report renders all its sections as HTML; **PDF download is not wired**:
-      `GET /api/compare/{id}/report.pdf` does not exist, and WeasyPrint needs GTK
-      (Linux CI only).
-- [ ] Cost = `2 × runs_per_scenario × len(scenario_ids)` credits — **not implemented**:
-      `POST /api/compare` does not exist, so comparison is CLI-only and uncharged
+- [~] Regression correctly flagged — verified (4 metrics regressed, "do not deploy"),
+      and now over HTTP: `POST /api/compare` + `GET /api/compare/{id}` return the full
+      report. **PDF download is still not wired**: `GET /api/compare/{id}/report.pdf` does
+      not exist, and WeasyPrint needs GTK (Linux CI only).
+- [x] Cost = `2 × runs_per_scenario × len(scenario_ids)` credits — charged before the
+      job queues, refunded from the *recorded* charge if it fails (the formula can change
+      between charge and refund). `tests/test_compare_api.py` covers charge, refund and the
+      refusal that must not charge.
 
 ---
 
-## 2.5 — Deterministic Replay
+## 2.5 — Deterministic Replay — ⚠ PARTIAL (both backend modes done and verified; viewer scrub/jump UI not built)
 
 **Why it sits here and not in polish**: replay is the proof of the determinism claim and the
 best demo in the product — click the failure, watch it re-run, frame-identical. It also
@@ -1115,8 +1117,15 @@ wastes its own guarantee.
 
 ### Acceptance Criteria
 
-- [ ] Replay-from-seed of any completed run produces an identical frame hash
-- [ ] A failed batch run is watchable via stored frames without re-computation
+- [x] Replay-from-seed of any completed run produces an identical frame hash —
+      `POST /api/runs/{id}/replay`. **This is what caught the hash being path-dependent**:
+      `EvaluationRunner` hashed `(world[t], action[t])` and `run_async` hashed
+      `(world[t+1], action[t])`, so a stored batch digest could never be reproduced by a
+      live run. Fixed with an `on_canonical` hook; both paths are pinned against each
+      other.
+- [x] A failed batch run is watchable via stored frames without re-computation —
+      `GET /api/runs/{id}/frames`. Kept only for runs that collided or left the road;
+      everything else replays from its seed. 149 frames compress to ~3 KB.
 - [ ] Scrub and jump-to-collision work in the viewer
 
 ---
@@ -1182,7 +1191,7 @@ scenarios copied in) with `run_suite` as the entrypoint.
 
 Same pattern, as a GitLab CI component at `gitlab.com/orioneval/evaluate-model`.
 
-## 3.4 — Model Versioning & History
+## 3.4 — Model Versioning & History — ⚠ PARTIAL (history endpoint done; no auto-compare on submission, no webhook)
 
 The same model name resubmitted creates a tracked version; the dashboard shows a timeline of
 composite score per version, auto-compares vN against vN−1, and flags regressions in the
@@ -1200,9 +1209,15 @@ GET /api/models/{name}/history
       not wired into the action.
 - [ ] Webhook fires < 30 s after batch completion; signature verifies — **not implemented**:
       only *inbound* Stripe webhooks exist, there is no outbound webhook system (3.1)
-- [ ] Version history shows the correct trend across 3 submissions — **not implemented**:
-      `models.version` is a column with an index; there are no history endpoints (3.4)
-- [ ] `run_suite` on 5 runs × 18 scenarios completes in < 10 minutes — **not measured**
+- [x] Version history shows the correct trend across 3 submissions —
+      `GET /api/models/{name}/history`. An unevaluated version is listed but does not
+      advance the baseline, so the next real version is still compared against the last
+      scored one rather than looking like a first submission.
+- [x] `run_suite` on 5 runs × 18 scenarios completes in < 10 minutes — **measured, and it
+      did not, until it was fixed.** 5 × 21 took 17.7 min. Profiling put 93% of simulation
+      time in `LaneInfo.get_closest_point`, which allocated four `Vector2D` objects per
+      segment per call — 5.8 M `__sub__` calls per run. Rewritten with scalar arithmetic:
+      **17.7 min → 4.1 min**, frame digests bit-identical.
 
 ---
 
