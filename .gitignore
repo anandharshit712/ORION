@@ -61,3 +61,6 @@ desktop.ini
 # ── Build artifacts ───────────────────────────────────────────────────────────
 *.pyc
 *.whl
+
+# Working notes, deliberately not project documentation.
+HOLD_AND_DOUBTS.md

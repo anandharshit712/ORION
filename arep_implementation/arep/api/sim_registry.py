@@ -47,6 +47,9 @@ class LiveRun:
     started_at: str
     org_id: Optional[str] = None
     user_id: Optional[int] = None
+    # The stored run this one re-simulates, when it is a replay. Carried so the
+    # viewer can say "replay of run 412" rather than presenting it as new work.
+    replay_of: Optional[int] = None
     completed_at: Optional[str] = None
     producer_task: Optional[asyncio.Task] = None
     subscribers: List[asyncio.Queue] = field(default_factory=list)
@@ -124,6 +127,8 @@ class LiveRun:
             "stability_score": m.get("stability_score", 0.0),
             "reactivity_score": m.get("reactivity_score", 0.0),
             "collision_occurred": m.get("collision_occurred", False),
+            "frame_hash": self.frame_hash,
+            "replay_of": self.replay_of,
         }
 
 
@@ -175,6 +180,8 @@ async def start_run(
     tick_interval: float = 0.02,
     org_id: Optional[str] = None,
     user_id: Optional[int] = None,
+    scenario_yaml: Optional[str] = None,
+    replay_of: Optional[int] = None,
 ) -> LiveRun:
     """
     Bootstrap a live simulation run and kick off its producer task.
@@ -192,7 +199,15 @@ async def start_run(
     from arep.simulation.engine import SimulationEngine
 
     parser = ScenarioParser()
-    scenario_def, _ = parser.parse_file(scenario_path)
+    if scenario_yaml is not None:
+        # Replay parses the YAML stored with the original run, not the file at
+        # scenario_path. The file may have been edited since - the lane-geometry
+        # fix alone moved every score - and a "replay" that silently runs a
+        # different scenario is worse than no replay at all. The stored copy is
+        # content-hashed, so this is the scenario that produced the result.
+        scenario_def, _ = parser.parse_string(scenario_yaml)
+    else:
+        scenario_def, _ = parser.parse_file(scenario_path)
 
     sim_config = get_config().simulation
     engine = SimulationEngine(sim_config)
@@ -215,7 +230,26 @@ async def start_run(
         started_at=datetime.now(timezone.utc).isoformat(),
         org_id=org_id,
         user_id=user_id,
+        replay_of=replay_of,
     )
+
+    def on_canonical(world, action) -> None:
+        """Hash the pairing EvaluationRunner hashes: the world the model saw,
+        with the action it produced, and the speed limit read at that world.
+
+        Not the frame published below. That one is post-step, which is what the
+        viewer should draw but not what the batch path hashed - and a digest
+        that depends on which code path ran the simulation cannot verify
+        anything.
+        """
+        run.frame_hasher.update(
+            engine.get_tick_frame(
+                world,
+                action=action,
+                scenario_name=scenario_def.name,
+                speed_limit=world.get_speed_limit(),
+            )
+        )
 
     async def on_tick(world, action) -> None:
         frame = engine.get_tick_frame(
@@ -224,9 +258,8 @@ async def start_run(
             scenario_name=scenario_def.name,
             speed_limit=speed_limit,
         )
-        # Hash before publishing: the frame is canonical here, and the WebSocket
-        # send site stamps emit_ts_ms onto its own copy on the way out.
-        run.frame_hasher.update(frame)
+        # The WebSocket send site stamps emit_ts_ms onto its own copy on the
+        # way out, so this frame stays canonical for anyone else reading it.
         run.publish(frame)
 
     async def producer() -> None:
@@ -236,6 +269,7 @@ async def start_run(
                 model=model,
                 rng=rng,
                 on_tick=on_tick,
+                on_canonical=on_canonical,
                 max_steps=max_steps,
                 tick_interval=tick_interval,
             )
