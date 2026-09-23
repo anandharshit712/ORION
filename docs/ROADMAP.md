@@ -147,7 +147,13 @@ Stripe holds placeholder price IDs and has had no live round trip, because Strip
 
 **Dashboard wiring: four of six sections done** — `runs`, `batches`, `models` and `scenarios` render live data against endpoints that needed no backend work. `compare` and `settings` remain disabled: `RegressionDetector` has no HTTP endpoint (it is CLI-only), and settings needs the org/API-key views.
 
-**Next:** surface the confidence intervals (2.1 remainder) so scores read as evidence rather than point estimates; then deterministic replay (2.5), which closes the `RunPage` stub; then a decision on the six unrouted pages (see CLAUDE.md §9) before more frontend work lands on either pattern.
+**2.1 is complete**: per-metric distributions with 95% intervals and percentiles,
+`GET /api/runs/batch/{id}/results`, and intervals on every dashboard score card. Interval
+width measured at 0.106 / 0.082 / 0.038 for n = 5 / 20 / 100.
+
+**Next:** deterministic replay (2.5), which closes the `RunPage` stub; then a decision on
+the unrouted frontend pages (see CLAUDE.md §9) before more frontend work lands on either
+pattern.
 
 ---
 
@@ -820,8 +826,7 @@ Before charging the first customer:
 >
 > What is still genuinely open:
 >
-> - **Statistical CIs are computed but not surfaced** to the API or dashboard (2.1 remainder).
-> - **Deterministic replay (2.5)** — the frame hash it depends on now exists for both live and
+> > - **Deterministic replay (2.5)** — the frame hash it depends on now exists for both live and
 >   batch runs, but nothing replays from it yet; `RunPage` is still a stub.
 > - **PDF rendering is unverified on Windows.** WeasyPrint cannot load its GTK libraries here,
 >   so `render_html()` is what the tests exercise; the PDF step runs in Linux CI.
@@ -840,7 +845,7 @@ primary reason customers choose ORION.
 
 ---
 
-## 2.1 — Statistical Rigor: Confidence Intervals & Distribution Analysis
+## 2.1 — Statistical Rigor: Confidence Intervals & Distribution Analysis — ✅ DONE
 
 **Currently**: the aggregator already computes Wilson + t-distribution CIs internally; they
 are not surfaced through the batch-results API or the dashboard.

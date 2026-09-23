@@ -120,15 +120,6 @@ Plain JSX throughout. A progressive migration is Phase 5 work.
 
 ## Scoring and analysis
 
-### Confidence intervals are computed but never surfaced
-`arep/statistics/aggregator.py` computes Wilson and t-distribution intervals and then
-discards them inside the function. The batch-results API and the dashboard show point
-estimates only.
-
-This is the largest remaining gap between what ORION computes and what it shows. For a
-platform whose claim is statistical rigour, `0.02` and `0.02 [0.008, 0.047], n=500` are
-very different statements.
-
 ### Deterministic replay (2.5)
 `FrameHasher` records a per-run digest on `RunRecord.frame_hash` for both live and batch
 runs, but nothing replays from it. Closes the `RunPage` stub.
