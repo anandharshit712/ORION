@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from arep.api.auth import require_verified_email, get_request_principal
 from arep.api.middleware import require_role
 from arep.api.model_store import SubmissionType, get_model_store
+from arep.database.models import RunRecord
 from arep.database.connection import session_scope
 from arep.database.repository import ModelRepository, OrganisationRepository
 from arep.utils.logging_config import get_logger
@@ -236,3 +237,118 @@ def delete_model(model_id: str, request: Request):
     if submission_type == SubmissionType.PYTHON_SDK.value:
         get_model_store().delete(artefact_uri)
     return None
+
+
+class ModelVersionHistoryEntry(BaseModel):
+    """One submitted version of a model, with how it scored (Phase 3.4)."""
+
+    model_id: str
+    version: str
+    submission_type: str
+    status: str
+    created_at: datetime.datetime
+
+    runs: int = 0
+    composite_mean: Optional[float] = None
+    safety_mean: Optional[float] = None
+    collision_rate: Optional[float] = None
+
+    # Change against the previous version. None on the first version, and on any
+    # version with no scored runs to compare.
+    composite_delta: Optional[float] = None
+    is_regression: bool = False
+
+
+class ModelHistoryResponse(BaseModel):
+    name: str
+    versions: List[ModelVersionHistoryEntry]
+    latest_version: Optional[str] = None
+    # True when the newest scored version regressed against the one before it.
+    has_regression: bool = False
+
+
+# A composite drop beyond this between consecutive versions is a regression.
+# Same threshold RegressionDetector uses, imported rather than restated so the
+# dashboard and the CLI cannot disagree about what counts as one.
+def _composite_threshold() -> float:
+    from arep.analysis.regression_detector import REGRESSION_COMPOSITE_THRESHOLD
+
+    return REGRESSION_COMPOSITE_THRESHOLD
+
+
+@models_api_router.get("/{name}/history", response_model=ModelHistoryResponse)
+def get_model_history(name: str, request: Request):
+    """Score trend across every submitted version of one model name (3.4).
+
+    Runs reference a submitted model by its UUID, not by name, so this walks
+    name -> versions -> that version's runs. Built-in models are referenced by
+    name directly and have no versions, so they are not covered here.
+
+    A version with no runs is still listed. "Uploaded but never evaluated" is a
+    real state and hiding it would make a submission look lost.
+    """
+    org_id, _, _ = get_request_principal(request)
+
+    with session_scope() as session:
+        records = [
+            m for m in ModelRepository(session).list_for_org(org_id) if m.name == name
+        ]
+        if not records:
+            raise HTTPException(404, f"No model named {name!r} in this organisation")
+
+        # Oldest first: a trend reads forwards, and the delta is against the
+        # version before it.
+        records.sort(key=lambda m: (m.created_at, m.version))
+
+        entries: List[ModelVersionHistoryEntry] = []
+        previous_composite: Optional[float] = None
+        threshold = _composite_threshold()
+
+        for record in records:
+            runs = (
+                session.query(RunRecord).filter(RunRecord.model_name == record.id).all()
+            )
+
+            composite = safety = collision_rate = None
+            if runs:
+                composite = sum(r.composite_score for r in runs) / len(runs)
+                safety = sum(r.safety_score for r in runs) / len(runs)
+                collision_rate = sum(1 for r in runs if r.collision_occurred) / len(
+                    runs
+                )
+
+            delta = None
+            regressed = False
+            if composite is not None and previous_composite is not None:
+                delta = composite - previous_composite
+                regressed = delta < -threshold
+
+            entries.append(
+                ModelVersionHistoryEntry(
+                    model_id=record.id,
+                    version=record.version,
+                    submission_type=record.submission_type,
+                    status=record.status,
+                    created_at=record.created_at,
+                    runs=len(runs),
+                    composite_mean=composite,
+                    safety_mean=safety,
+                    collision_rate=collision_rate,
+                    composite_delta=delta,
+                    is_regression=regressed,
+                )
+            )
+
+            # Only advance the baseline on a version that was actually scored,
+            # so an unevaluated submission does not break the chain and make the
+            # next real version look like the first.
+            if composite is not None:
+                previous_composite = composite
+
+        scored = [e for e in entries if e.composite_mean is not None]
+        return ModelHistoryResponse(
+            name=name,
+            versions=entries,
+            latest_version=entries[-1].version if entries else None,
+            has_regression=bool(scored and scored[-1].is_regression),
+        )
