@@ -617,6 +617,12 @@ black arep/ tests/
 ruff check arep/ tests/
 mypy arep/
 
+# Verify roadmap acceptance criteria by executing them. Prints PASS / FAIL /
+# CANNOT-VERIFY per criterion. Run before marking anything DONE in the roadmap:
+# a box ticked from memory turns "we think this works" into "this was verified".
+# It found the CMA-ES tell() crash on its first run.
+PYTHONPATH=. python scripts/verify_roadmap.py
+
 # Hard-rule check (no wall-clock / unseeded randomness in the simulation
 # packages). AST-based, same check CI runs.
 python scripts/check_hard_rules.py
