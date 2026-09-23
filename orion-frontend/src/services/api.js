@@ -108,6 +108,11 @@ export const api = {
   // Distinct from getBatchJobs, which lists the job rows.
   getBatchStatus: (batchId) => request(`${API}/runs/batch/${batchId}/status`),
 
+  // Full score distributions for a finished batch (Phase 2.1): per-metric mean,
+  // 95% interval, percentiles, the collision-rate Wilson interval, the best and
+  // worst seeds, and a pre-binned composite histogram.
+  getBatchResults: (batchId) => request(`${API}/runs/batch/${batchId}/results`),
+
   // Customer models (P1.2). Mounted under /api, unlike /models/ at the root
   // which is the built-in model catalogue.
   getModels: () => request(`${API}/models/`),

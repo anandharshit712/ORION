@@ -228,6 +228,74 @@ Stated so that nobody infers coverage that is not there:
 
 ---
 
+## 8.5 How certain is a score?
+
+`arep/statistics/aggregator.py`
+
+A mean on its own is not evidence. Every metric is reported with the sample
+behind it:
+
+```
+safety 0.73  ->  safety 0.73 +/- 0.04  (95% CI, n=100)
+```
+
+**Means** carry a t-distribution interval. The standard deviation uses `ddof=1`,
+the sample standard deviation, because the runs are a sample of the scenario's
+parameter space and not the whole of it. `ddof=0` would quietly understate the
+spread.
+
+**The collision rate** carries a Wilson score interval instead, because it is a
+proportion rather than a mean. The usual normal approximation runs off the end
+of the scale near 0 and 1 — it will happily report a lower bound below zero —
+and near zero is exactly where a good model's collision rate lives. Wilson stays
+inside `[0, 1]` and stays sensible at small n.
+
+**Percentiles** (5th, 25th, 75th, 95th) are reported alongside the interval
+because they answer a different question. The interval says how well the mean is
+pinned down; the percentiles say what the spread actually looks like. A model
+that is reliably mediocre and one that is usually excellent but occasionally
+catastrophic can share a mean and a standard deviation. Their 5th percentiles do
+not look remotely alike, and for a safety argument the lower tail is the
+interesting end.
+
+### Small samples
+
+The interval widens as n falls, and that is the point — a 5-run batch must not
+read as confidently as a 100-run one. Measured on the same data:
+
+| n | 95% CI width |
+| --- | --- |
+| 5 | 0.106 |
+| 20 | 0.082 |
+| 100 | 0.038 |
+
+Specific behaviours worth knowing:
+
+- **n = 1**: standard deviation is 0 and the interval collapses to the point
+  estimate. There is no spread to estimate from one run. This is reported as-is
+  rather than padded with an invented width.
+- **All runs identical**: the same collapse, for the same reason. The standard
+  error is zero, so the t-interval is undefined and the point estimate is
+  returned.
+- **n < 5**: flagged `low_confidence` in the API response, and the dashboard
+  says "small sample — interval is wide" next to every affected score. A wide
+  bar is easy to miss; a confident-looking mean is not.
+- **Zero collisions**: never reported as a zero collision probability. Zero in
+  20 runs still has an upper bound above 10%. The bound is the defensible claim,
+  not the point estimate.
+
+### Which run to look at
+
+Each batch names a `worst_run_seed` and a `best_run_seed`. These are seeds, not
+database ids, because a seed can be re-run and a row id cannot — naming the
+worst run is only useful if you can reproduce it.
+
+A collision outranks a low composite when choosing the worst run. The run a
+reviewer needs is the one that crashed, even when a different run scored lower
+on the weighted average.
+
+---
+
 ## 9. Reproducing a score
 
 ```bash

@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
@@ -33,9 +34,12 @@ from arep.api.schemas import (
     ModelListResponse,
     BatchEnqueueResponse,
     BatchProgressResponse,
+    BatchResultsResponse,
+    ScoreDistributionResponse,
+    HistogramBin,
 )
 from arep.database.connection import session_scope
-from arep.database.models import ScenarioRecord
+from arep.database.models import RunRecord, ScenarioRecord
 from arep.database.repository import (
     ScenarioRepository,
     RunRepository,
@@ -52,6 +56,7 @@ from arep.models.examples.example_models import (
 from arep.models.interface import ModelInterface
 from arep.models.resolver import resolve_model, is_uuid
 from arep.scenario.parser import ScenarioParser
+from arep.statistics.aggregator import StatisticalAggregator
 from arep.utils.logging_config import get_logger
 
 logger = get_logger("api.routes")
@@ -594,6 +599,112 @@ def enqueue_batch(req: RunBatchRequest, request: Request):
         enqueued=enqueued,
         credits_remaining=credits_remaining,
     )
+
+
+# How many bins the composite histogram is cut into. Ten reads well at a glance
+# and matches the dashboard's spark-histogram (docs/ROADMAP.md 2.1).
+_HISTOGRAM_BINS = 10
+
+# Below this many scored runs the interval is wide enough that quoting it
+# without a caveat would overstate the evidence. See docs/METHODOLOGY.md.
+_LOW_CONFIDENCE_N = 5
+
+
+@runs_router.get(
+    "/batch/{batch_id}/results",
+    response_model=BatchResultsResponse,
+    summary="Full score distributions for a finished batch",
+)
+def get_batch_results(batch_id: int, request: Request):
+    """Per-metric distributions, intervals and percentiles for one batch (2.1).
+
+    Recomputed from the stored per-run rows rather than read off the batch job,
+    because the job row carries only the means. Recomputing also means a batch
+    scored under an older scoring version is summarised the same way as a new
+    one -- the rows are the source of truth.
+    """
+    org_id, _, _ = get_request_principal(request)
+
+    with session_scope() as db:
+        job = BatchJobRepository(db).get_by_id(batch_id, org_id=org_id)
+        if job is None:
+            raise HTTPException(404, "Batch not found")
+
+        rows = (
+            db.query(RunRecord)
+            .filter(RunRecord.batch_job_id == batch_id)
+            .order_by(RunRecord.master_seed)
+            .all()
+        )
+
+        if not rows:
+            # A queued or wholly-failed batch has no rows to summarise. Say so
+            # with empty distributions rather than inventing zeros, which would
+            # render as a model that scored 0.0 on everything.
+            return BatchResultsResponse(
+                batch_id=job.id,
+                status=job.status,
+                scenario_name=job.scenario_name,
+                model_name=job.model_name,
+                num_runs=job.num_runs,
+                scored_runs=0,
+                master_seed=job.master_seed,
+                distributions={},
+                collision_rate=0.0,
+                collision_rate_ci_95_low=0.0,
+                collision_rate_ci_95_high=0.0,
+                low_confidence=True,
+            )
+
+        aggregator = StatisticalAggregator()
+        series = {
+            "composite": np.array([r.composite_score for r in rows], dtype=float),
+            "safety": np.array([r.safety_score for r in rows], dtype=float),
+            "compliance": np.array([r.compliance_score for r in rows], dtype=float),
+            "stability": np.array([r.stability_score for r in rows], dtype=float),
+            "reactivity": np.array([r.reactivity_score for r in rows], dtype=float),
+            "min_ttc": np.array([r.min_ttc for r in rows], dtype=float),
+        }
+        distributions = {
+            name: ScoreDistributionResponse(**aggregator.distribution(values).__dict__)
+            for name, values in series.items()
+        }
+
+        collisions = sum(1 for r in rows if r.collision_occurred)
+        col_low, col_high = aggregator._wilson_ci(collisions, len(rows))
+
+        # The worst run is the one to reproduce, and a collision outranks a low
+        # composite: a crash is the finding, not the weighted average.
+        worst = min(rows, key=lambda r: (not r.collision_occurred, r.composite_score))
+        best = max(rows, key=lambda r: (not r.collision_occurred, r.composite_score))
+
+        counts, edges = np.histogram(
+            series["composite"], bins=_HISTOGRAM_BINS, range=(0.0, 1.0)
+        )
+        histogram = [
+            HistogramBin(
+                lower=float(edges[i]), upper=float(edges[i + 1]), count=int(counts[i])
+            )
+            for i in range(len(counts))
+        ]
+
+        return BatchResultsResponse(
+            batch_id=job.id,
+            status=job.status,
+            scenario_name=job.scenario_name,
+            model_name=job.model_name,
+            num_runs=job.num_runs,
+            scored_runs=len(rows),
+            master_seed=job.master_seed,
+            distributions=distributions,
+            collision_rate=collisions / len(rows),
+            collision_rate_ci_95_low=col_low,
+            collision_rate_ci_95_high=col_high,
+            worst_run_seed=worst.master_seed,
+            best_run_seed=best.master_seed,
+            histogram=histogram,
+            low_confidence=len(rows) < _LOW_CONFIDENCE_N,
+        )
 
 
 @runs_router.get(

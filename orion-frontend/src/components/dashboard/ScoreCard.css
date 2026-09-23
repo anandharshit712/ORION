@@ -47,12 +47,53 @@
   background: var(--bg-inset);
   position: relative;
 }
+/* Scaled, not widened: animating width relayouts the card on every refresh. */
 .score-bar i {
   position: absolute;
   left: 0;
   top: 0;
   height: 100%;
-  transition: width 0.6s var(--ease);
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  transition: transform 0.6s var(--ease);
 }
 .score-bar i.amber { background: var(--amber); }
 .score-bar i.cyan { background: var(--cyan); }
+
+/* ── Confidence interval (Phase 2.1) ──────────────────────────────────── */
+
+/* The band sits behind the fill and marks where the mean could plausibly be.
+   Deliberately low-contrast: it qualifies the estimate, it is not a second
+   reading competing with it. */
+.score-bar-ci {
+  position: absolute;
+  top: -2px;
+  height: 9px;
+  background: var(--border-strong);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.score-ci {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.score-ci.is-weak { color: var(--text-mute); }
+
+.score-ci-meta {
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+
+/* A small sample says so in words as well as in the width, because a wide bar
+   is easy to miss and a confident-looking mean is not. */
+.score-weak {
+  color: var(--amber);
+  font-size: 9.5px;
+}
