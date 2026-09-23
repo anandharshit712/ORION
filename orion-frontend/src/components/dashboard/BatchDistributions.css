@@ -1,0 +1,63 @@
+/* ══ BatchDistributions — mean + interval + histogram (Phase 2.1) ══════ */
+
+.batch-dist { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.batch-dist-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.dist-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-3);
+}
+
+.dist-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(300px, 2fr);
+  gap: var(--space-3);
+}
+
+.dist-collision {
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dist-collision-val {
+  font-size: 34px; font-weight: 700; line-height: 1; color: var(--text);
+}
+.dist-collision-val em {
+  font-style: normal; font-size: 14px; font-weight: 400; color: var(--cyan);
+  margin-left: 2px;
+}
+.dist-collision-ci { font-size: 11px; color: var(--text-2); }
+
+.dist-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-mute);
+}
+
+.dist-histogram { padding: 16px 16px 8px; }
+
+.dist-seeds { display: flex; flex-wrap: wrap; align-items: center; }
+.dist-seeds > div {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0 14px; min-width: 110px;
+  border-left: 1px solid var(--border);
+}
+.dist-seeds > div:first-child { border-left: none; padding-left: 0; }
+.dist-seeds .num { font-size: 16px; color: var(--text); }
+
+.dist-seeds-hint {
+  flex-direction: row !important;
+  align-items: center; gap: 6px;
+  color: var(--text-mute); font-size: 11.5px;
+  min-width: 220px;
+}
+
+@media (max-width: 720px) {
+  .dist-row { grid-template-columns: 1fr; }
+  .dist-seeds > div { border-left: none; padding: 0; }
+}

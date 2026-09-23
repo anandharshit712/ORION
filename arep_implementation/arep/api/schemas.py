@@ -7,7 +7,7 @@ Request/response models for the FastAPI endpoints.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -144,6 +144,69 @@ class BatchProgressResponse(BaseModel):
     error_message: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+
+
+class HistogramBin(BaseModel):
+    """One bin of the composite-score histogram."""
+
+    lower: float
+    upper: float
+    count: int
+
+
+class ScoreDistributionResponse(BaseModel):
+    """One metric's distribution across a batch (Phase 2.1).
+
+    The interval and the percentiles answer different questions. The interval
+    says how well the mean is pinned down by this sample; the percentiles say
+    what the spread actually looks like, which is where a rare catastrophic run
+    shows up. A mean alone hides both.
+    """
+
+    mean: float
+    std: float
+    ci_95_low: float
+    ci_95_high: float
+    percentile_5: float
+    percentile_25: float
+    percentile_75: float
+    percentile_95: float
+    minimum: float
+    maximum: float
+    n: int
+
+
+class BatchResultsResponse(BaseModel):
+    """Returned by GET /api/runs/batch/{batch_id}/results.
+
+    `histogram` is a pre-binned composite histogram so the dashboard does not
+    have to pull every run row to draw one.
+    """
+
+    batch_id: int
+    status: str
+    scenario_name: str
+    model_name: str
+    num_runs: int
+    scored_runs: int
+    master_seed: int
+
+    distributions: Dict[str, ScoreDistributionResponse]
+
+    collision_rate: float
+    collision_rate_ci_95_low: float
+    collision_rate_ci_95_high: float
+
+    # Seeds, not row ids: a seed can be re-run, which is the only reason to
+    # name the worst run.
+    worst_run_seed: Optional[int] = None
+    best_run_seed: Optional[int] = None
+
+    histogram: List[HistogramBin] = []
+
+    # True when the sample is too small for the interval to say much. The
+    # dashboard shows a caveat rather than a confident-looking number.
+    low_confidence: bool = False
 
 
 class RunRecordResponse(BaseModel):

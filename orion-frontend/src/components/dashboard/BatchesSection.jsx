@@ -8,11 +8,12 @@
 // A batch still running is re-polled; a finished one is not, because polling a
 // terminal row forever is how a dashboard quietly becomes a load generator.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import { useApiData, asList } from '../../hooks/useApiData';
 import Icon from '../common/Icon';
 import DataStates from './DataStates';
+import BatchDistributions from './BatchDistributions';
 import './BatchesSection.css';
 
 const POLL_MS = 4000;
@@ -30,7 +31,7 @@ function pct(value) {
   return typeof value === 'number' ? (value * 100).toFixed(1) : '—';
 }
 
-function BatchRow({ job }) {
+function BatchRow({ job, expanded, onToggle }) {
   const total = job.num_runs || 0;
   const done = job.runs_completed || 0;
   const failed = job.runs_failed || 0;
@@ -45,9 +46,23 @@ function BatchRow({ job }) {
           <span className="batch-name">{job.scenario_name}</span>
           <span className="batch-model mono-label">{job.model_name}</span>
         </div>
-        <span className={`chip ${STATUS_CHIP[job.status] || 'chip-queued'}`}>
-          {job.status}
-        </span>
+        <div className="batch-head-right">
+          <span className={`chip ${STATUS_CHIP[job.status] || 'chip-queued'}`}>
+            {job.status}
+          </span>
+          {/* Distributions only exist once there are scored runs, so the
+              control is not offered on a batch that has none yet. */}
+          {settled > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={onToggle}
+              aria-expanded={expanded}
+            >
+              {expanded ? 'Hide' : 'Distributions'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -75,11 +90,18 @@ function BatchRow({ job }) {
           <Icon name="warning" size={13} /> {job.error_message}
         </div>
       )}
+
+      {expanded && (
+        <div className="batch-expanded">
+          <BatchDistributions batchId={job.id} />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function BatchesSection() {
+  const [expanded, setExpanded] = useState(null);
   const { data, loading, error, refresh } = useApiData(() => api.getBatchJobs(), []);
   const jobs = useMemo(() => asList(data, 'jobs'), [data]);
 
@@ -118,7 +140,14 @@ export default function BatchesSection() {
         emptyHint="Batches queued through POST /api/runs/batch appear here with live progress."
       >
         <div className="batch-list">
-          {jobs.map((job) => <BatchRow key={job.id} job={job} />)}
+          {jobs.map((job) => (
+            <BatchRow
+              key={job.id}
+              job={job}
+              expanded={expanded === job.id}
+              onToggle={() => setExpanded(expanded === job.id ? null : job.id)}
+            />
+          ))}
         </div>
       </DataStates>
     </section>
