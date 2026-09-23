@@ -375,6 +375,10 @@ class RunStatusResponse(BaseModel):
     stability_score: float = 0.0
     reactivity_score: float = 0.0
     collision_occurred: bool = False
+    # Phase 2.5. A client verifying a replay needs both digests; without this
+    # the comparison the feature exists for cannot be made over the API.
+    frame_hash: Optional[str] = None
+    replay_of: Optional[int] = None
 
 
 @runs_router.post(
@@ -419,6 +423,93 @@ async def start_run(req: StartRunRequest, request: Request):
         model_name=run.model_name,
         master_seed=run.master_seed,
         ws_url=f"/ws/simulation/{run.run_id}",
+    )
+
+
+class ReplayResponse(BaseModel):
+    """Returned by POST /api/runs/{stored_run_id}/replay (Phase 2.5)."""
+
+    run_id: str
+    replay_of: int
+    status: str
+    scenario_name: str
+    model_name: str
+    master_seed: int
+    ws_url: str
+    # The digest the original run recorded. The replay's own digest lands on the
+    # LiveRun when it finishes; equal digests are the determinism proof.
+    original_frame_hash: Optional[str] = None
+
+
+@runs_router.post(
+    "/{stored_run_id}/replay",
+    response_model=ReplayResponse,
+    status_code=201,
+    dependencies=[Depends(require_verified_email)],
+)
+async def replay_run(stored_run_id: int, request: Request):
+    """Re-simulate a stored run from its seed (Phase 2.5).
+
+    Cheap and exact: determinism is already guaranteed and frame-hash verified,
+    so re-running `(scenario, model, seed)` reproduces the original bit for bit.
+    Nothing is stored to make this work.
+
+    The scenario comes from the YAML saved with the run, not from the path on
+    disk. Scenario files get edited -- the lane-geometry correction alone moved
+    every score in the library -- and a replay that quietly runs a *different*
+    scenario is worse than no replay, because it looks authoritative.
+    """
+    org_id, user_id, _ = get_request_principal(request)
+
+    with session_scope() as db:
+        run = db.get(RunRecord, stored_run_id)
+        if run is None or (org_id is not None and run.org_id != org_id):
+            # 404 rather than 403 for another org's run: whether a given id
+            # exists is not something a stranger should be able to probe.
+            raise HTTPException(404, "Run not found")
+
+        scenario = db.get(ScenarioRecord, run.scenario_id)
+        if scenario is None or not scenario.yaml_content:
+            raise HTTPException(
+                409,
+                "The scenario this run used is no longer stored, so it cannot be "
+                "replayed exactly.",
+            )
+
+        # Named locals rather than a dict: a dict of mixed types erases them,
+        # and start_run's signature is the thing worth type-checking here.
+        scenario_label: str = scenario.name
+        stored_yaml: str = scenario.yaml_content
+        model_name: str = run.model_name
+        master_seed: int = run.master_seed
+        original_frame_hash: Optional[str] = run.frame_hash
+
+    from arep.api.sim_registry import start_run as _start_run
+
+    try:
+        live = await _start_run(
+            scenario_path=scenario_label,
+            scenario_yaml=stored_yaml,
+            model_name=model_name,
+            master_seed=master_seed,
+            tick_interval=0.02,
+            org_id=org_id,
+            user_id=user_id,
+            replay_of=stored_run_id,
+        )
+    except Exception as e:
+        logger.exception("Failed to start replay of run %s", stored_run_id)
+        raise HTTPException(500, f"Failed to start replay: {e}")
+
+    return ReplayResponse(
+        run_id=live.run_id,
+        replay_of=stored_run_id,
+        status=live.status,
+        scenario_name=live.scenario_name,
+        model_name=live.model_name,
+        master_seed=live.master_seed,
+        ws_url=f"/ws/simulation/{live.run_id}",
+        original_frame_hash=original_frame_hash,
     )
 
 

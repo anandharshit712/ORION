@@ -234,3 +234,66 @@ def test_no_bare_random_module_in_the_simulation_packages():
     assert not result.stdout.strip(), (
         "unseeded randomness in a deterministic package:\n" + result.stdout
     )
+
+
+def test_the_live_path_and_the_batch_path_agree_on_the_digest():
+    """The digest must not depend on which code path ran the simulation.
+
+    EvaluationRunner hashes (world the model saw, action it produced).
+    run_async fires on_tick *after* stepping, so its frame is
+    (world[t+1], action[t]) — the right thing to draw, the wrong thing to hash.
+    Hashing that pairing meant a stored batch digest could never be verified by
+    a replay, which is the entire point of storing it. `on_canonical` now gives
+    both paths the same pairing.
+    """
+    import asyncio
+
+    from arep.config import get_config
+    from arep.core.random_manager import RandomManager
+    from arep.execution.runner import EvaluationRunner
+    from arep.models.examples.example_models import EmergencyBrakeModel
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+    from arep.simulation.engine import SimulationEngine
+    from arep.utils.hashing import FrameHasher
+
+    scenario_path = "scenarios/basic/straight_road_lead_vehicle.yaml"
+    seed = 4242
+
+    batch = EvaluationRunner().run_single(
+        scenario_path, EmergencyBrakeModel(), master_seed=seed
+    )
+
+    async def live_digest():
+        cfg = get_config().simulation
+        engine = SimulationEngine(cfg)
+        scenario_def, _ = ScenarioParser().parse_file(scenario_path)
+        rng = RandomManager(seed)
+        world = ScenarioExecutor(cfg).create_initial_world(scenario_def, rng)
+        hasher = FrameHasher()
+
+        def on_canonical(w, action):
+            hasher.update(
+                engine.get_tick_frame(
+                    w,
+                    action=action,
+                    scenario_name=scenario_def.name,
+                    speed_limit=w.get_speed_limit(),
+                )
+            )
+
+        async def on_tick(w, action):
+            return None
+
+        await engine.run_async(
+            initial_world=world,
+            model=EmergencyBrakeModel(),
+            rng=rng,
+            on_tick=on_tick,
+            on_canonical=on_canonical,
+            max_steps=int(scenario_def.duration / cfg.timestep),
+            tick_interval=0.0,
+        )
+        return hasher.hexdigest()
+
+    assert asyncio.run(live_digest()) == batch.frame_hash

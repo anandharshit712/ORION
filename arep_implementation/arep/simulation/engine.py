@@ -196,6 +196,7 @@ class SimulationEngine:
         on_tick: Callable[[WorldState, Action], Awaitable[None]],
         max_steps: int = 3000,
         tick_interval: float = 0.02,
+        on_canonical: Optional[Callable[[WorldState, Action], None]] = None,
     ) -> WorldState:
         """
         Run a complete simulation in an async context, invoking ``on_tick``
@@ -205,6 +206,19 @@ class SimulationEngine:
 
         Determinism is preserved: same seed → same world trajectory. Wall-
         clock pacing affects delivery latency, not simulation outputs.
+
+        ``on_canonical`` is called **before** each step, with the world the
+        model actually saw and the action it produced. That pairing is what the
+        frame hash is computed over, and it has to be, because
+        ``EvaluationRunner`` hashes the same pairing.
+
+        The distinction is not pedantic. ``on_tick`` fires *after* the step, so
+        it carries ``(world[t+1], action[t])`` — the right thing to draw, the
+        wrong thing to hash. Hashing that pairing here while the batch path
+        hashed the pre-step one meant the same (model, scenario, seed) produced
+        two different digests depending on which code path ran it, so a stored
+        batch digest could never be verified by a replay. The guarantee the hash
+        exists to prove was itself path-dependent.
         """
         world = initial_world.copy()
         previous_world: Optional[WorldState] = None
@@ -230,6 +244,11 @@ class SimulationEngine:
                 world.termination_reason = TerminationReason.MODEL_ERROR
                 await on_tick(world, Action.zero())
                 break
+
+            # Canonical frame first: the state the model acted on, paired with
+            # its action. Same pairing as EvaluationRunner, so the digests match.
+            if on_canonical is not None:
+                on_canonical(world, action)
 
             previous_world = world
             world = self.step(world, action, rng)
