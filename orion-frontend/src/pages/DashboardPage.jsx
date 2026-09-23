@@ -49,7 +49,7 @@ function MetricPanel({ label, value, accent = 'cyan', live = false }) {
     <div className={`panel metric ${live ? 'panel--live' : ''}`}>
       <div className="metric-top"><span className="mono-label">{label}</span></div>
       <div className={`metric-val num ${accent === 'amber' ? 'is-amber' : ''}`}>{v.toFixed(1)}</div>
-      <div className="metric-bar"><i className={accent} style={{ width: `${w}%` }} /></div>
+      <div className="metric-bar"><i className={accent} style={{ '--p': w / 100 }} /></div>
     </div>
   );
 }
