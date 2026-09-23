@@ -145,7 +145,9 @@ weights are frozen — see `CLAUDE.md` § 7.
 
 Stripe holds placeholder price IDs and has had no live round trip, because Stripe signup is invite-only in India and requires a registered company. This blocks nothing: `billing_enabled` defaults to false and credits are granted by hand via `POST /api/admin/orgs/{id}/credits`.
 
-**Next: wire the dashboard.** Six of seven sections still render the `ComingSoon` panel while the APIs behind them exist, so nothing built in Phases 2-4 is reachable from a browser. Then surface the confidence intervals (2.1 remainder), then deterministic replay (2.5).
+**Dashboard wiring: four of six sections done** — `runs`, `batches`, `models` and `scenarios` render live data against endpoints that needed no backend work. `compare` and `settings` remain disabled: `RegressionDetector` has no HTTP endpoint (it is CLI-only), and settings needs the org/API-key views.
+
+**Next:** surface the confidence intervals (2.1 remainder) so scores read as evidence rather than point estimates; then deterministic replay (2.5), which closes the `RunPage` stub; then a decision on the six unrouted pages (see CLAUDE.md §9) before more frontend work lands on either pattern.
 
 ---
 
