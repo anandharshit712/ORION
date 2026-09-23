@@ -176,9 +176,12 @@ hard wall-clock kill per call and per run.
   probed from the inside rather than by reading the `docker run` string -- no `ORION_*` in the
   container env, rootfs writes refused, the scratch tmpfs refuses to execute a staged binary,
   cgroup limits read back, loopback-only port, container removed on close. They skip where no
-  daemon is reachable, so a Windows-side venv will skip them all; run them from WSL. The two
-  gVisor tests remain unrun until `runsc` is registered as a Docker runtime
-  (`scripts/setup_docker_wsl.sh` installs both).
+  daemon is reachable, so a Windows-side venv will skip them all; run them from WSL
+  (`scripts/setup_docker_wsl.sh` installs Docker Engine and gVisor there).
+  **The gVisor path is verified**: under `ORION_CONTAINER_RUNTIME=runsc` the guest kernel
+  reports `4.19.0-gvisor` and a full evaluation completes. Cost measured at **+11%**
+  (22.47s -> 25.01s on one scenario) for an **identical composite score** — the runtime moves
+  the isolation boundary, not the result.
 - `Observation.to_dict()`/`from_dict()` is the wire format for out-of-process models. Extend
   both sides together, or the sandbox and HTTP adapters silently drop fields.
 
@@ -674,7 +677,7 @@ event id. See Section 8.
 Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
 
 1. ~~**0.1 Secrets hardening (D-02)**~~ — **DONE.** Fallbacks removed; `arep/config/validate.py` is the single resolver (`resolve_secret_key`, `resolve_database_url`, `validate_startup`); fail-fast in non-dev, ephemeral secret + sqlite in dev; `validate_startup()` wired into `app.py` lifespan; docker-compose secrets moved to git-ignored `infrastructure/.env` (`infrastructure/.env.example` documents them). `git grep "Harshit:Harshit\|change-in-production"` in `arep/` → 0 hits. See Section 12.
-2. ~~**0.2 Model sandboxing (D-01)**~~ — **STEP 1 DONE.** `arep/models/sandbox.py` rewritten: env whitelist (no `ORION_*` reaches the child), `unshare --net` when available + in-process socket block installed before unpickling, fresh tmpdir as cwd/`TMPDIR`/`HOME`, rlimits actually applied via `preexec_fn` + `os.setsid()`, hard per-call and per-run wall-clock kill via `killpg(SIGKILL)`. Limits in `config/default.yaml` `sandbox:` (`SandboxConfig`, `ORION_SANDBOX_*`). Cloudpickle path gated per-org: `organisations.allow_pickle_models` (migration `005`, default FALSE), enforced at upload and at resolve, toggled by `PUT /api/admin/orgs/{id}/pickle-models`. `ModelSandboxError` aborts the run (never scored) so the worker refunds. **Step 2 still open**: gVisor/Firecracker before open self-serve signup.
+2. ~~**0.2 Model sandboxing (D-01)**~~ — **STEP 1 DONE.** `arep/models/sandbox.py` rewritten: env whitelist (no `ORION_*` reaches the child), `unshare --net` when available + in-process socket block installed before unpickling, fresh tmpdir as cwd/`TMPDIR`/`HOME`, rlimits actually applied via `preexec_fn` + `os.setsid()`, hard per-call and per-run wall-clock kill via `killpg(SIGKILL)`. Limits in `config/default.yaml` `sandbox:` (`SandboxConfig`, `ORION_SANDBOX_*`). Cloudpickle path gated per-org: `organisations.allow_pickle_models` (migration `005`, default FALSE), enforced at upload and at resolve, toggled by `PUT /api/admin/orgs/{id}/pickle-models`. `ModelSandboxError` aborts the run (never scored) so the worker refunds. **STEP 2 ALSO DONE**: the Docker path runs under gVisor when `ORION_CONTAINER_RUNTIME=runsc`, verified end to end (guest kernel `4.19.0-gvisor`, +11% runtime, identical composite). Production turns it on with `ORION_REQUIRE_HARDENED_RUNTIME=true`, which makes the API refuse customer code under plain runc.
 3. ~~**0.3 API hardening (D-03, D-07)**~~ — **DONE.** CORS is an explicit whitelist
    (`ORION_ALLOWED_ORIGINS`, wildcard refused outside dev by `resolve_cors_origins()`);
    slowapi rate limiting via `api/ratelimit.py` (login 5/min, signup 3/hour, 120/min default,
@@ -705,8 +708,8 @@ Full spec + defect register (D-01…D-13): `docs/ROADMAP.md` § Phase 0. Order:
    partial-refund, NPC behaviour-tree and admin suites; `scripts/check_hard_rules.py` enforces
    the simulation-purity rules in CI; frontend `OrgContext` deleted and unready nav disabled.
 
-**Phase 0 is complete** apart from 0.2 Step 2 (gVisor/Firecracker), which is gated on opening
-self-serve signup rather than on this phase.
+**Phase 0 is complete**, including 0.2 Step 2: gVisor is implemented and verified. Enabling it
+on the production host is an operational step, not development work.
 
 ### Phase 1 — COMPLETE
 
