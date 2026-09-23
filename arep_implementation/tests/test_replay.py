@@ -376,7 +376,9 @@ def test_a_run_with_no_stored_frames_says_to_replay_instead(client, account):
 def test_another_orgs_frames_are_not_readable(client, account):
     headers, _ = account
     orphan_id, _ = _colliding_run(None)
-    assert client.get(f"/api/runs/{orphan_id}/frames", headers=headers).status_code == 404
+    assert (
+        client.get(f"/api/runs/{orphan_id}/frames", headers=headers).status_code == 404
+    )
 
 
 def test_refusing_to_store_an_implausible_number_of_frames():

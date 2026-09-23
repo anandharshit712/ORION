@@ -309,3 +309,23 @@ def run_batch_simulations(
         )
 
     return {"batch_id": batch_id, "enqueued": num_runs}
+
+
+@celery_app.task(
+    name="arep.worker.tasks.run_comparison",
+    bind=True,
+    acks_late=True,
+    max_retries=MAX_RETRIES,
+)
+def run_comparison(task, comparison_id: int) -> None:
+    """Execute a queued model comparison (Phase 2.4).
+
+    The body lives in `analysis.comparison_runner` so the inline fallback in
+    `api/compare.py` runs exactly the same code. It handles its own failure and
+    refund, and never raises, so there is nothing to retry here: a comparison
+    that failed deterministically fails identically on every attempt, and one
+    that failed transiently has already refunded the customer.
+    """
+    from arep.analysis.comparison_runner import execute_comparison
+
+    execute_comparison(comparison_id)

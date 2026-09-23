@@ -26,6 +26,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    JSON,
     LargeBinary,
 )
 from sqlalchemy.orm import (
@@ -444,6 +445,59 @@ class RunFrameRecord(Base):
 
     def __repr__(self) -> str:
         return f"<RunFrames run={self.run_id} frames={self.frame_count} {self.reason}>"
+
+
+class ComparisonJobRecord(Base):
+    """One queued model-vs-model comparison (Phase 2.4).
+
+    A comparison runs `2 x runs_per_scenario x len(scenario_ids)` simulations,
+    which is minutes of work, so it is queued like a batch rather than run
+    inside the request.
+
+    ``credits_charged`` is recorded rather than recomputed at refund time: the
+    pricing formula can change, and a customer must be refunded what they were
+    actually charged, not what the same job would cost today.
+    """
+
+    __tablename__ = "comparison_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=True, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    model_a_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    model_b_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Newline-separated. A JSON column would be nicer but is not portable
+    # between SQLite and Postgres without a dialect-specific type, and this
+    # field is never queried by content.
+    scenario_ids: Mapped[str] = mapped_column(Text, nullable=False)
+    runs_per_scenario: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    seed: Mapped[int] = mapped_column(Integer, nullable=False, default=42)
+    credits_charged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="queued", index=True
+    )
+    overall_winner: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    recommendation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    has_regression: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    report_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+    completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ComparisonJob {self.id} {self.model_a_id} vs {self.model_b_id} "
+            f"{self.status}>"
+        )
 
 
 class WebhookEventRecord(Base):
