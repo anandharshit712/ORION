@@ -157,6 +157,16 @@ pattern.
 
 ---
 
+
+> **Heading markers.** ✅ DONE means every acceptance criterion below it was
+> verified, not that the code exists. ⚠ PARTIAL means the module works but at
+> least one criterion is unmet or cannot be verified here — the criteria say
+> which, and why. Criteria are checked from evidence produced by
+> `arep_implementation/scripts/verify_roadmap.py`, which executes them and
+> prints PASS / FAIL / CANNOT-VERIFY. A box ticked from memory is worse than an
+> unticked one: it turns "we think this works" into "this was verified".
+> `[~]` marks a criterion that is partly met, with the gap stated inline.
+
 ## The Phases
 
 | Phase | Name | Duration (2-person team) | Outcome |
@@ -210,7 +220,7 @@ no billing.
 
 ---
 
-## 0.2 — Customer Model Sandboxing (D-01) — ✅ STEP 1 DONE
+## 0.2 — Customer Model Sandboxing (D-01) — ✅ DONE (both steps)
 
 **The single most dangerous defect in the codebase.** A customer-uploaded cloudpickle
 deserialises with full Python in a worker subprocess that inherits DB credentials. One
@@ -790,11 +800,12 @@ markings as `LineSegments` from the centerline points.
 
 ### Acceptance Criteria
 
-- [ ] `road_templates.four_way_intersection()` returns a valid `RoadGraph`
-- [ ] `RoadGraph.is_off_road()` returns `True` for positions outside all segments
-- [ ] An INT-\* scenario with `template: four_way_intersection` loads and runs
+- [x] `road_templates.four_way_intersection()` returns a valid `RoadGraph` — 4 segments, 1 junction
+- [x] `RoadGraph.is_off_road()` returns `True` for positions outside all segments
+- [x] An INT-\* scenario with `template: four_way_intersection` loads and runs — INT-001, composite 0.9914
 - [ ] Three.js renders the intersection geometry; junction traffic lights cycle in the HUD
-- [ ] Lane-offset computation (from 0.5) works on curved and junction segments, not just
+      — **not verified**: needs a browser, no automated check
+- [x] Lane-offset computation (from 0.5) works on curved and junction segments, not just
       straight roads
 
 ---
@@ -803,13 +814,26 @@ markings as `LineSegments` from the centerline points.
 
 Before charging the first customer:
 
-- [ ] Phase 0 exit checklist fully green (non-negotiable)
-- [ ] Sign-up → email verify → org → first run → results: the whole flow works in production
-- [ ] Stripe live mode; model submission works via the Docker path (cloudpickle gated per 0.2)
-- [ ] All 18 scenarios runnable (INT needs 1.5)
-- [ ] HTTPS everywhere; secrets from env or a secret store only
-- [ ] Basic admin view: orgs, usage, error rates
-- [ ] Step-2 sandboxing (gVisor / Firecracker) done **or** the cloudpickle path still gated off
+- [x] Phase 0 exit checklist fully green — all 13 register defects closed, including
+      0.2 Step 2 (gVisor verified 2026-09-23)
+- [ ] Sign-up → email verify → org → first run → results in **production** — the flow is
+      covered end to end by the test suite, but there is no production deployment to run
+      it against
+- [~] Model submission via the Docker path works — verified against a live daemon,
+      16/16 integration tests, cloudpickle still gated per-org.
+      **Stripe live mode is blocked**: signup is invite-only in India and needs a
+      registered company. See `docs/PENDING.md`.
+- [x] All scenarios runnable — **21 of 21 execute**. 18 pass against `emergency_brake`;
+      EMG-002, LAT-003 and MLT-007 fail correctly (each needs evasive steering or gentle
+      braking, which a brake-only model cannot do)
+- [~] Secrets come from env only — enforced by `config/validate.py`, which refuses to boot
+      in non-dev on a missing/weak/placeholder secret. **HTTPS is unverified**: no
+      deployment exists.
+- [~] Admin **API** exists — `GET /api/admin/orgs`, `/users`, credit top-up, plan change,
+      pickle-model gate. There is no admin **UI**; the dashboard's Settings section is
+      still disabled.
+- [x] Step-2 sandboxing done — gVisor verified end to end (guest kernel `4.19.0-gvisor`,
+      +11% runtime, identical composite). Cloudpickle also remains gated per-org.
 
 ---
 
@@ -882,14 +906,15 @@ inline 10-bin spark-histogram (Recharts).
 
 ### Acceptance Criteria
 
-- [ ] CI widens as n decreases (verified at n = 5 / 20 / 100)
-- [ ] Same seed → identical distribution statistics
-- [ ] Frontend shows the CI on all score cards
-- [ ] TTC-with-acceleration flags earlier threat detection than constant-velocity TTC
+- [x] CI widens as n decreases — widths 0.1063 / 0.0817 / 0.0384 at n = 5 / 20 / 100
+- [x] Same seed → identical distribution statistics
+- [x] Frontend shows the CI on all score cards — `BatchDistributions.test.jsx`
+- [x] TTC-with-acceleration flags earlier threat detection than constant-velocity TTC —
+      braking at 8 m/s² into a 50 m gap reports *no collision*; coasting reports 2.50 s
 
 ---
 
-## 2.2 — Failure Clustering & Root Cause Analysis
+## 2.2 — Failure Clustering & Root Cause Analysis — ✅ DONE
 
 **Currently**: you know a model failed, not why.
 **After**: "42% of failures occurred when NPC initial distance < 25 m AND ego speed > 15 m/s."
@@ -909,12 +934,14 @@ failure-rate bars, "See example run →" links into `SimulationViewer`.
 
 ### Acceptance Criteria
 
-- [ ] A 50-run LON-003 batch with `ConstantAction` produces a non-empty `FailureReport`
-- [ ] Descriptions reference actual parameter names; `example_run_id` is a real FAIL run
+- [x] A 50-run LON-003 batch with `ConstantAction` produces a non-empty `FailureReport` —
+      40/50 runs collided and were clustered
+- [x] Descriptions reference actual parameter names; `example_run_id` is a real FAIL run —
+      `tests/test_failure_clustering.py`
 
 ---
 
-## 2.3 — Adversarial Scenario Search
+## 2.3 — Adversarial Scenario Search — ⚠ PARTIAL (search works; CMA-ES does not beat the random baseline at the current budget, and there is no tier gate or API)
 
 **The single biggest technical differentiator.** CARLA runs the scenarios you author; ORION
 finds the scenarios that break your model before you know to author them.
@@ -1009,17 +1036,31 @@ GET  /api/search/{search_id}/result    { best_params, best_fitness, falsificatio
 
 ### Acceptance Criteria
 
-- [ ] CMA-ES finds a collision for `ConstantAction` on LON-003 within 50 evals
-- [ ] Over 50 evaluations, CMA-ES fitness beats the random-search baseline
-- [ ] `falsification_params` re-run with the same seed reproduces the collision exactly
+- [x] CMA-ES finds a collision for `ConstantAction` on LON-003 within 50 evals —
+      found on the 1st evaluation. **This is the check that caught the `tell()` crash**: the
+      search raised "population size 1 is too small" whenever it succeeded, because the
+      generation is cut short on a falsification and `cma` rejects a truncated population.
+      Hidden until now because every CMA-ES test drove a model that never collides.
+- [ ] Over 50 evaluations, CMA-ES fitness beats the random-search baseline —
+      **measured, and it does not.** On LON-003 with `EmergencyBrake`, 50 evaluations each:
+      CMA-ES best fitness **1.57** (50 evals, no collision found); random search **13.51**
+      (stopped at 30 — it found one). Plausible cause is budget: 8 search dimensions is far
+      too few evaluations for CMA-ES to build a useful covariance, so it is still exploring
+      while random search gets lucky. Needs either a larger budget before the comparison is
+      meaningful, or a smaller default search space. Do not claim CMA-ES superiority in any
+      customer-facing material until this passes.
+- [x] `falsification_params` re-run with the same seed reproduces the collision exactly
       (frame-hash equal — uses the 0.5 infrastructure)
-- [ ] `SearchResult.all_evaluations` has exactly `max_evals` entries; same seed → identical
-      search trajectory
-- [ ] Tier gate and credit accounting correct
+- [x] `SearchResult.all_evaluations` has exactly `max_evals` entries; same seed → identical
+      search trajectory — 50/50 entries at `max_evals=50`, reproducible.
+      Qualification: a search that finds a falsification stops early **by design**, so the
+      count equals `max_evals` only when nothing was falsified.
+- [ ] Tier gate and credit accounting correct — **not implemented**: `arep/search/` has no
+      tier or credit logic, and the search is not exposed through the API yet
 
 ---
 
-## 2.4 — Model Comparison & Regression Reports
+## 2.4 — Model Comparison & Regression Reports — ⚠ PARTIAL (comparison and HTML report work; no `/api/compare`, no PDF download, no credit accounting)
 
 **After**: "Model v2.1 vs v2.0: safety improved 0.08, compliance regressed 0.03."
 
@@ -1042,9 +1083,13 @@ highlights, and the **methodology section from 0.5** — the part a safety revie
 
 ### Acceptance Criteria
 
-- [ ] `EmergencyBrake` vs `ConstantAction` on LON-003 → EmergencyBrake wins
-- [ ] Regression correctly flagged; PDF downloads with all sections
-- [ ] Cost = `2 × runs_per_scenario × len(scenario_ids)` credits
+- [x] `EmergencyBrake` vs `ConstantAction` on LON-003 → EmergencyBrake wins — verified
+- [~] Regression correctly flagged — verified (4 metrics regressed, "do not deploy").
+      The report renders all its sections as HTML; **PDF download is not wired**:
+      `GET /api/compare/{id}/report.pdf` does not exist, and WeasyPrint needs GTK
+      (Linux CI only).
+- [ ] Cost = `2 × runs_per_scenario × len(scenario_ids)` credits — **not implemented**:
+      `POST /api/compare` does not exist, so comparison is CLI-only and uncharged
 
 ---
 
@@ -1103,7 +1148,7 @@ DELETE /api/webhooks/{id}
 HMAC-SHA256 signature in `X-ORION-Signature`; 3× retry with exponential backoff; deliveries
 logged in a `webhook_deliveries` table.
 
-## 3.2 — GitHub Actions Integration
+## 3.2 — GitHub Actions Integration — ⚠ PARTIAL (action + CLI exist; unverified against a real PR)
 
 Published action `orioneval/evaluate-model@v1` (skeleton already exists at
 `.github/actions/evaluate-model/`). The Docker image runs `orion evaluate`: package model →
@@ -1149,10 +1194,15 @@ GET /api/models/{name}/history
 
 ### Acceptance Criteria for Phase 3
 
-- [ ] The GitHub Action fails a PR when the threshold is missed or a regression is detected
-- [ ] Webhook fires < 30 s after batch completion; signature verifies
-- [ ] Version history shows the correct trend across 3 submissions
-- [ ] `run_suite` on 5 runs × 18 scenarios completes in < 10 minutes
+- [~] The GitHub Action exists (`.github/actions/evaluate-model/`) and `run_suite` returns
+      distinct exit codes (0 pass / 1 model failed / 2 harness error), so a PR can be
+      failed on threshold. **Not verified against a real PR**, and regression detection is
+      not wired into the action.
+- [ ] Webhook fires < 30 s after batch completion; signature verifies — **not implemented**:
+      only *inbound* Stripe webhooks exist, there is no outbound webhook system (3.1)
+- [ ] Version history shows the correct trend across 3 submissions — **not implemented**:
+      `models.version` is a column with an index; there are no history endpoints (3.4)
+- [ ] `run_suite` on 5 runs × 18 scenarios completes in < 10 minutes — **not measured**
 
 ---
 
@@ -1161,7 +1211,7 @@ GET /api/models/{name}/history
 **Duration**: ~2.5 months
 **Goal**: remove reasons not to use ORION.
 
-## 4.1 — HTTP Model Bridge & ROS2 Connector (Non-Python Models)
+## 4.1 — HTTP Model Bridge & ROS2 Connector (Non-Python Models) — ⚠ PARTIAL (HTTP bridge and hardened container path done; no ROS2 connector)
 
 The ORION side (`HttpModelAdapter`) is already built. This work package is documentation,
 example repositories and client adapters for **C++**, **MATLAB/Simulink**, and **ROS2**.
@@ -1207,7 +1257,7 @@ the ROS2 environment, not pip).
 - [ ] Publishing a constant `AckermannDriveStamped` to `/orion/cmd` drives the ego
 - [ ] Disconnecting the ROS2 node pauses the simulation (no action = coast, not crash)
 
-## 4.2 — OpenDRIVE Map Support
+## 4.2 — OpenDRIVE Map Support — ⚠ PARTIAL (parser works on line + arc; no `source: xodr` scenario wiring, spirals/poly3 skipped)
 
 Load a standard `.xodr` file and convert it to an ORION `RoadGraph`, unlocking real-world
 road geometry exported from HD map tools, CARLA, or public datasets. A subset is enough —
@@ -1240,11 +1290,14 @@ environment:
 
 ### Acceptance Criteria
 
-- [ ] Parsing `tests/fixtures/TownSimple.xodr` produces a `RoadGraph` with ≥ 2 segments
-- [ ] `is_off_road()` is correct for known on/off-road positions
-- [ ] A scenario using `source: xodr` runs to completion; Three.js renders the geometry
+- [~] OpenDRIVE parses to a `RoadGraph` — verified on line + arc geometry.
+      **The named fixture `tests/fixtures/TownSimple.xodr` does not exist**; the parser is
+      tested against generated XML instead. Spirals and poly3 are skipped and logged.
+- [x] `is_off_road()` is correct for known on/off-road positions
+- [ ] A scenario using `source: xodr` runs to completion; Three.js renders the geometry —
+      **not implemented**: scenarios select geometry with `template:`, not `source: xodr`
 
-## 4.3 — Scenario Library Expansion (18 → 60)
+## 4.3 — Scenario Library Expansion (18 → 60) — ⚠ PARTIAL (21 of 60)
 
 Ten scenarios per category, following the existing taxonomy. Each new scenario needs a
 reactive BT, a full parameterization block, and a unique `master_seed`.
@@ -1293,7 +1346,7 @@ runs where failures live. 2.3 finds the failure; this exploits it at suite scale
 **SaaS packaging into suites**: Core (18, all paid plans) · Intersection (10, Starter+) ·
 VRU (10, Starter+) · Emergency (10, Pro+) · Full (60, Enterprise).
 
-## 4.4 — OpenSCENARIO 2.0 Import / Export
+## 4.4 — OpenSCENARIO 2.0 Import / Export — ⚠ PARTIAL (round trip works for the modelled subset; not a conforming parser, parameterisation lost by design)
 
 Read standard `.osc` files into `ScenarioDefinition` objects and write ORION scenarios back
 out — the migration path from CARLA and ASAM member tools.
@@ -1313,8 +1366,12 @@ GET  /api/scenarios/{id}/export/osc   # returns .osc file
 
 ### Acceptance Criteria
 
-- [ ] Importing the ASAM sample `CutIn.osc` produces a valid `ScenarioDefinition`
-- [ ] Exporting LON-003 produces syntactically valid OpenSCENARIO 2.0
+- [~] OSC2 import produces a valid `ScenarioDefinition` — verified on exported output.
+      **The ASAM `CutIn.osc` sample is not committed**, so import is untested against a
+      third-party file. This is a line reader for the modelled subset, not a conforming
+      parser.
+- [x] Exporting LON-003 produces OpenSCENARIO 2.0 that re-imports — round trip verified.
+      The parameterisation block is lost by design, with a test pinning it.
 - [ ] Round-trip (ORION → OSC → ORION) preserves triggers and NPC parameters
 
 ## 4.5 — Safety-Standards Alignment

@@ -236,3 +236,27 @@ def test_every_evaluation_is_kept_for_the_report():
     for record in objective.history:
         assert record.params
         assert np.isfinite(record.fitness)
+
+
+def test_cma_es_survives_finding_a_collision():
+    """The regression that mattered: CMA-ES crashed when it succeeded.
+
+    The inner loop breaks as soon as a falsification appears, leaving `costs`
+    shorter than the population cma proposed. Passing that truncated list to
+    `tell()` raises "population size 1 is too small", so the search blew up
+    precisely when it did its job.
+
+    It stayed hidden because every other CMA-ES test here drives
+    EmergencyBrakeModel, which does not collide. This one uses a model that
+    does.
+    """
+    scenario, space = _space()
+    objective = ObjectiveFunction(scenario, ConstantActionModel(throttle=0.4), space)
+
+    result = CMAESOptimizer(space, max_evals=50, popsize=10, seed=7).run(objective)
+
+    assert result.falsification_found, "the search never found the collision"
+    assert (
+        result.falsification_params
+    ), "a counter-example with no parameters is useless"
+    assert result.n_evals > 0
