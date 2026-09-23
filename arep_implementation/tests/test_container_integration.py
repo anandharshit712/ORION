@@ -358,7 +358,8 @@ def test_the_model_runs_under_gvisor_when_configured(runner, monkeypatch):
         version = _exec(
             r.container_name, "sh", "-c", "uname -v; cat /proc/version"
         ).stdout
-        assert "gVisor" in version, f"not running under gVisor: {version!r}"
+        # The guest kernel names itself "4.19.0-gvisor", lower case.
+        assert "gvisor" in version.lower(), f"not running under gVisor: {version!r}"
     finally:
         monkeypatch.undo()
         reload_config()

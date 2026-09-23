@@ -127,7 +127,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 
 | ID | Defect | Severity | Fixed in |
 | --- | --- | --- | --- |
-| D-01 | ~~Cloudpickle model upload = arbitrary code execution in worker; subprocess inherits `ORION_DATABASE_URL`~~ | CRITICAL | 0.2 Step 1 — **done**; Step 2 (gVisor/Firecracker) before open signup |
+| D-01 | ~~Cloudpickle model upload = arbitrary code execution in worker; subprocess inherits `ORION_DATABASE_URL`~~ | CRITICAL | 0.2 Steps 1 and 2 — **done**. gVisor verified end to end; enabling it in production is an ops step |
 | D-02 | ~~JWT secret falls back to a hardcoded string; hardcoded DB creds; plaintext creds in docker-compose~~ | CRITICAL | 0.1 — **done** |
 | D-03 | ~~CORS `allow_origins=["*"]` + zero rate limiting on login/signup (`api/app.py`)~~ | CRITICAL | 0.3 — **done** |
 | D-04 | ~~JWT stored in `localStorage` (`AuthContext.jsx`); signup auto-activates with no email verification~~ | CRITICAL | 0.4 — **done** |
@@ -141,7 +141,7 @@ weights are frozen — see `CLAUDE.md` § 7.
 | D-12 | ~~Weight transfer uses previous-step acceleration~~ | LOW | 0.5 — **done** |
 | D-13 | ~~SQLite dev vs Postgres prod — `FOR UPDATE` is a no-op on SQLite, race bugs invisible in dev~~ | MED | 0.6 — **done** (CI job on Postgres + Alembic round trip) |
 
-**Current position**: Phases 0 and 1 are **complete** except 0.2 Step 2 (gVisor/Firecracker), which is gated on open self-serve signup rather than on this phase. All thirteen register defects are closed. Phase 2-4 analysis, reporting and interop modules are implemented.
+**Current position**: Phases 0 and 1 are **complete**, including 0.2 Step 2 — gVisor is implemented and verified (`ORION_CONTAINER_RUNTIME=runsc`, guest kernel reports `4.19.0-gvisor`, +11% runtime, identical score). What remains before open signup is an **operational** step: enabling it on the production host with `ORION_REQUIRE_HARDENED_RUNTIME=true`. All thirteen register defects are closed. Phase 2-4 analysis, reporting and interop modules are implemented.
 
 Stripe holds placeholder price IDs and has had no live round trip, because Stripe signup is invite-only in India and requires a registered company. This blocks nothing: `billing_enabled` defaults to false and credits are granted by hand via `POST /api/admin/orgs/{id}/credits`.
 
@@ -271,7 +271,9 @@ dev-only target for this path.
 - [x] A model that calls `socket.connect()` fails; run marked failed, credit refunded
 - [x] A model that sleeps forever is killed at the wall-clock limit; credit refunded
 - [x] A self-serve org cannot use the cloudpickle path without manual enablement
-- [ ] Step 2: model process runs under gVisor/Firecracker (before open signup)
+- [x] Step 2: model process runs under gVisor — verified by `tests/test_container_integration.py`;
+      turning it on in production means `ORION_CONTAINER_RUNTIME=runsc` plus
+      `ORION_REQUIRE_HARDENED_RUNTIME=true`, which makes the API refuse customer code under runc
 
 ---
 
