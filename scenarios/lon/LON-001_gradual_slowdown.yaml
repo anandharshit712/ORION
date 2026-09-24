@@ -50,3 +50,24 @@ termination:
   timeout: 30.0
 
 master_seed: 1001
+parameterization:
+  # Approach speed and following distance are what make a gradual slowdown easy
+  # or hard. The lead's deceleration stays gentle: a hard stop here would turn
+  # this into LON-002, and one scenario tests one requirement.
+  ego_velocity:
+    min: 19.44     # 70 km/h
+    max: 27.78     # 100 km/h
+  npc_overrides:
+    lead_vehicle:
+      initial_x:
+        min: 35.0
+        max: 70.0
+      initial_velocity:
+        min: 19.44
+        max: 27.78
+      parameters:
+        initial_decel:
+          min: -2.5
+          max: -1.0
+
+master_seed: 1001

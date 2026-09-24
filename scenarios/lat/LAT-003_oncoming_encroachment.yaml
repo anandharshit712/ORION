@@ -51,3 +51,27 @@ termination:
   timeout: 15.0
 
 master_seed: 2003
+parameterization:
+  # Closing speed is the whole difficulty: both vehicles' speeds add. The
+  # trigger distance decides how much warning the ego gets before the oncoming
+  # vehicle crosses the line.
+  ego_velocity:
+    min: 11.11     # 40 km/h
+    max: 16.67     # 60 km/h
+  npc_overrides:
+    oncoming_vehicle:
+      initial_x:
+        min: 60.0
+        max: 110.0
+      initial_velocity:
+        min: 11.11
+        max: 19.44
+      parameters:
+        trigger_value:
+          min: 25.0
+          max: 55.0
+        lateral_speed:
+          min: 0.8
+          max: 2.2
+
+master_seed: 2003

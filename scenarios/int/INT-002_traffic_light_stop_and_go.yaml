@@ -55,3 +55,11 @@ termination:
   timeout: 25.0
 
 master_seed: 3002
+parameterization:
+  # Approach speed decides whether the ego meets the light in the dilemma zone:
+  # too close to stop comfortably, too far to clear it. That is the hard case.
+  ego_velocity:
+    min: 8.33      # 30 km/h
+    max: 13.89     # 50 km/h
+
+master_seed: 3002

@@ -212,6 +212,47 @@ Every scenario in the ORION taxonomy must be defined with this schema — no exc
 | Real-World Crash Anchor | If this scenario maps to a documented crash type, cite it (NHTSA typology code, Euro NCAP test code, etc.). If it does not map to any real crash type, justify its inclusion. |
 | Engine Trigger Code | The identifier used by the Dynamic Execution Engine to instantiate this scenario's NPC behavior tree. This is the integration link to the implementation. E.g., TRIGGER::LON_EMERGENCY_STOP_V1. |
 
+#### 1.6.1 Parameterization is mandatory (RULE)
+
+> **RULE** — Every scenario MUST declare a `parameterization:` block with at least one
+> `{min, max}` range. A scenario with no ranges is a single fixed situation, not a test.
+
+The schema above has always listed a "Parameterization Profile" as required. It was not
+enforced, and by 2026-09-24 **eleven of twenty-one production scenarios had no
+`parameterization:` block at all**. Those scenarios could be run, but they could not be
+*searched*: adversarial search varies declared ranges, so with none declared it has nothing
+to explore and returns immediately. Half the library was invisible to the feature meant to
+find its hardest cases.
+
+All twenty-one now declare ranges (1–11 dimensions). The rule is enforced by
+`tests/test_scenario_library.py`, so a new scenario without ranges fails the suite rather
+than silently opting out of search.
+
+**What to vary, and what not to.** Ranges vary the *difficulty* of the behavioural
+requirement, never the requirement itself:
+
+- **Vary**: ego approach speed, adversary speed, spawn distance, trigger distance,
+  deceleration strength, hesitation probability, pedestrian walk speed.
+- **Do not vary**: anything that changes what the scenario *is*. A stationary-obstacle
+  scenario keeps a stationary obstacle in every draw. A head-on scenario stays head-on. If a
+  range would turn the scenario into a different behavioural requirement, it belongs in a
+  different scenario — see §1.1.
+- **Do not vary the thing under test.** EMG-004 tests black-ice recovery, so surface
+  friction is fixed and *entry speed* is the range. Varying the friction would be varying
+  the question.
+
+**Make the range wide enough to include failures.** A range where every draw is comfortably
+survivable tests nothing. LON-004's sighting distance deliberately reaches inside the
+braking distance for its highest speed, so some draws are genuinely unavoidable — a model
+should be measured on those too.
+
+**Watch the axis on rotated geometry.** `ego_x_jitter` shifts x, which is *longitudinal* on
+an eastbound scenario and *lateral* on a northbound arm. INT-003 once applied ±4 m of it
+while climbing a north-facing arm, which is wider than the lane: every run started in
+oncoming traffic. MLT-003 documents avoiding the same trap on its 15° ramp.
+
+---
+
 ### 1.7 The Full Taxonomy Structure: How Many Scenarios and How to Count Them
 
 The number of scenarios should emerge from coverage analysis, not be decided in advance. Here is how to arrive at the right number:

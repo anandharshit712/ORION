@@ -155,7 +155,11 @@ def test_three_submissions_show_the_trend_oldest_first(client, account):
     body = r.json()
 
     versions = body["versions"]
-    assert [v["version"] for v in versions] == ["v1", "v2", "v3"], "a trend reads forwards"
+    assert [v["version"] for v in versions] == [
+        "v1",
+        "v2",
+        "v3",
+    ], "a trend reads forwards"
     assert body["latest_version"] == "v3"
 
     assert versions[0]["composite_mean"] == pytest.approx(0.71)
@@ -194,7 +198,7 @@ def test_a_small_dip_is_not_a_regression(client, account):
 
 
 def test_an_unevaluated_version_is_listed_not_hidden(client, account):
-    """"Uploaded but never run" is a real state. Hiding it would make a
+    """ "Uploaded but never run" is a real state. Hiding it would make a
     submission look lost."""
     headers, org_id = account
     _submit_version(org_id, "unrun", "v1", composites=(), created_offset=0)
@@ -218,7 +222,9 @@ def test_an_unevaluated_version_does_not_break_the_chain(client, account):
     body = client.get("/api/models/gappy/history", headers=headers).json()
     v3 = body["versions"][2]
 
-    assert v3["composite_delta"] == pytest.approx(-0.40), "compared against v1, not nothing"
+    assert v3["composite_delta"] == pytest.approx(
+        -0.40
+    ), "compared against v1, not nothing"
     assert v3["is_regression"] is True
 
 

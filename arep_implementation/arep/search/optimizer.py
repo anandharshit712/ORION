@@ -30,6 +30,115 @@ from arep.utils.logging_config import get_logger
 logger = get_logger("search.optimizer")
 
 
+# Two failures whose parameters differ by less than this fraction of each
+# dimension's declared range are treated as the same failure.
+#
+# Needed because CMA-ES converges: once it finds a failing region it samples
+# that region repeatedly, so a search that keeps going returns forty variations
+# of one bug. Reporting them as forty findings would be worse than reporting
+# one, because it buries the *other* failure modes in noise.
+DISTINCT_FAILURE_TOLERANCE = 0.10
+
+# Cap on how many counter-examples are returned. A customer reproduces the worst
+# few; the rest is what `failure_rate` and `analysis/failure_clustering.py` are
+# for.
+MAX_REPORTED_FAILURES = 10
+
+# CMA-ES needs roughly 10 evaluations per search dimension before it beats
+# random sampling — it spends the early evaluations learning the shape of the
+# space. Measured on LON-003 (8 dimensions): at 50 evaluations random search
+# won (13.5 vs 1.6); at 100 CMA-ES won (14.9 vs 13.5) and found a *worse*
+# failure. Verified 3/3 across scenarios, models and seeds.
+#
+# Scaled per scenario rather than a flat floor, because the library runs from 1
+# to 11 dimensions: a flat 150 would overcharge a one-dimensional scenario
+# fifteen-fold for a search that converged at evaluation ten.
+EVALS_PER_DIMENSION = 10
+
+# Even a one-dimensional space needs enough draws for the result to mean
+# anything; 10 evaluations is a sampling accident, not a search.
+MIN_EVALS = 30
+
+
+def recommended_evals(n_dims: int) -> int:
+    """Smallest evaluation budget at which a search is worth trusting.
+
+    Below this CMA-ES is still exploring, so it underperforms random sampling
+    and the result understates how bad the model is — which is the dangerous
+    direction for a safety tool to be wrong in.
+    """
+    return max(MIN_EVALS, EVALS_PER_DIMENSION * max(n_dims, 1))
+
+
+def distinct_failures(
+    records, space=None, tolerance: float = DISTINCT_FAILURE_TOLERANCE
+):
+    """Collapse near-identical failures, keeping the worst of each group.
+
+    Records are expected worst-first, so the representative kept for each group
+    is the most severe example of that failure mode — the one to reproduce.
+
+    Closeness is measured as a fraction of each dimension's **declared range**,
+    not of its value. Those are very different tests: 10% of a velocity of 25
+    is 2.5 m/s, but if the declared range is [24, 26] then 2.5 spans the whole
+    space and every sample collapses into one group. Passing `space` is what
+    makes the comparison meaningful; without it this falls back to a
+    relative-to-value test, which over eight dimensions collapses almost
+    nothing.
+
+    Deliberately a greedy pass rather than real clustering: it runs on a few
+    hundred records at most, and `analysis/failure_clustering.py` already exists
+    for the case where a customer wants fault *conditions* rather than a
+    de-duplicated list.
+    """
+    ranges = _dimension_ranges(space) if space is not None else None
+    kept: list = []
+    for record in records:
+        if not any(_near(record.params, k.params, tolerance, ranges) for k in kept):
+            kept.append(record)
+    return kept
+
+
+def _dimension_ranges(space) -> dict:
+    """Declared width of each search dimension, by flattened name."""
+    return {
+        dim.name: max(float(dim.high) - float(dim.low), 1e-9)
+        for dim in space.dimensions
+    }
+
+
+def _near(a: dict, b: dict, tolerance: float, ranges=None) -> bool:
+    """Whether two parameter sets represent the same failure.
+
+    A key present in one set and not the other makes them different: they are
+    not comparable, so they are not the same finding.
+    """
+    flat_a, flat_b = _flatten(a), _flatten(b)
+    if flat_a.keys() != flat_b.keys():
+        return False
+
+    for key, value_a in flat_a.items():
+        value_b = flat_b[key]
+        if ranges is not None and key in ranges:
+            scale = ranges[key]
+        else:
+            scale = max(abs(value_a), abs(value_b), 1e-9)
+        if abs(value_a - value_b) / scale > tolerance:
+            return False
+    return True
+
+
+def _flatten(params: dict, prefix: str = "") -> dict:
+    flat: dict = {}
+    for key, value in params.items():
+        name = f"{prefix}{key}"
+        if isinstance(value, dict):
+            flat.update(_flatten(value, prefix=f"{name}."))
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            flat[name] = float(value)
+    return flat
+
+
 @dataclass
 class SearchResult:
     """Complete result of an adversarial search run."""
@@ -42,6 +151,20 @@ class SearchResult:
     all_evaluations: List[EvaluationRecord] = field(default_factory=list)
     optimizer_used: str = "unknown"
     converged: bool = False
+
+    # Every distinct failure found, worst first, when the search was told to
+    # keep going past the first one. `falsification_params` stays the first
+    # failure so existing callers are unaffected.
+    #
+    # One counter-example proves the model can fail. Several show how many
+    # different ways it fails, and two failures from opposite corners of the
+    # parameter space are two bugs rather than one.
+    falsifications: List[Dict[str, Any]] = field(default_factory=list)
+    falsification_count: int = 0
+    distinct_failure_count: int = 0
+    # Failures as a fraction of evaluations. When most of the space fails, *that*
+    # is the finding — a list of 81 settings buries it.
+    failure_rate: float = 0.0
 
 
 class CMAESOptimizer:
@@ -66,12 +189,19 @@ class CMAESOptimizer:
         popsize: int = 10,
         max_evals: int = 200,
         seed: int = 0,
+        stop_on_first_falsification: bool = True,
     ):
         self.space = space
         self.sigma0 = sigma0
         self.popsize = popsize
         self.max_evals = max_evals
         self.seed = seed
+        # Stopping at the first collision returns one counter-example for the
+        # least compute. Continuing spends the whole budget and returns every
+        # failure mode it can find, which is what a customer fixing the model
+        # actually wants - and makes the cost predictable, since the search then
+        # always uses exactly max_evals evaluations.
+        self.stop_on_first_falsification = stop_on_first_falsification
 
     def run(self, objective: ObjectiveFunction) -> SearchResult:
         """
@@ -145,10 +275,12 @@ class CMAESOptimizer:
                 fitness = objective(candidate, seed=self.seed + evaluations)
                 evaluations += 1
                 costs.append(-fitness)
-                if objective.falsification_found:
+                if objective.falsification_found and self.stop_on_first_falsification:
+                    break
+                if evaluations >= self.max_evals:
                     break
 
-            if objective.falsification_found:
+            if objective.falsification_found and self.stop_on_first_falsification:
                 # Stop without telling CMA-ES about this generation. The inner
                 # loop broke early, so `costs` is shorter than the population
                 # cma proposed, and cma rejects a truncated one outright
@@ -162,10 +294,15 @@ class CMAESOptimizer:
                 logger.info("Falsification found after %d evaluations", evaluations)
                 break
 
-            strategy.tell(candidates, costs)
+            if len(costs) == len(candidates):
+                strategy.tell(candidates, costs)
 
         return self._result(
-            objective, evaluations, "cma-es", converged=bool(strategy.stop())
+            objective,
+            evaluations,
+            "cma-es",
+            converged=bool(strategy.stop()),
+            space=self.space,
         )
 
     def strategy_bounds(self):
@@ -173,9 +310,13 @@ class CMAESOptimizer:
         return self.space.bounds
 
     @staticmethod
-    def _result(objective, evaluations, optimizer_used, converged) -> SearchResult:
+    def _result(
+        objective, evaluations, optimizer_used, converged, space=None
+    ) -> SearchResult:
         best = objective.best_record
         falsifier = objective.falsification_record
+        failures = objective.falsification_records
+        distinct = distinct_failures(failures, space=space)
         return SearchResult(
             best_params=best.params if best else {},
             best_fitness=best.fitness if best else 0.0,
@@ -185,6 +326,13 @@ class CMAESOptimizer:
             all_evaluations=objective.history,
             optimizer_used=optimizer_used,
             converged=converged,
+            falsifications=[
+                {"params": r.params, "seed": r.seed, "fitness": r.fitness}
+                for r in distinct[:MAX_REPORTED_FAILURES]
+            ],
+            falsification_count=len(failures),
+            distinct_failure_count=len(distinct),
+            failure_rate=(len(failures) / evaluations) if evaluations else 0.0,
         )
 
 
@@ -208,10 +356,12 @@ class RandomSearchOptimizer:
         space: SearchSpace,
         n_samples: int = 50,
         seed: int = 0,
+        stop_on_first_falsification: bool = True,
     ):
         self.space = space
         self.n_samples = n_samples
         self.seed = seed
+        self.stop_on_first_falsification = stop_on_first_falsification
 
     def run(self, objective: ObjectiveFunction) -> SearchResult:
         """
@@ -227,7 +377,7 @@ class RandomSearchOptimizer:
         for index in range(self.n_samples):
             objective(self.space.random_point(rng), seed=self.seed + index)
             evaluations += 1
-            if objective.falsification_found:
+            if objective.falsification_found and self.stop_on_first_falsification:
                 logger.info("Falsification found after %d samples", evaluations)
                 break
 
@@ -236,4 +386,5 @@ class RandomSearchOptimizer:
             evaluations,
             "random",
             converged=True,
+            space=self.space,
         )

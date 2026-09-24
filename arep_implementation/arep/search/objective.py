@@ -157,6 +157,23 @@ class ObjectiveFunction:
                 return r
         return None
 
+    @property
+    def falsification_records(self) -> List[EvaluationRecord]:
+        """Every collision-producing record, worst first.
+
+        One counter-example proves the model can fail. Several show *how many
+        different ways* it fails, which is the more useful answer: two failures
+        from opposite corners of the parameter space are two bugs, not one.
+
+        Ordered by fitness so the worst case is first — that is the one a
+        reviewer reproduces before the others.
+        """
+        return sorted(
+            (r for r in self._history if r.collision_occurred),
+            key=lambda r: r.fitness,
+            reverse=True,
+        )
+
     @staticmethod
     def compute_fitness(
         collision_occurred: bool,

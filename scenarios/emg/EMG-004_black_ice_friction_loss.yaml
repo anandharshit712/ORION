@@ -49,3 +49,12 @@ termination:
   timeout: 20.0
 
 master_seed: 5004
+parameterization:
+  # Surface friction is set by the scenario, not varied here — it is what the
+  # scenario *is*. Entry speed is the variable that decides whether the ego can
+  # recover, and it is the one a customer can act on.
+  ego_velocity:
+    min: 11.11     # 40 km/h
+    max: 22.22     # 80 km/h
+
+master_seed: 5004

@@ -46,3 +46,18 @@ termination:
   timeout: 20.0
 
 master_seed: 1004
+parameterization:
+  # Speed and sighting distance together decide whether stopping is possible at
+  # all. The lower end of the distance range is deliberately inside the braking
+  # distance for the upper end of the speed range, so some draws are genuinely
+  # unavoidable — a model should be judged on those too.
+  ego_velocity:
+    min: 11.11     # 40 km/h
+    max: 22.22     # 80 km/h
+  npc_overrides:
+    stopped_vehicle:
+      initial_x:
+        min: 30.0
+        max: 90.0
+
+master_seed: 1004
