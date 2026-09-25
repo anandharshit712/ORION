@@ -500,6 +500,79 @@ class ComparisonJobRecord(Base):
         )
 
 
+class WebhookRecord(Base):
+    """A customer endpoint to notify when something finishes (Phase 3.1).
+
+    ``secret`` is stored in plaintext deliberately, unlike a password. It is a
+    *shared* secret: we need the original to compute the HMAC the customer
+    verifies, so a one-way hash would make the feature impossible. It is
+    therefore credential material at rest — treat the column accordingly, and
+    never return it from the API after creation.
+    """
+
+    __tablename__ = "webhooks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=True, index=True
+    )
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    # Newline-separated event names. Not JSON: portable across SQLite and
+    # Postgres without a dialect-specific type, and never queried by content.
+    events: Mapped[str] = mapped_column(Text, nullable=False)
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+    last_delivery_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    # Consecutive failures. A endpoint that has been broken for a long time is
+    # disabled rather than retried forever, because the alternative is spending
+    # worker time on an address nobody is listening at.
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+
+    def __repr__(self) -> str:
+        return f"<Webhook {self.id} org={self.org_id} {'active' if self.active else 'disabled'}>"
+
+
+class WebhookDeliveryRecord(Base):
+    """One delivery attempt.
+
+    Records the outcome and nothing else. No response body: echoing it back
+    would turn a webhook into a way to read whatever the URL pointed at. The
+    error is a category, never the transport's own message, because
+    "connection refused" and "timed out" are different enough to map a network
+    with.
+    """
+
+    __tablename__ = "webhook_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    webhook_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("webhooks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event: Mapped[str] = mapped_column(String(64), nullable=False)
+    delivered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+
+    def __repr__(self) -> str:
+        return f"<WebhookDelivery {self.id} hook={self.webhook_id} {self.event} ok={self.delivered}>"
+
+
 class WebhookEventRecord(Base):
     """
     A webhook delivery we have seen, keyed by the provider's own event id.
