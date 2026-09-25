@@ -23,7 +23,7 @@ Tasks are JSON-serialisable only — never pass ORM objects across the wire.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy.exc import DBAPIError, OperationalError
 
@@ -233,7 +233,30 @@ def execute_single_run(
 
         batch_repo = BatchJobRepository(db)
         batch_repo.increment_completed(batch_id)
-        batch_repo.finalise_if_done(batch_id)
+        finished = batch_repo.finalise_if_done(batch_id)
+        notify: Optional[Dict[str, Any]] = None
+        if finished is not None and finished.status == "completed":
+            # Captured inside the session, dispatched outside it: a webhook can
+            # take seconds, and holding a database transaction open across a
+            # network call to an address the customer chose is how a slow
+            # endpoint becomes a connection-pool outage.
+            notify = {
+                "batch_id": finished.id,
+                "org_id": finished.org_id,
+                "scenario_name": finished.scenario_name,
+                "model_name": finished.model_name,
+                "num_runs": finished.num_runs,
+                "runs_completed": finished.runs_completed,
+                "runs_failed": finished.runs_failed,
+                "composite_mean": finished.composite_mean,
+                "collision_rate": finished.collision_rate,
+            }
+
+    if notify is not None:
+        from arep.api.webhooks import dispatch
+
+        org_id = notify.pop("org_id")
+        dispatch("batch.completed", org_id, notify)
 
     return {
         "batch_id": batch_id,
