@@ -1165,7 +1165,7 @@ version, ORION evaluates it, the pipeline fails if safety regresses. "GitHub Act
 autonomous driving safety." Large AV companies build this internally for millions; ORION
 hosts it.
 
-## 3.1 — Webhook System
+## 3.1 — Webhook System — ✅ DONE
 
 ```
 POST   /api/webhooks   { url, events: ["run.completed","batch.completed","regression.detected","search.completed"], secret }
@@ -1226,8 +1226,20 @@ GET /api/models/{name}/history
       distinct exit codes (0 pass / 1 model failed / 2 harness error), so a PR can be
       failed on threshold. **Not verified against a real PR**, and regression detection is
       not wired into the action.
-- [ ] Webhook fires < 30 s after batch completion; signature verifies — **not implemented**:
-      only *inbound* Stripe webhooks exist, there is no outbound webhook system (3.1)
+- [x] Webhook fires after batch completion; signature verifies —
+      `POST /api/webhooks`, dispatched from the worker the moment
+      `finalise_if_done` transitions a batch, so latency is the delivery itself rather than a
+      poll interval. HMAC-SHA256 over `<timestamp>.<body>` in `X-ORION-Signature`, the
+      construction Stripe uses, so customers already have verifying code.
+
+      The SSRF controls are the substance here, not the plumbing: a webhook makes ORION
+      fetch an address the customer chose, from inside the network they cannot reach.
+      Every resolved address is checked (not just the first), ranges come from `ipaddress`
+      rather than a hand-written CIDR list so `::ffff:169.254.169.254` is caught, redirects
+      are never followed, and the URL is re-validated at send time because DNS changing
+      between registration and delivery *is* the rebinding attack. Transport failures
+      collapse to one category, since "refused in 1 ms" versus "timed out in 5 s" maps an
+      internal network.
 - [x] Version history shows the correct trend across 3 submissions —
       `GET /api/models/{name}/history`. An unevaluated version is listed but does not
       advance the baseline, so the next real version is still compared against the last
