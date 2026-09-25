@@ -244,3 +244,63 @@ def test_every_scenario_starts_the_ego_inside_a_lane(path: Path):
         f"ego starts straddling the lane line: offset={offset:+.3f} m, "
         f"half-width={half_width:.3f} m, lane width={lane.width:.3f} m"
     )
+
+
+# The production library only. LIBRARY and BASIC both sit under a directory
+# called "scenarios", so they cannot be told apart by name.
+PRODUCTION = [p for p in ALL if LIBRARY in p.parents]
+
+
+# ── Parameterisation (docs/ARCHITECTURE.md §1.6.1) ───────────────────────
+#
+# The schema always listed a "Parameterization Profile" as required, and it was
+# never enforced: by 2026-09-24 eleven of the twenty-one production scenarios
+# had no `parameterization:` block. Those could be run but not *searched* —
+# adversarial search varies declared ranges, so with none declared it returns
+# immediately. Half the library was invisible to the feature built to find its
+# hardest cases.
+
+
+@pytest.mark.parametrize(
+    "path",
+    PRODUCTION,
+    ids=lambda p: p.name,
+)
+def test_every_production_scenario_declares_ranges(path: Path):
+    """A scenario with no ranges is one fixed situation, not a test.
+
+    The two v1 fixtures under arep_implementation/scenarios/basic/ are exempt:
+    they exist to pin engine behaviour, not to challenge a model.
+    """
+    from arep.search.space import SearchSpace
+
+    scenario, _ = ScenarioParser().parse_file(str(path))
+    n_dims = SearchSpace(scenario).n_dims
+
+    assert n_dims > 0, (
+        f"{path.name} declares no parameterization ranges, so adversarial "
+        f"search has nothing to explore and will return immediately"
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    PRODUCTION,
+    ids=lambda p: p.name,
+)
+def test_declared_ranges_are_ordered_and_non_empty(path: Path):
+    """min < max, always.
+
+    An inverted range samples nothing meaningful, and an equal one is a scalar
+    wearing a range's clothes — it would count as a search dimension while
+    having nothing to search.
+    """
+    from arep.search.space import SearchSpace
+
+    scenario, _ = ScenarioParser().parse_file(str(path))
+
+    for dim in SearchSpace(scenario).dimensions:
+        assert dim.low < dim.high, (
+            f"{path.name}: range {dim.name} is [{dim.low}, {dim.high}] — "
+            f"min must be strictly less than max"
+        )

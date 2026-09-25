@@ -54,3 +54,16 @@ termination:
   timeout: 25.0
 
 master_seed: 3001
+parameterization:
+  # Whether the crossing vehicle arrives before, with, or after the ego is the
+  # entire test. Its speed and start distance set that timing.
+  ego_velocity:
+    min: 5.56      # 20 km/h
+    max: 11.11     # 40 km/h
+  npc_overrides:
+    crossing_vehicle:
+      initial_velocity:
+        min: 5.56
+        max: 11.11
+
+master_seed: 3001

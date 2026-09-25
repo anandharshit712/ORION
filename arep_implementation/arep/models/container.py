@@ -18,6 +18,13 @@ What this adds, per run:
   - the port published on 127.0.0.1 only, never 0.0.0.0
   - no environment inherited from the API process — the same rule the subprocess
     sandbox already follows, because ORION_* holds database credentials
+  - the network named by ``ORION_CONTAINER_NETWORK``, whose egress the host
+    filters. **Docker's default bridge has unrestricted outbound access** — a
+    customer image reaches the cloud metadata endpoint, the database and Redis
+    directly, which was true of this path until 2026-09-25 while the subprocess
+    sandbox had blocked network since 0.2. ``--internal`` is not the answer: it
+    blocks egress but also breaks ``--publish``, and ORION talks to the model
+    over that published port. See ``infrastructure/CONTAINER_EGRESS.md``.
 
 and, when configured, ``--runtime=runsc`` (gVisor): a user-space kernel between the
 model and the host. That is the isolation D-01 step 2 was waiting for. It is opt-in
@@ -80,11 +87,20 @@ class ContainerModelRunner(ModelInterface):
     def _start(self) -> None:
         cfg = get_config().sandbox
 
-        if shutil.which("docker") is None:
+        # Configuration guards first, deliberately. They are deterministic and
+        # cheap, and a deployment that has not been locked down should say so
+        # even on a machine without Docker -- otherwise the operator sees
+        # "Docker is not available", fixes that, and meets the real problem
+        # later. It also makes these guards testable anywhere.
+        if cfg.require_restricted_network and not cfg.container_network:
             raise ModelSandboxError(
-                "Docker is not available on this host, so a Docker-submitted "
-                "model cannot be run. Refusing rather than falling back to an "
-                "unsandboxed HTTP call."
+                "require_restricted_network is set but no container_network is "
+                "configured. Customer containers would join Docker's default "
+                "bridge, which has unrestricted outbound access: the image "
+                "could reach the cloud metadata endpoint, the database and "
+                "Redis directly. Set ORION_CONTAINER_NETWORK to a bridge whose "
+                "egress is filtered (see infrastructure/), or clear the "
+                "requirement."
             )
 
         if cfg.require_hardened_runtime and not cfg.container_runtime:
@@ -93,6 +109,13 @@ class ContainerModelRunner(ModelInterface):
                 "configured. Set ORION_CONTAINER_RUNTIME=runsc (gVisor), or "
                 "clear the requirement — customer code will not be run under "
                 "the default runtime while this is on."
+            )
+
+        if shutil.which("docker") is None:
+            raise ModelSandboxError(
+                "Docker is not available on this host, so a Docker-submitted "
+                "model cannot be run. Refusing rather than falling back to an "
+                "unsandboxed HTTP call."
             )
 
         host_port = _free_port()
@@ -157,6 +180,13 @@ class ContainerModelRunner(ModelInterface):
 
         if cfg.container_runtime:
             command += ["--runtime", cfg.container_runtime]
+
+        if cfg.container_network:
+            # A named bridge, never --internal: an internal network blocks
+            # egress but also breaks --publish, and ORION reaches the model over
+            # that published port. Egress is filtered at the host instead, which
+            # is the operator's job -- this only decides which network to join.
+            command += ["--network", cfg.container_network]
 
         command.append(self.image)
         return command

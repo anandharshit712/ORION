@@ -66,3 +66,27 @@ termination:
   timeout: 30.0
 
 master_seed: 3005
+parameterization:
+  # The gap between the two oncoming vehicles is what makes this a judgement
+  # call rather than a fixed sequence: sometimes the gap is acceptable, and a
+  # model that always waits fails as surely as one that always goes.
+  ego_velocity:
+    min: 3.0
+    max: 8.33      # 30 km/h
+  npc_overrides:
+    oncoming_v1:
+      initial_x:
+        min: 45.0
+        max: 85.0
+      initial_velocity:
+        min: 11.11
+        max: 16.67
+    oncoming_v2:
+      initial_x:
+        min: 95.0
+        max: 160.0
+      initial_velocity:
+        min: 11.11
+        max: 16.67
+
+master_seed: 3005

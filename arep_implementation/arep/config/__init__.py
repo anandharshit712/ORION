@@ -178,6 +178,22 @@ class SandboxConfig:
     # and the API fails loudly rather than running customer code under runc.
     require_hardened_runtime: bool = False
 
+    # The Docker network customer containers join. Empty means Docker's default
+    # bridge, which has **unrestricted outbound access** — a customer image can
+    # reach the cloud metadata endpoint (169.254.169.254), the database and
+    # Redis directly. Measured, not theorised: a container on the default bridge
+    # reaches the public internet today.
+    #
+    # Docker's own `--internal` network blocks egress but also breaks
+    # `--publish`, and ORION talks to the model over that published port — so
+    # the answer is a named bridge whose egress the operator filters at the
+    # host. infrastructure/ documents the rules.
+    container_network: str = ""
+    # Refuse to run a customer image on the default bridge. Off in dev, on in
+    # production: the code cannot install firewall rules, but it can decline to
+    # run customer code until someone has.
+    require_restricted_network: bool = False
+
 
 @dataclass(frozen=True)
 class Config:
@@ -425,6 +441,12 @@ _ENV_MAP: dict[str, tuple[str, str, Callable[[str], Any]]] = {
         lambda v: v.lower() in ("1", "true", "yes"),
     ),
     "ORION_CONTAINER_RUNTIME": ("sandbox", "container_runtime", str),
+    "ORION_CONTAINER_NETWORK": ("sandbox", "container_network", str),
+    "ORION_REQUIRE_RESTRICTED_NETWORK": (
+        "sandbox",
+        "require_restricted_network",
+        lambda v: v.lower() in ("1", "true", "yes"),
+    ),
     "ORION_CONTAINER_MEMORY": ("sandbox", "container_memory", str),
     "ORION_CONTAINER_CPUS": ("sandbox", "container_cpus", str),
     "ORION_CONTAINER_PIDS_LIMIT": ("sandbox", "container_pids_limit", int),

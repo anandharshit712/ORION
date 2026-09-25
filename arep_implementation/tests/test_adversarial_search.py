@@ -260,3 +260,112 @@ def test_cma_es_survives_finding_a_collision():
         result.falsification_params
     ), "a counter-example with no parameters is useless"
     assert result.n_evals > 0
+
+
+# -- Collecting every failure, not just the first -------------------------
+
+
+def test_the_search_is_reproducible_down_to_the_failing_setting():
+    """A tester re-running a search must get the same counter-example.
+
+    Without this the finding is not evidence: "we found a failure at these
+    settings" is only useful if asking again produces the same settings.
+    """
+    scenario, _ = _space()
+
+    def search():
+        space = SearchSpace(scenario)
+        objective = ObjectiveFunction(
+            scenario, ConstantActionModel(throttle=0.4), space
+        )
+        result = CMAESOptimizer(space, max_evals=50, popsize=10, seed=3).run(objective)
+        record = objective.falsification_record
+        return result.n_evals, record.seed, record.params
+
+    assert search() == search()
+
+
+def test_continuing_past_the_first_failure_finds_more_of_them():
+    """Stopping at the first collision returns one counter-example for the least
+    compute. A customer fixing the model wants every failure mode, which is what
+    the whole budget buys."""
+    scenario, _ = _space()
+
+    def search(stop_first):
+        space = SearchSpace(scenario)
+        objective = ObjectiveFunction(
+            scenario, ConstantActionModel(throttle=0.4), space
+        )
+        return CMAESOptimizer(
+            space,
+            max_evals=60,
+            popsize=10,
+            seed=3,
+            stop_on_first_falsification=stop_first,
+        ).run(objective)
+
+    stopped = search(True)
+    exhaustive = search(False)
+
+    assert stopped.falsification_count == 1, "stopping should return exactly one"
+    assert exhaustive.falsification_count > stopped.falsification_count
+    assert exhaustive.n_evals == 60, "continuing should spend the whole budget"
+
+
+def test_the_failure_rate_is_reported():
+    """When most of the space fails, the rate is the finding — a list of
+    individual settings buries it."""
+    scenario, _ = _space()
+    space = SearchSpace(scenario)
+    objective = ObjectiveFunction(scenario, ConstantActionModel(throttle=0.4), space)
+
+    result = CMAESOptimizer(
+        space, max_evals=40, popsize=10, seed=3, stop_on_first_falsification=False
+    ).run(objective)
+
+    assert 0.0 < result.failure_rate <= 1.0
+    assert result.failure_rate == pytest.approx(
+        result.falsification_count / result.n_evals
+    )
+
+
+def test_reported_failures_are_capped_and_worst_first():
+    """A reviewer reproduces the worst few; the rest is what failure_rate and
+    the clusterer are for."""
+    from arep.search.optimizer import MAX_REPORTED_FAILURES
+
+    scenario, _ = _space()
+    space = SearchSpace(scenario)
+    objective = ObjectiveFunction(scenario, ConstantActionModel(throttle=0.4), space)
+
+    result = CMAESOptimizer(
+        space, max_evals=60, popsize=10, seed=3, stop_on_first_falsification=False
+    ).run(objective)
+
+    assert len(result.falsifications) <= MAX_REPORTED_FAILURES
+    fitnesses = [f["fitness"] for f in result.falsifications]
+    assert fitnesses == sorted(fitnesses, reverse=True), "worst case must come first"
+    # Every reported failure carries the seed that reproduces it.
+    assert all(f["seed"] is not None and f["params"] for f in result.falsifications)
+
+
+def test_near_identical_failures_collapse_into_one():
+    """CMA-ES converges, so a search that keeps going resamples the region it
+    found. Reporting forty variations of one bug buries the other bugs."""
+    from arep.search.optimizer import distinct_failures
+
+    class Rec:
+        def __init__(self, params, fitness):
+            self.params = params
+            self.fitness = fitness
+            self.seed = 1
+
+    a = Rec({"ego_velocity": 20.0, "gap": 30.0}, 15.0)
+    twin = Rec({"ego_velocity": 20.05, "gap": 30.1}, 14.0)
+    far = Rec({"ego_velocity": 33.0, "gap": 5.0}, 13.0)
+
+    kept = distinct_failures([a, twin, far])
+
+    assert len(kept) == 2, "the twin should have collapsed into the first"
+    assert kept[0] is a, "the worst example of a group is the one kept"
+    assert far in kept

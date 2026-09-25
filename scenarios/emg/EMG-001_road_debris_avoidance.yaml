@@ -49,3 +49,16 @@ termination:
   timeout: 15.0
 
 master_seed: 5001
+parameterization:
+  # Motorway speeds with a static blocker: sighting distance decides whether
+  # braking alone is enough or the model has to steer.
+  ego_velocity:
+    min: 22.22     # 80 km/h
+    max: 33.33     # 120 km/h
+  npc_overrides:
+    road_debris:
+      initial_x:
+        min: 55.0
+        max: 120.0
+
+master_seed: 5001

@@ -138,12 +138,30 @@ or a smaller default search space.
 search is still useful — it finds and reproduces counter-examples — it is just not yet
 demonstrably better than sampling.
 
+### Search budget tooltip — deferred to the UI work
+
+When the search UI is built, the run-count control gets an "i" affordance whose tooltip
+appears on hover. **No price estimate and no numbers** — just that a larger budget costs
+more. The information is there for anyone who wants it; choosing not to hover is the
+customer's choice.
+
+Suggested wording, which says what they gain as well as what it costs:
+
+> More runs search harder and find rarer failures. Longer runs use more credits.
+
+Picked up with the rest of the dashboard work, alongside the search form itself. Nothing in
+the backend blocks it — `recommended_evals(n_dims)` already gives the minimum to show.
+
 ### Adversarial search has no API, tier gate or credit accounting
 `arep/search/` is CLI and library only. `POST /api/search` does not exist, and neither does
-the "Pro tier and above, consumes `max_evals` credits" rule the roadmap specifies. Held
-pending a pricing decision — charging per *evaluation* means a search that stops on the
-first collision costs almost nothing while a thorough one costs a lot, which may be
-backwards.
+the "Pro tier and above, consumes `max_evals` credits" rule the roadmap specifies.
+
+**The algorithm questions are settled** (2026-09-24): CMA-ES beats random search from about
+ten evaluations per dimension, `recommended_evals()` enforces that floor per scenario, every
+scenario in the library is now searchable, and the search can return every failure rather
+than stopping at the first. What remains is purely the pricing decision — charging per
+*evaluation* means a search that stops early costs almost nothing while a thorough one
+costs a lot, which may be exactly right or exactly backwards.
 
 ### Comparison has no PDF download endpoint
 `POST /api/compare` and `GET /api/compare/{id}` exist and are charged correctly. What is

@@ -37,3 +37,15 @@ termination:
   timeout: 20.0
 
 master_seed: 2001
+parameterization:
+  # Nothing to react to here, so the only meaningful variable is how fast the
+  # ego is holding its lane. Thin on purpose: a baseline that varies a lot is
+  # not a baseline.
+  ego_velocity:
+    min: 16.67     # 60 km/h
+    max: 30.56     # 110 km/h
+  ego_x_jitter:
+    min: -5.0
+    max: 5.0
+
+master_seed: 2001

@@ -49,3 +49,19 @@ termination:
   timeout: 25.0
 
 master_seed: 4003
+parameterization:
+  # A cyclist is slow and in the lane, so the difficulty is closing speed and
+  # how late the ego sees them.
+  ego_velocity:
+    min: 8.33      # 30 km/h
+    max: 16.67     # 60 km/h
+  npc_overrides:
+    cyclist:
+      initial_x:
+        min: 25.0
+        max: 60.0
+      initial_velocity:
+        min: 3.0
+        max: 6.5
+
+master_seed: 4003

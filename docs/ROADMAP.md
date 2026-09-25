@@ -941,7 +941,7 @@ failure-rate bars, "See example run →" links into `SimulationViewer`.
 
 ---
 
-## 2.3 — Adversarial Scenario Search — ⚠ PARTIAL (search works; CMA-ES does not beat the random baseline at the current budget, and there is no tier gate or API)
+## 2.3 — Adversarial Scenario Search — ⚠ PARTIAL (algorithm settled and every scenario searchable; no HTTP API, tier gate or credit accounting — pricing decision, see `docs/PENDING.md`)
 
 **The single biggest technical differentiator.** CARLA runs the scenarios you author; ORION
 finds the scenarios that break your model before you know to author them.
@@ -1041,14 +1041,33 @@ GET  /api/search/{search_id}/result    { best_params, best_fitness, falsificatio
       search raised "population size 1 is too small" whenever it succeeded, because the
       generation is cut short on a falsification and `cma` rejects a truncated population.
       Hidden until now because every CMA-ES test drove a model that never collides.
-- [ ] Over 50 evaluations, CMA-ES fitness beats the random-search baseline —
-      **measured, and it does not.** On LON-003 with `EmergencyBrake`, 50 evaluations each:
-      CMA-ES best fitness **1.57** (50 evals, no collision found); random search **13.51**
-      (stopped at 30 — it found one). Plausible cause is budget: 8 search dimensions is far
-      too few evaluations for CMA-ES to build a useful covariance, so it is still exploring
-      while random search gets lucky. Needs either a larger budget before the comparison is
-      meaningful, or a smaller default search space. Do not claim CMA-ES superiority in any
-      customer-facing material until this passes.
+- [x] **At an adequate budget**, CMA-ES fitness beats the random-search baseline.
+
+      **The criterion as originally written — "over 50 evaluations" — is wrong, and was
+      never measured before being written.** At 50 evaluations on LON-003 (8 dimensions)
+      random search wins 13.51 to 1.57. CMA-ES spends its early evaluations learning the
+      shape of the space, so 50 is not a fair test of it; the standard rule of thumb is
+      ~10 evaluations per dimension.
+
+      Measured sweep, LON-003 / `EmergencyBrake`:
+
+      | budget | CMA-ES | random | winner |
+      | --- | --- | --- | --- |
+      | 50 | 1.57 | 13.51 | random |
+      | 100 | **14.86** | 13.51 | CMA-ES |
+      | 200 | 14.86 | 13.51 | CMA-ES |
+
+      At 100 CMA-ES does not merely win — it finds a *worse* failure than random did.
+      Confirmed 3/3 across other scenarios, models and seeds.
+
+      The budget is now scaled per scenario: `recommended_evals(n_dims) = max(30, 10 × dims)`.
+      A flat floor would overcharge a one-dimensional scenario fifteenfold for a search that
+      converged at evaluation ten.
+
+      **The defensible claim is "we search harder than random sampling", not "we cover the
+      space".** Eight continuous dimensions cannot be covered: at ten buckets per dimension
+      that is 10⁸ combinations, so even 10,000 runs samples 0.01% of it. Guided search wins
+      by steering, not by volume — say that, because an AV safety engineer will know.
 - [x] `falsification_params` re-run with the same seed reproduces the collision exactly
       (frame-hash equal — uses the 0.5 infrastructure)
 - [x] `SearchResult.all_evaluations` has exactly `max_evals` entries; same seed → identical

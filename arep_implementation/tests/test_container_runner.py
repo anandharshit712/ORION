@@ -202,3 +202,68 @@ def test_free_ports_do_not_repeat():
     from arep.models.container import _free_port
 
     assert _free_port() != 0
+
+
+# ── Egress (2026-09-25) ──────────────────────────────────────────────────
+#
+# Measured, not theorised: a customer container on Docker's default bridge
+# reaches the public internet today, and on a cloud host would reach the
+# metadata endpoint that hands out the instance's credentials. The subprocess
+# sandbox has had network blocked since 0.2; the Docker path — the one the
+# pickle gate recommends instead — never did.
+#
+# Docker's own --internal network blocks egress but also breaks --publish, and
+# ORION talks to the model over that published port. Verified both halves before
+# choosing: --internal gave no reachable port, a named bridge gave HTTP 200. So
+# the answer is a named bridge whose egress the host filters, and code that
+# refuses to run customer images until one is configured.
+
+
+def test_no_network_flag_when_none_is_configured(monkeypatch):
+    """Default stays Docker's bridge, so dev and existing behaviour are
+    unaffected by this landing."""
+    assert "--network" not in _command(monkeypatch)
+
+
+def test_the_configured_network_is_passed(monkeypatch):
+    command = _command(monkeypatch, ORION_CONTAINER_NETWORK="orion-models")
+    assert "--network" in command
+    assert command[command.index("--network") + 1] == "orion-models"
+
+
+def test_the_network_is_never_internal(monkeypatch):
+    """--internal blocks egress but also breaks --publish, and ORION reaches the
+    model over that published port. Measured before choosing: --internal gave no
+    reachable port, a named bridge gave HTTP 200."""
+    command = _command(monkeypatch, ORION_CONTAINER_NETWORK="orion-models")
+    assert "--internal" not in command
+
+
+def test_production_refuses_the_default_bridge(monkeypatch):
+    """The code cannot install firewall rules. It can decline to run customer
+    code until someone has."""
+    monkeypatch.setenv("ORION_REQUIRE_RESTRICTED_NETWORK", "true")
+    monkeypatch.setenv("ORION_CONTAINER_NETWORK", "")
+    reload_config()
+
+    with pytest.raises(ModelSandboxError) as excinfo:
+        ContainerModelRunner(image="anything:latest", port=8080)
+
+    message = str(excinfo.value)
+    assert "require_restricted_network" in message
+    # The error has to name the actual exposure, or an operator will clear the
+    # flag to make the message go away.
+    assert "metadata" in message.lower()
+
+
+def test_a_configured_network_satisfies_the_requirement(monkeypatch):
+    """With a network set the guard passes, and start-up fails later for an
+    ordinary reason rather than being blocked here."""
+    monkeypatch.setenv("ORION_REQUIRE_RESTRICTED_NETWORK", "true")
+    monkeypatch.setenv("ORION_CONTAINER_NETWORK", "orion-models")
+    reload_config()
+
+    with pytest.raises(ModelSandboxError) as excinfo:
+        ContainerModelRunner(image="definitely-not-a-real-image:v0", port=8080)
+
+    assert "require_restricted_network" not in str(excinfo.value)

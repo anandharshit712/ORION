@@ -50,3 +50,20 @@ termination:
   timeout: 12.0
 
 master_seed: 5002
+parameterization:
+  # Combined closing speed is the difficulty, and it is the sum of both. The
+  # ranges keep every draw a head-on approach: that is the requirement under
+  # test, and varying it away would make this a different scenario.
+  ego_velocity:
+    min: 19.44     # 70 km/h
+    max: 27.78     # 100 km/h
+  npc_overrides:
+    wrong_way_driver:
+      initial_x:
+        min: 150.0
+        max: 260.0
+      initial_velocity:
+        min: 16.67
+        max: 25.0
+
+master_seed: 5002
