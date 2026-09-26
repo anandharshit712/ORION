@@ -350,3 +350,64 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
 
         return response
+
+
+class RateLimitHeadersMiddleware:
+    """Put ``X-RateLimit-*`` back on every response.
+
+    ``Limiter(headers_enabled=True)`` is supposed to do this, and for a while it
+    did. It stopped, silently, when Starlette moved to 1.x — same slowapi, same
+    configuration, no headers. Nothing failed: requests are still counted and
+    still refused at the limit. Clients just lost the signal that tells them how
+    close they are, which is the difference between backing off and being
+    surprised by a 429.
+
+    Two things had to line up for it to break, and neither is a bug in slowapi:
+
+    * ``SlowAPIMiddleware`` deliberately skips any route carrying a
+      ``@limiter.limit`` decorator — "we let the decorator handle it". Every
+      per-route limit here is a decorator, so the middleware never injects for
+      them.
+    * The decorator injects into the ``response`` object FastAPI passes the
+      endpoint, and only *after* the endpoint returns. A failed login raises
+      ``HTTPException``, so it never returns, and the injection is skipped. The
+      one response a caller most needs a remaining-count on is the one that
+      cannot carry it.
+
+    A plain ASGI middleware sidesteps both. It edits the outgoing headers rather
+    than a response object, so it works whether the endpoint returned or raised,
+    and it shares ``scope["state"]`` with the route by identity — where
+    ``BaseHTTPMiddleware`` gets a copy, which is why slowapi's own middleware
+    could not see ``view_rate_limit`` either.
+
+    The header values come from the limiter's own formatter, so they stay
+    consistent with whatever slowapi emits elsewhere.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        from starlette.datastructures import MutableHeaders
+
+        from arep.api.ratelimit import limiter
+
+        async def send_with_headers(message) -> None:
+            if message["type"] == "http.response.start":
+                current_limit = scope.get("state", {}).get("view_rate_limit")
+                if current_limit is not None:
+                    try:
+                        limiter._inject_asgi_headers(
+                            MutableHeaders(raw=message["headers"]), current_limit
+                        )
+                    except Exception:  # pragma: no cover - never break a response
+                        # A missing header is a degraded response; an exception
+                        # here would be a failed one.
+                        pass
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)

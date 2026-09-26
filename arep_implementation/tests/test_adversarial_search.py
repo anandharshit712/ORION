@@ -32,6 +32,12 @@ from arep.search.objective import ObjectiveFunction  # noqa: E402
 from arep.search.optimizer import CMAESOptimizer, RandomSearchOptimizer  # noqa: E402
 from arep.search.space import SearchSpace  # noqa: E402
 
+# `cma` is an optional extra (`arep[search]`). Without it these fail at the
+# first CMA-ES call rather than skipping, which is how CI spent weeks red on a
+# dependency it was never asked to install. CI installs the extra, so this
+# skips only on a developer machine that has not.
+pytest.importorskip("cma", reason="needs arep[search]")
+
 PARAMETERISED = "../scenarios/lon/LON-003_emergency_stop.yaml"
 FLAT = "scenarios/basic/straight_road_lead_vehicle.yaml"
 

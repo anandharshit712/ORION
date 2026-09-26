@@ -690,6 +690,40 @@ site — they live in `api.rate_limit_*`. Never add a data route without router-
 whole public surface. Never act on a webhook before verifying its signature and claiming its
 event id. See Section 8.
 
+### Dependency pins, and the failures that come from not having them
+
+Three CI failures in one week, none caused by a change in this repository, all
+caused by a dependency shipping a new default:
+
+- **ruff 0.16** turned on whole rule families by default. 862 findings against a
+  clean tree. The rule set is now declared in `[tool.ruff] lint.select`.
+- **SQLAlchemy 2.1** changed which DBAPI a bare `postgresql://` URL means, from
+  psycopg2 to psycopg v3. This project ships `psycopg2-binary`, so every Postgres
+  connection died on `No module named 'psycopg'`. `pin_postgres_driver()` in
+  `config/validate.py` now writes `postgresql+psycopg2://` explicitly; alembic's
+  `env.py` goes through it too, because reading the env var directly is how the
+  migration runner ended up on a different driver than the app.
+- **Starlette 1.x** stopped `X-RateLimit-*` reaching clients. slowapi leaves
+  decorated routes to the decorator, which only injects when the endpoint
+  *returns* — so a 401 never carried them — and `BaseHTTPMiddleware` now gets a
+  copy of `scope["state"]`, so slowapi's own middleware could not see the limit
+  either. `RateLimitHeadersMiddleware` (plain ASGI, edits outgoing headers) owns
+  it now.
+
+The rules that follow:
+
+- **Never read `ORION_DATABASE_URL` directly.** Go through `resolve_database_url()`,
+  so the driver, the SQLite refusal and the fail-fast all apply. `env.py` is the
+  one place that legitimately needs the raw variable, and it still calls
+  `pin_postgres_driver()`.
+- **Don't depend on a library's default** for anything a customer can observe.
+  Name the rule set, name the driver, own the header.
+- **A CI job that has been red for a while stops being read.** Lint and Tests were
+  both failing on every branch for days, so a broken migration and a lost
+  response header sat on `main` behind an already-red light. If CI is red for a
+  reason that is not yours, fix that first — you cannot see your own breakage
+  through it.
+
 ### CI integrations (GitHub Action, GitLab component)
 
 Both run the **same image** (`ghcr.io/<owner>/orion-cli`) and the **same script**

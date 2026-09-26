@@ -70,13 +70,24 @@ def _render(direction: str) -> str:
     return buffer.getvalue()
 
 
+# Alembic's own bookkeeping table. It is created and dropped by the runner
+# rather than by any migration, and whether its DROP shows up in rendered SQL
+# depends on the Alembic version - 1.18 emits it, 1.20 does not. Either way it
+# is not part of the schema under test.
+BOOKKEEPING = {"alembic_version"}
+
+
 def _table_events(sql: str) -> list[tuple[str, str]]:
     """(action, table) pairs in the order the chain performs them."""
     pattern = re.compile(
         r"\b(CREATE TABLE|DROP TABLE)\s+(?:IF (?:NOT )?EXISTS\s+)?([A-Za-z_][\w.]*)",
         re.IGNORECASE,
     )
-    return [(m.group(1).upper(), m.group(2).lower()) for m in pattern.finditer(sql)]
+    return [
+        (m.group(1).upper(), m.group(2).lower())
+        for m in pattern.finditer(sql)
+        if m.group(2).lower() not in BOOKKEEPING
+    ]
 
 
 @pytest.fixture(scope="module")
@@ -147,4 +158,85 @@ def test_a_table_a_migration_recreates_on_downgrade_is_dropped_again_later(
     assert deliveries[-1] == "DROP TABLE", (
         "the last thing the downgrade does to webhook_deliveries is "
         f"{deliveries[-1]}, so downgrading to base leaves it behind"
+    )
+
+
+# -- Which driver a Postgres URL means --------------------------------------
+
+
+def test_a_bare_postgres_url_names_the_driver_we_ship():
+    """SQLAlchemy resolves the DBAPI from the URL scheme, and in 2.1 it changed
+    what a bare `postgresql://` means: psycopg2 before, psycopg v3 after.
+
+    This project ships `psycopg2-binary`, so the first environment to resolve
+    SQLAlchemy 2.1 died on `No module named 'psycopg'` — CI, and any fresh
+    production deploy next, on a morning nobody changed a line. Naming the
+    driver makes it a decision instead of a default that can move again.
+    """
+    from arep.config.validate import pin_postgres_driver
+
+    assert (
+        pin_postgres_driver("postgresql://u:p@host:5432/db")
+        == "postgresql+psycopg2://u:p@host:5432/db"
+    )
+
+
+def test_the_heroku_style_alias_is_normalised_too():
+    """`postgres://` is what several hosts still hand out, and SQLAlchemy
+    dropped it entirely."""
+    from arep.config.validate import pin_postgres_driver
+
+    assert pin_postgres_driver("postgres://u@h/db") == "postgresql+psycopg2://u@h/db"
+
+
+def test_an_explicitly_chosen_driver_is_left_alone():
+    """Someone who wrote `+psycopg` or `+asyncpg` meant it. Overriding an
+    explicit choice with ours would be the same class of surprise."""
+    from arep.config.validate import pin_postgres_driver
+
+    for url in (
+        "postgresql+psycopg://u@h/db",
+        "postgresql+asyncpg://u@h/db",
+        "postgresql+psycopg2://u@h/db",
+    ):
+        assert pin_postgres_driver(url) == url
+
+
+def test_non_postgres_urls_are_untouched():
+    from arep.config.validate import pin_postgres_driver
+
+    for url in ("sqlite:///arep.db", "sqlite+aiosqlite:///x.db", "mysql://u@h/db"):
+        assert pin_postgres_driver(url) == url
+
+
+def test_alembic_resolves_the_same_driver_as_the_application():
+    """The migration runner read ORION_DATABASE_URL directly, so it could pick
+    a different DBAPI than the app — which is exactly what happened."""
+    env = (ROOT / "arep/database/migrations/env.py").read_text(encoding="utf-8")
+    assert "pin_postgres_driver" in env, (
+        "alembic env.py bypasses the URL resolver, so migrations and the "
+        "application can disagree about which driver to load"
+    )
+
+
+def test_rendering_the_chain_does_not_switch_off_everyone_elses_logging():
+    """Alembic's env.py calls `fileConfig`, which disables every existing
+    logger unless told not to.
+
+    That is a side effect on whatever process ran the migration. Under pytest
+    it meant every test *after* this file quietly stopped capturing log output,
+    so assertions about warnings failed somewhere else entirely — three of them
+    did, and they pointed at the wrong code. In production it would mute the
+    application's own logging for anything that migrates in process.
+    """
+    import logging
+
+    canary = logging.getLogger("arep.tests.logging_canary")
+    assert not canary.disabled
+
+    _render("up")
+
+    assert not canary.disabled, (
+        "rendering the migration chain disabled a pre-existing logger — "
+        "env.py needs fileConfig(..., disable_existing_loggers=False)"
     )

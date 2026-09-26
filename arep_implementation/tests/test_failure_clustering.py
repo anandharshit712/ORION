@@ -13,6 +13,7 @@ invents parameter vectors would never test that.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 
@@ -28,6 +29,13 @@ from arep.analysis.failure_clustering import (  # noqa: E402
 
 SCENARIO = "scenarios/basic/straight_road_lead_vehicle.yaml"
 PARAMETERISED = "../scenarios/lon/LON-003_emergency_stop.yaml"
+
+
+# DBSCAN comes from scikit-learn, an optional extra (`arep[search]`). Only the
+# tests that actually cluster need it; the rest of this file does not.
+needs_sklearn = pytest.mark.skipif(
+    importlib.util.find_spec("sklearn") is None, reason="needs arep[search]"
+)
 
 
 @pytest.fixture
@@ -160,6 +168,7 @@ def test_an_unparameterised_scenario_says_so_rather_than_implying_no_pattern(db)
     assert "no parameterisation" in report.safe_region_description
 
 
+@needs_sklearn
 def test_a_parameterised_batch_reconstructs_its_parameters(db):
     """The load-bearing claim: a run's inputs can be recovered from its seed."""
     from arep.models.examples.example_models import ConstantActionModel
@@ -182,6 +191,7 @@ def test_a_parameterised_batch_reconstructs_its_parameters(db):
         assert condition.description
 
 
+@needs_sklearn
 def test_reconstruction_is_deterministic(db):
     """Two analyses of one batch must agree, or the report is not evidence."""
     from arep.models.examples.example_models import ConstantActionModel

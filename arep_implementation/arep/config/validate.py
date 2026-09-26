@@ -98,6 +98,32 @@ def resolve_secret_key() -> str:
     return _ephemeral_secret
 
 
+def pin_postgres_driver(url: str) -> str:
+    """Name the psycopg2 driver explicitly on a bare ``postgresql://`` URL.
+
+    SQLAlchemy picks a DBAPI from the scheme, and in 2.1 it changed which one a
+    bare ``postgresql://`` means: psycopg2 before, psycopg (v3) after. This
+    project ships ``psycopg2-binary``, so the day SQLAlchemy 2.1 was installed,
+    every Postgres connection died on ``ModuleNotFoundError: No module named
+    'psycopg'`` - CI first, and any fresh production deploy next, since nothing
+    here pins SQLAlchemy.
+
+    Pinning the driver in the URL makes it a decision rather than a default that
+    can move again. A URL that already names one (``postgresql+psycopg://``,
+    ``postgresql+asyncpg://``) is left alone: an explicit choice outranks ours.
+
+    Moving to psycopg v3 later is then one line here plus the dependency, done
+    deliberately and with the Postgres suite to check it - not by surprise on a
+    morning when someone's install resolved differently.
+    """
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + url[len("postgresql://") :]
+    if url.startswith("postgres://"):
+        # The heroku-style alias SQLAlchemy dropped support for entirely.
+        return "postgresql+psycopg2://" + url[len("postgres://") :]
+    return url
+
+
 def resolve_database_url() -> str:
     """
     Return the SQLAlchemy database URL.
@@ -114,7 +140,7 @@ def resolve_database_url() -> str:
                 f"(ORION_ENV={get_env()!r}); FOR UPDATE row locks are a no-op "
                 "on SQLite. Set a PostgreSQL ORION_DATABASE_URL. Refusing to boot."
             )
-        return url
+        return pin_postgres_driver(url)
 
     if not is_dev():
         raise ConfigurationError(

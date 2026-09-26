@@ -19,14 +19,29 @@ from arep.database.models import Base  # noqa: F401
 # Alembic Config object
 config = context.config
 
-# Override sqlalchemy.url from environment variable if set
+# Override sqlalchemy.url from environment variable if set.
+#
+# Through pin_postgres_driver, not raw, so migrations resolve the same DBAPI the
+# application does. Reading the variable directly is how the Postgres CI job
+# ended up on a driver nobody installed when SQLAlchemy 2.1 changed what a bare
+# `postgresql://` means.
+from arep.config.validate import pin_postgres_driver  # noqa: E402
+
 db_url = os.environ.get("ORION_DATABASE_URL")
 if db_url:
-    config.set_main_option("sqlalchemy.url", db_url)
+    config.set_main_option("sqlalchemy.url", pin_postgres_driver(db_url))
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False, which is not the default. fileConfig
+    # otherwise switches off every logger configured before it, and alembic's
+    # env.py runs inside whatever process invoked it. Under pytest that meant
+    # any test running after a migration silently stopped capturing log output
+    # and its assertions about warnings failed - a failure that points at the
+    # test rather than at the migration that caused it. In production it would
+    # mute the application's own logging for anything that ran migrations in
+    # process.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

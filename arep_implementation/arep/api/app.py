@@ -22,7 +22,11 @@ from slowapi.middleware import SlowAPIMiddleware
 from arep.api.admin import admin_router
 from arep.api.auth import auth_router
 from arep.api.billing import billing_router
-from arep.api.middleware import OrgAuthMiddleware, SecurityHeadersMiddleware
+from arep.api.middleware import (
+    OrgAuthMiddleware,
+    RateLimitHeadersMiddleware,
+    SecurityHeadersMiddleware,
+)
 from arep.api.ratelimit import limiter, rate_limit_exceeded_handler
 from arep.api.compare import compare_router
 from arep.api.webhooks import webhooks_router
@@ -92,6 +96,9 @@ def create_app() -> FastAPI:
     app.add_middleware(OrgAuthMiddleware)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    # Outside the rate limiter, so it sees the response after the limit has been
+    # recorded — including a response the endpoint raised rather than returned.
+    app.add_middleware(RateLimitHeadersMiddleware)
 
     # CORS (outermost). resolve_cors_origins() refuses a wildcard outside dev;
     # allow_credentials=True is only valid against an explicit origin list.

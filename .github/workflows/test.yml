@@ -22,7 +22,13 @@ jobs:
         working-directory: arep_implementation
         # worker extras included: the batch and reliability suites import celery
         # and cloudpickle, and without them 13 tests error rather than run.
-        run: pip install -e ".[dev,api,worker]"
+        #
+        # search too, for cma and scikit-learn. Adversarial search and failure
+        # clustering are shipped features; without the extra, 10 of their tests
+        # failed here on an import while passing on every developer machine that
+        # happened to have the packages. They skip if the extra is ever dropped,
+        # but the point is to run them.
+        run: pip install -e ".[dev,api,worker,search]"
       - name: Run tests
         working-directory: arep_implementation
         run: pytest --tb=short -q
@@ -77,7 +83,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: arep_implementation
-        run: pip install -e ".[dev,api,worker]"
+        run: pip install -e ".[dev,api,worker,search]"
 
       - name: Alembic upgrade → downgrade → upgrade
         working-directory: arep_implementation
