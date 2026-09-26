@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from arep.utils.logging_config import get_logger
 
@@ -108,6 +108,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Master seed for all runs (default: 42)",
     )
+    p.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        metavar="REPORT.json",
+        help=(
+            "A previous report to compare against. Scores that drop past the "
+            "regression thresholds fail the run even when every scenario is "
+            "still under the collision limit."
+        ),
+    )
+    p.add_argument(
+        "--no-fail-on-regression",
+        dest="fail_on_regression",
+        action="store_false",
+        default=True,
+        help="Report regressions against --baseline but do not change the exit code",
+    )
     return p
 
 
@@ -181,7 +199,7 @@ def run_suite(
     from arep.execution.runner import EvaluationRunner
 
     runner = EvaluationRunner()
-    scenarios = []
+    scenarios: List[Dict[str, Any]] = []
 
     for path in scenario_paths:
         logger.info("Running %s", path.name)
@@ -207,6 +225,15 @@ def run_suite(
         )
 
     passed = sum(1 for s in scenarios if s["passed"])
+
+    # Suite-wide means, so a CI integration does not have to re-derive them
+    # from the scenario list. Unweighted: every scenario gets the same number
+    # of runs, so a weighted mean would be the same number with more code.
+    def _mean(key: str) -> float:
+        if not scenarios:
+            return 0.0
+        return round(sum(float(s[key]) for s in scenarios) / len(scenarios), 4)
+
     return {
         "model": getattr(model, "name", str(model)),
         "seed": seed,
@@ -214,9 +241,82 @@ def run_suite(
         "scenario_count": len(scenarios),
         "scenarios_passed": passed,
         "pass_rate": round(passed / len(scenarios), 4) if scenarios else 0.0,
+        "composite_mean": _mean("composite_mean"),
+        "safety_mean": _mean("safety_mean"),
+        "collision_rate": _mean("collision_rate"),
         "collision_rate_limit": COLLISION_RATE_LIMIT,
         "scenarios": scenarios,
     }
+
+
+def find_regressions(report: dict, baseline: dict) -> List[str]:
+    """Scenarios that got meaningfully worse, as human-readable lines.
+
+    Compared per scenario rather than on the suite mean: a model that gains
+    0.05 on four scenarios and loses 0.15 on the fifth has a flat mean and a
+    new way to crash. Scenarios absent from either side are skipped — an added
+    scenario is not a regression, and a removed one cannot be compared.
+
+    Thresholds are imported, not restated, so this agrees with
+    `RegressionDetector` by construction. Two sets of numbers that are supposed
+    to match is one set of numbers and a bug.
+    """
+    from arep.analysis.regression_detector import (
+        REGRESSION_COLLISION_THRESHOLD,
+        REGRESSION_COMPOSITE_THRESHOLD,
+        REGRESSION_SAFETY_THRESHOLD,
+    )
+
+    before = {s["scenario"]: s for s in baseline.get("scenarios", [])}
+    regressions: List[str] = []
+
+    for now in report.get("scenarios", []):
+        was = before.get(now["scenario"])
+        if was is None:
+            continue
+
+        for key, limit, label in (
+            ("composite_mean", REGRESSION_COMPOSITE_THRESHOLD, "composite"),
+            ("safety_mean", REGRESSION_SAFETY_THRESHOLD, "safety"),
+        ):
+            drop = float(was.get(key, 0.0)) - float(now.get(key, 0.0))
+            if drop > limit:
+                regressions.append(
+                    f"{now['scenario']}: {label} {was[key]:.3f} -> {now[key]:.3f} "
+                    f"(-{drop:.3f}, limit {limit:.2f})"
+                )
+
+        rise = float(now.get("collision_rate", 0.0)) - float(
+            was.get("collision_rate", 0.0)
+        )
+        if rise > REGRESSION_COLLISION_THRESHOLD:
+            regressions.append(
+                f"{now['scenario']}: collision rate {was['collision_rate']:.3f} -> "
+                f"{now['collision_rate']:.3f} (+{rise:.3f}, limit "
+                f"{REGRESSION_COLLISION_THRESHOLD:.2f})"
+            )
+
+    return regressions
+
+
+def load_baseline(path: Path) -> Optional[dict]:
+    """Read a baseline report, or return None if there is not a usable one.
+
+    A missing baseline is the normal first run and must not fail the build —
+    otherwise nobody can ever adopt the flag. An unreadable one is reported and
+    also skipped: a corrupt artefact is a CI plumbing problem, not a verdict on
+    the model.
+    """
+    import json
+
+    if not path.exists():
+        print(f"note: no baseline at {path}; skipping the regression check")
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"warning: could not read baseline {path}: {exc}", file=sys.stderr)
+        return None
 
 
 def write_report(report: dict, output_dir: Path, fmt: str) -> Path:
@@ -314,7 +414,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f">= {COLLISION_RATE_LIMIT}",
             )
 
-    return EXIT_PASS if report["pass_rate"] >= args.pass_threshold else EXIT_FAIL
+    if args.pass_threshold > report["pass_rate"]:
+        return EXIT_FAIL
+
+    if args.baseline is not None:
+        baseline = load_baseline(args.baseline)
+        if baseline is not None:
+            regressions = find_regressions(report, baseline)
+            for line in regressions:
+                print(f"  REGRESSION {line}")
+            if regressions and args.fail_on_regression:
+                print(
+                    f"{len(regressions)} regression(s) against {args.baseline}",
+                    file=sys.stderr,
+                )
+                return EXIT_FAIL
+
+    return EXIT_PASS
 
 
 def _repo_root() -> Path:

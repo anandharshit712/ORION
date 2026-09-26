@@ -208,6 +208,22 @@ Phase 4.3. All 21 execute; 18 pass against `emergency_brake`, and the three that
 (EMG-002, LAT-003, MLT-007) fail correctly — each needs evasive steering or gentle
 braking, which a brake-only model cannot do. Do not "fix" them by weakening the scenario.
 
+### Publishing the GitLab CI component (3.3)
+The component source is written, tested and pinned to the same image as the GitHub Action
+(`ci/gitlab/templates/evaluate-model.yml`). Publishing it needs a `gitlab.com/orioneval`
+project, which does not exist — a component is published from a GitLab project and ORION is
+on GitHub. `ci/gitlab/README.md` has the five steps.
+
+**Nobody is blocked.** Any GitLab project can run the suite today with the copy-paste job in
+that README, which pulls the public image directly. The component only removes about fifteen
+lines of YAML from a customer's pipeline.
+
+### The GitHub Action against a real pull request
+The three exit codes are verified inside the built image and both integration files are
+parsed by test the way the platforms parse them. What no local check can answer is whether
+GitHub accepts `action.yml` and pulls the image — the first push to `main` publishes it, and
+one PR that adds the action settles it.
+
 ---
 
 ## Product decisions outstanding
@@ -226,9 +242,6 @@ in-flight work finish.
 
 Tracked in `docs/ROADMAP.md`; listed here so the file reads as a complete picture.
 
-- **Outbound webhooks (3.1)** — only inbound Stripe webhooks exist.
-- **GitLab CI integration (3.3)** — the GitHub Action exists.
-- **Model versioning API (3.4)** — `models.version` is a column with an index; no history endpoints.
 - **ROS2 connector (4.1)** — the HTTP model bridge exists; no `rclpy` transport.
 - **Standards alignment (4.5)** — no ISO 26262/21448 traceability matrix or ODD declarations. Certification is never claimed.
 - **Sensor simulation (Phase 6)** — observation is ground-truth state. No LiDAR, camera, GPS/IMU. Until it ships, ORION is planning/control evaluation: do not promise perception testing anywhere.

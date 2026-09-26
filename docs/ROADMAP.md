@@ -1176,15 +1176,50 @@ DELETE /api/webhooks/{id}
 HMAC-SHA256 signature in `X-ORION-Signature`; 3× retry with exponential backoff; deliveries
 logged in a `webhook_deliveries` table.
 
-## 3.2 — GitHub Actions Integration — ⚠ PARTIAL (action + CLI exist; unverified against a real PR)
+## 3.2 — GitHub Actions Integration — ⚠ PARTIAL (action runs and regression-checks; unverified against a real PR)
 
-Published action `orioneval/evaluate-model@v1` (skeleton already exists at
-`.github/actions/evaluate-model/`). The Docker image runs `orion evaluate`: package model →
-upload → batch evaluate → poll → regression-check against the previous suite run → write
-`$GITHUB_OUTPUT` → exit 0/1. Inputs: `api_key`, `model_path`, `scenarios`,
-`runs_per_scenario`, `pass_threshold`, `fail_on_regression`.
+The action at `.github/actions/evaluate-model/` runs the **self-hosted** suite inside its
+own container: evaluate → regression-check against a baseline report → write
+`$GITHUB_OUTPUT` → exit 0/1/2. No account and no credential, because nothing leaves the
+runner. `api_key` stays declared but optional and unused, reserved for the hosted path
+(package → upload → batch → poll) which needs a deployment that does not exist yet.
 
 A red check on every PR is the product's viral loop.
+
+**It shipped unable to run, in three separate ways, and none of them could fail in our own
+CI** — the action is only ever executed by someone else's pipeline, so the roadmap recorded
+it as working for months:
+
+1. `action.yml` was not valid YAML (a value opened with a quote and continued unquoted), so
+   GitHub could not load the action at all.
+2. It ran `docker://ghcr.io/orioneval/cli:latest`, an image nobody pushed. `docker-build.yml`
+   tagged the CLI inside the runner and discarded it — a green build publishing nothing.
+3. It configured itself through `ORION_*` variables that nothing read. The image's
+   `ENTRYPOINT` is `run_suite`, which ignores them, and the `entrypoint.sh` that would have
+   read them sat beside `action.yml` — where a prebuilt-image action never looks, because
+   GitHub mounts the workspace, not the action directory. That script also read
+   `report.json` for keys named `composite_mean` and `passed`; the file is called
+   `orion_suite_report.json` and had neither key.
+
+Fixed together: the workflow pushes to `ghcr.io/<owner>/orion-cli` after a `--help` smoke
+test, the action overrides the entrypoint with `/usr/local/bin/orion-ci` baked into the
+image, and the suite report now carries the suite-wide means the outputs publish.
+`tests/test_ci_integration_files.py` parses both files the way GitHub does and asserts they
+still agree — including that the script has LF line endings, which is how the fix broke
+itself once: a CRLF shebang makes the container die with "no such file or directory"
+naming a file that plainly exists.
+
+### Regression checking
+
+`run_suite --baseline <report.json>` compares per scenario against a previous report, using
+the thresholds imported from `RegressionDetector` rather than a second copy of the numbers.
+A missing baseline is the normal first run and is skipped; a corrupt one is reported and
+skipped, because a bad artefact is a plumbing problem, not a verdict on the model.
+
+Per scenario, not on the suite mean: a model that gains a little on four scenarios and
+loses a lot on the fifth has a flat mean and a new way to crash. Verified end to end with
+two real models on LON-003 — `emergency_brake` (0.966) then `lane_keep` (0.865), both
+collision-free, both passing the absolute bar, and the second correctly failing the build.
 
 ### Self-hosted suite runner (the same capability, offline)
 
@@ -1206,9 +1241,20 @@ Exits `0` if `pass_rate >= pass_threshold`, `1` otherwise, and writes a JSON/HTM
 `--output-dir`. Shipped as a slim image (`python:3.11-slim`, `pip install -e ".[api]"`,
 scenarios copied in) with `run_suite` as the entrypoint.
 
-## 3.3 — GitLab CI Integration
+## 3.3 — GitLab CI Integration — ⚠ PARTIAL (component written and tested; not published)
 
 Same pattern, as a GitLab CI component at `gitlab.com/orioneval/evaluate-model`.
+
+The component source is `ci/gitlab/templates/evaluate-model.yml`, sharing the image and the
+entrypoint with the GitHub Action — `ci/orion-ci.sh` is written once and configured by
+environment variables, because two hand-written integrations of the same product drift and
+CI integrations drift silently: nobody runs the other platform's pipeline.
+
+**Publishing it is the part that cannot be done from here.** A GitLab component is published
+from a GitLab project, and ORION is hosted on GitHub; `gitlab.com/orioneval` does not exist.
+`ci/gitlab/README.md` has the five steps, and — more usefully — the copy-paste job that needs
+no component at all, since any GitLab project can pull the public image today. Customers who
+need this before the namespace exists are not blocked.
 
 ## 3.4 — Model Versioning & History — ⚠ PARTIAL (history endpoint done; no auto-compare on submission, no webhook)
 
@@ -1224,8 +1270,25 @@ GET /api/models/{name}/history
 
 - [~] The GitHub Action exists (`.github/actions/evaluate-model/`) and `run_suite` returns
       distinct exit codes (0 pass / 1 model failed / 2 harness error), so a PR can be
-      failed on threshold. **Not verified against a real PR**, and regression detection is
-      not wired into the action.
+      failed on threshold. Regression detection **is** now wired in, through
+      `--baseline <report.json>`.
+
+      The action previously could not have run at all — invalid YAML, an image nobody
+      published, and env-var configuration nothing read. All three are fixed and the three
+      exit codes are verified **inside the built image**, not just in-process: 0 for
+      `emergency_brake` on LON-003, 1 for `constant` on LON-004, 2 for an unimportable
+      model and for a missing `ORION_MODEL_PATH`. The in-container composite (0.9659)
+      matches the host run digit for digit, which is the determinism claim holding across
+      environments rather than just across seeds.
+
+      **Still not verified against a real PR.** What remains is exactly that: the first
+      push to `main` publishes the image, and a pull request that adds the action says
+      whether GitHub agrees with our reading of it. Nothing local can answer that.
+- [~] The GitLab component exists (`ci/gitlab/templates/evaluate-model.yml`), shares the
+      image and entrypoint with the GitHub Action, and is pinned against it by test —
+      **not published**, because a component is published from a GitLab project and
+      `gitlab.com/orioneval` does not exist. The copy-paste job in `ci/gitlab/README.md`
+      works today without it.
 - [x] Webhook fires after batch completion; signature verifies —
       `POST /api/webhooks`, dispatched from the worker the moment
       `finalise_if_done` transitions a batch, so latency is the delivery itself rather than a

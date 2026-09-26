@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import sys
 import traceback
+from pathlib import Path
 
 RESULTS: list[tuple[str, str, str]] = []
 
@@ -416,6 +417,110 @@ def _suite_runner_exit_codes():
     return f"pass={EXIT_PASS} fail={EXIT_FAIL} error={EXIT_ERROR}, all distinct"
 
 
+def _ci_files_agree():
+    """The action and the workflow are only ever executed by someone else's
+    pipeline, so nothing in our CI notices when they stop matching."""
+    import yaml
+
+    root = Path(__file__).resolve().parent.parent.parent
+    action = yaml.safe_load(
+        (root / ".github" / "actions" / "evaluate-model" / "action.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    workflow = (root / ".github" / "workflows" / "docker-build.yml").read_text(
+        encoding="utf-8"
+    )
+
+    image = action["runs"]["image"].replace("docker://", "")
+    name = image.rsplit("/", 1)[-1].split(":")[0]
+    assert name in workflow, f"{name} is never built by docker-build.yml"
+    assert "docker push" in workflow, "the image is built but never published"
+
+    entrypoint = action["runs"].get("entrypoint")
+    assert entrypoint, "the action does not override the image entrypoint"
+
+    dockerfile = (root / "infrastructure" / "docker" / "Dockerfile.cli").read_text(
+        encoding="utf-8"
+    )
+    assert entrypoint in dockerfile, f"{entrypoint} is not installed in the image"
+
+    script = root / "ci" / "orion-ci.sh"
+    # bytes([13, 10]) rather than a "\r\n" literal: this file gets edited by
+    # tooling that mangles backslash escapes, and a CRLF check that silently
+    # became a bare-newline check would pass against the exact file it exists
+    # to reject.
+    assert bytes([13, 10]) not in script.read_bytes(), "orion-ci.sh has CRLF"
+
+    return f"action runs {image} via {entrypoint}; pushed, installed, LF"
+
+
+def _ci_regression_fails_a_passing_run():
+    """The absolute collision bar cannot see a model getting steadily worse.
+    Two real models, both collision-free on LON-003, one clearly worse."""
+    import json
+    import tempfile
+
+    from arep.cli.run_suite import EXIT_FAIL, EXIT_PASS, main as suite_main
+
+    with tempfile.TemporaryDirectory() as tmp:
+        good, worse = Path(tmp) / "good", Path(tmp) / "worse"
+
+        def run(model, out, extra=()):
+            return suite_main(
+                [
+                    "--scenarios",
+                    "LON-003",
+                    "--model",
+                    model,
+                    "--runs-per-scenario",
+                    "2",
+                    "--output-dir",
+                    str(out),
+                    *extra,
+                ]
+            )
+
+        assert run("emergency_brake", good) == EXIT_PASS
+        assert run("lane_keep", worse) == EXIT_PASS, "must pass on its own merits"
+
+        baseline = good / "orion_suite_report.json"
+        assert run("lane_keep", worse, ["--baseline", str(baseline)]) == EXIT_FAIL
+
+        before = json.loads(baseline.read_text(encoding="utf-8"))["composite_mean"]
+        after = json.loads(
+            (worse / "orion_suite_report.json").read_text(encoding="utf-8")
+        )["composite_mean"]
+
+    return f"composite {before} -> {after} passes the bar and fails the build"
+
+
+def _gitlab_component_matches_the_action():
+    import yaml
+
+    root = Path(__file__).resolve().parent.parent.parent
+    component = root / "ci" / "gitlab" / "templates" / "evaluate-model.yml"
+    assert component.exists(), "the GitLab component is missing"
+
+    docs = list(yaml.safe_load_all(component.read_text(encoding="utf-8")))
+    assert len(docs) == 2, "a component is a spec document then a job document"
+
+    action = yaml.safe_load(
+        (root / ".github" / "actions" / "evaluate-model" / "action.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected = action["runs"]["image"].replace("docker://", "")
+    assert (
+        docs[0]["spec"]["inputs"]["image"]["default"] == expected
+    ), "the component and the action would score against different images"
+
+    job = next(iter(docs[1].values()))
+    assert job["image"]["entrypoint"] == [""], "script: would be passed to run_suite"
+
+    return f"component pinned to {expected}; not published (no gitlab.com/orioneval)"
+
+
 CRITERIA = [
     ("1.5", "four_way_intersection() returns a valid RoadGraph", _four_way_graph),
     ("1.5", "is_off_road() true outside all segments", _off_road),
@@ -439,6 +544,17 @@ CRITERIA = [
     ),
     ("2.4", "Report renders all sections", _pdf_report_sections),
     ("3.2", "run_suite exit codes 0/1/2 are distinct", _suite_runner_exit_codes),
+    ("3.2", "The action and the image it runs agree", _ci_files_agree),
+    (
+        "3.2",
+        "A regression fails a run that passes the collision bar",
+        _ci_regression_fails_a_passing_run,
+    ),
+    (
+        "3.3",
+        "GitLab component matches the action",
+        _gitlab_component_matches_the_action,
+    ),
     ("4.2", "Parsing TownSimple.xodr", _xodr_named_fixture),
     ("4.2", "XODR line+arc geometry parses to a RoadGraph", _xodr_parses_at_all),
     ("4.4", "Importing the ASAM CutIn.osc sample", _osc_named_fixture),

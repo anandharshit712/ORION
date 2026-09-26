@@ -639,6 +639,11 @@ pytest --cov=arep --cov-report=term-missing --cov-fail-under=70
 # CI suite runner (exit 0 pass / 1 model failed / 2 harness could not answer)
 PYTHONPATH=. python -m arep.cli.run_suite --scenarios all --model emergency_brake     --runs-per-scenario 10 --output-dir ./results --format json
 
+# Same, failing the run on a regression against a previous report as well as on
+# the absolute collision bar. A missing baseline is the normal first run and is
+# skipped rather than failing.
+PYTHONPATH=. python -m arep.cli.run_suite --scenarios all --model emergency_brake     --baseline ./results/orion_suite_report.json
+
 # Start everything (from project root)
 ./start.sh        # Linux/Mac (bash)
 start.bat         # Windows (cmd.exe)
@@ -673,6 +678,39 @@ site — they live in `api.rate_limit_*`. Never add a data route without router-
 (`dependencies=_AUTHENTICATED`); `/health`, `/docs`, `/openapi.json` and `/api/auth/*` are the
 whole public surface. Never act on a webhook before verifying its signature and claiming its
 event id. See Section 8.
+
+### CI integrations (GitHub Action, GitLab component)
+
+Both run the **same image** (`ghcr.io/<owner>/orion-cli`) and the **same script**
+(`ci/orion-ci.sh`, installed at `/usr/local/bin/orion-ci`). Write the behaviour once, in the
+script, configured by `ORION_*` environment variables. Two hand-written integrations of one
+product drift, and CI integrations drift silently — nobody runs the other platform's
+pipeline.
+
+`tests/test_ci_integration_files.py` is what keeps them honest. It parses both files the way
+the platforms do and fails if they disagree. Extend it when you touch either.
+
+Things that are load-bearing and easy to break:
+
+- **`ci/orion-ci.sh` must stay LF.** A CRLF shebang makes the container exit with
+  "no such file or directory" naming a file that is plainly there. `.gitattributes` pins
+  `*.sh` on checkout, but Python's `write_text` on Windows re-introduces CRLF — which is how
+  this broke once, after the `.gitattributes` fix. A test asserts the bytes.
+- **Never add `set -e` to that script.** The exit code from `run_suite` is the entire
+  contract; aborting on the first non-zero command loses the outputs and flattens 1 (model
+  failed) into the same shape as 2 (harness error).
+- **The action must override the image entrypoint.** The image's `ENTRYPOINT` is `run_suite`,
+  which ignores every `ORION_*` variable. A script kept beside `action.yml` is not in a
+  prebuilt image — GitHub mounts the workspace, not the action directory.
+- **`action.yml`'s `image:` takes no expressions**, so it and `docker-build.yml` are matched
+  by hand and by test. If the project moves to an `orioneval` org, change both.
+- **A new `run_suite` report field is a new CI output.** Declare it in `action.yml` outputs
+  and publish it in the script; the test pairs the two.
+
+The regression check lives in `run_suite.find_regressions`, importing its thresholds from
+`analysis/regression_detector.py`. Never restate those numbers: two sets that are supposed to
+match are one set and a bug.
+
 
 ---
 
@@ -758,6 +796,7 @@ the module docstring before assuming coverage.
 | `search/space.py`, `search/objective.py`, `search/optimizer.py` | CMA-ES + random-baseline adversarial search | Stops at the first collision; needs `arep[search]` |
 | `reporting/pdf_generator.py` | Jinja2 → HTML → PDF | `render_html()` works anywhere; PDF needs WeasyPrint's GTK libraries, absent on Windows |
 | `cli/run_suite.py` | CI entrypoint | Exit **0** pass / **1** model failed / **2** ORION could not answer — keep 1 and 2 distinct |
+| `ci/orion-ci.sh` | The CI entrypoint both integrations run | Configured only by `ORION_*` env vars; must stay LF and must not use `set -e` |
 | `maps/xodr_parser.py` | OpenDRIVE → `RoadGraph` | Line and arc geometry only; spirals and poly3 are skipped **and logged** |
 | `scenario/osc_importer.py`, `osc_exporter.py` | OpenSCENARIO 2.0 ↔ `ScenarioDefinition` | A line reader for the modelled subset, not a conforming parser. The round trip loses the parameterisation block |
 

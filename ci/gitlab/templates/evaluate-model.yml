@@ -1,0 +1,89 @@
+# ORION safety evaluation — GitLab CI/CD component (Phase 3.3).
+#
+# Same capability as .github/actions/evaluate-model, same image, same
+# entrypoint script. Only the plumbing differs: GitLab reads outputs from a
+# dotenv artifact instead of a $GITHUB_OUTPUT file, so `orion-ci` writes both
+# and neither platform needs its own logic.
+#
+# Used as:
+#   include:
+#     - component: $CI_SERVER_FQDN/orioneval/evaluate-model/evaluate-model@1
+#       inputs:
+#         model_path: myproject.model.MyModel
+
+spec:
+  inputs:
+    job_name:
+      default: orion-evaluate
+      description: Name of the generated job.
+    stage:
+      default: test
+      description: Stage to run in. Must exist in the including pipeline.
+    model_path:
+      description: Python import path to your ModelInterface class.
+    scenarios:
+      default: all
+      description: Scenario IDs or a category (LON, LAT, INT, VRU, EMG, MLT, or all).
+    runs_per_scenario:
+      default: "10"
+      description: Number of seeded runs per scenario.
+    pass_threshold:
+      default: "0.80"
+      description: Minimum fraction of scenarios that must pass.
+    seed:
+      default: "42"
+      description: Master seed. The same seed gives the same runs on any machine.
+    fail_on_regression:
+      default: "true"
+      description: Fail when scores drop past the regression thresholds vs the baseline.
+    image:
+      default: ghcr.io/anandharshit712/orion-cli:latest
+      description: >-
+        The CLI image. Override to pin a digest, or to point at a mirror in an
+        environment that cannot reach ghcr.io.
+---
+
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image:
+    name: $[[ inputs.image ]]
+    # The image ships run_suite as its entrypoint for direct `docker run` use.
+    # GitLab runs `script:` under the container's shell, so the entrypoint has
+    # to be cleared or every command is passed to run_suite as arguments.
+    entrypoint: [""]
+  variables:
+    ORION_MODEL_PATH: $[[ inputs.model_path ]]
+    ORION_SCENARIOS: $[[ inputs.scenarios ]]
+    ORION_RUNS_PER_SCENARIO: $[[ inputs.runs_per_scenario ]]
+    ORION_PASS_THRESHOLD: $[[ inputs.pass_threshold ]]
+    ORION_SEED: $[[ inputs.seed ]]
+    ORION_FAIL_ON_REGRESSION: $[[ inputs.fail_on_regression ]]
+    ORION_OUTPUT_DIR: orion-results
+    # Set by the cache below when a previous default-branch run left one. A
+    # missing baseline is the normal first run and is skipped, not an error.
+    ORION_BASELINE_REPORT: orion-baseline/orion_suite_report.json
+  # Keyed on the default branch so a feature branch compares against main
+  # rather than against its own previous pipeline, which would let a
+  # regression ratchet in one commit at a time.
+  cache:
+    key: orion-baseline-$CI_DEFAULT_BRANCH
+    paths:
+      - orion-baseline/
+  script:
+    - /usr/local/bin/orion-ci
+    # Promote this run to the baseline only from the default branch. Doing it
+    # everywhere would let a merge request overwrite the reference it is
+    # supposed to be measured against.
+    - |
+      if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then
+        mkdir -p orion-baseline
+        cp orion-results/orion_suite_report.json orion-baseline/
+      fi
+  artifacts:
+    # Kept on failure too: the report is most useful precisely when the job
+    # went red.
+    when: always
+    paths:
+      - orion-results/
+    reports:
+      dotenv: orion-results/orion.env

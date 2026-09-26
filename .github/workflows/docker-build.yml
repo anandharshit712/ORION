@@ -3,15 +3,71 @@ name: Docker Build
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  # Needed to push to ghcr.io. Without it the login below succeeds and the push
+  # fails with a 403 that reads like a credentials problem.
+  packages: write
+
+env:
+  # ghcr.io under the repository owner, so no registry account or secret has to
+  # be provisioned: GITHUB_TOKEN can already push here. Lower-cased because
+  # ghcr.io rejects capitals in a path and GitHub usernames may contain them.
+  REGISTRY: ghcr.io
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Lower-case the owner for the image path
+        id: owner
+        run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      # Only log in when we are going to push. A pull request from a fork has
+      # no package-write token, and attempting the login would fail the build
+      # for a contributor who changed nothing about the images.
+      - name: Log in to ghcr.io
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build API image
         run: docker build -f infrastructure/docker/Dockerfile.api -t orion-api:${{ github.sha }} .
+
       - name: Build Worker image
         run: docker build -f infrastructure/docker/Dockerfile.worker -t orion-worker:${{ github.sha }} .
+
+      # The CLI image is the one that has to exist in a registry rather than
+      # only inside this runner: .github/actions/evaluate-model runs
+      # `docker://ghcr.io/<owner>/orion-cli:latest`, so until this is pushed the
+      # action fails on image pull for every customer who adds it. It was
+      # tagged locally and discarded when the job ended, which looked like a
+      # working build.
       - name: Build CLI image
-        run: docker build -f infrastructure/docker/Dockerfile.cli -t orion-cli:${{ github.sha }} .
+        run: |
+          docker build -f infrastructure/docker/Dockerfile.cli \
+            -t ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/orion-cli:${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/orion-cli:latest \
+            .
+
+      - name: Smoke-test the CLI image
+        # A published image that cannot start is worse than none: the action
+        # would fail inside a customer's pipeline rather than ours.
+        run: |
+          docker run --rm \
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/orion-cli:${{ github.sha }} \
+            --help
+
+      - name: Push CLI image
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/orion-cli:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/orion-cli:latest

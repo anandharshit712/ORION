@@ -296,6 +296,40 @@ on the weighted average.
 
 ---
 
+## 8.6 When ORION calls a change a regression
+
+A score is only meaningful against another score. In CI, ORION compares the new
+suite report against a previous one and fails the build when any scenario moves
+past one of these:
+
+| What moved | How far it has to move |
+| --- | --- |
+| Composite score | down more than **0.05** |
+| Safety score | down more than **0.10** |
+| Collision rate | up more than **1 percentage point** |
+
+Safety gets the looser band deliberately. It is the noisier of the two across
+seeds, and a check that fires on ordinary run-to-run variation gets switched
+off within a week — at which point it protects nothing.
+
+**The comparison is per scenario, never on the suite average.** A model that
+improves slightly on four scenarios and degrades badly on the fifth has an
+unchanged mean and a new way to crash. Averaging is exactly the operation that
+hides the finding.
+
+These thresholds are heuristics for "look at this", not statistical tests. They
+do not account for the width of the interval around either score, so a
+comparison built on very few runs per scenario can move past them by chance.
+Read them alongside the n and the interval from §8.5 — with 5 runs a 0.05 move
+may be well inside the noise, and with 100 it is unlikely to be.
+
+A missing baseline is the normal first run: the comparison is skipped, not
+failed. Nothing about the scoring itself changes when a baseline is supplied —
+the same run produces the same scores either way. The baseline only decides
+whether a build goes red.
+
+---
+
 ## 9. Reproducing a score
 
 ```bash

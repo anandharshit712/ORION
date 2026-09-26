@@ -19,4 +19,13 @@ RUN pip install --no-cache-dir /orion-sdk/
 
 COPY scenarios/ /arep/scenarios/
 
+# The CI entrypoint has to live inside the image. A Docker action referencing a
+# prebuilt `image:` never mounts the action's own directory, so a script kept
+# beside action.yml is not there at runtime -- which is why the action's
+# env-var configuration was read by nothing.
+COPY ci/orion-ci.sh /usr/local/bin/orion-ci
+RUN chmod +x /usr/local/bin/orion-ci
+
+# Plain `docker run <image> --scenarios all ...` still works: the CI wrapper is
+# an override, not a replacement.
 ENTRYPOINT ["python", "-m", "arep.cli.run_suite"]

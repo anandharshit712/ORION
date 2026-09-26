@@ -28,6 +28,8 @@ from arep.cli.run_suite import (  # noqa: E402
     EXIT_ERROR,
     EXIT_FAIL,
     EXIT_PASS,
+    find_regressions,
+    load_baseline,
     load_model,
     main,
     resolve_scenarios,
@@ -333,3 +335,190 @@ def test_pdf_generation_explains_a_missing_native_library():
         # The toolchain is present (Linux CI): rendering must then work.
         pdf = PDFGenerator().render_batch_report(BATCH)
         assert pdf.startswith(b"%PDF")
+
+
+# -- Regression against a baseline ----------------------------------------
+#
+# The suite exits on the collision limit, which is an absolute bar. A model can
+# clear it while getting steadily worse, and a CI integration that only watches
+# the bar never says so until the day it drops through.
+
+
+def _report(**scenario):
+    base = {
+        "scenario": "LON-003",
+        "composite_mean": 0.90,
+        "safety_mean": 0.95,
+        "collision_rate": 0.0,
+    }
+    base.update(scenario)
+    return {"scenarios": [base]}
+
+
+def test_an_unchanged_model_reports_no_regression():
+    assert find_regressions(_report(), _report()) == []
+
+
+def test_a_small_drop_is_noise_not_a_regression():
+    """Below the threshold nothing is reported. A check that fires on every
+    run of a stochastic suite gets switched off within a week."""
+    assert find_regressions(_report(composite_mean=0.88), _report()) == []
+
+
+def test_a_composite_drop_past_the_threshold_is_reported():
+    found = find_regressions(_report(composite_mean=0.80), _report())
+    assert len(found) == 1
+    assert "composite" in found[0]
+
+
+def test_safety_gets_its_own_looser_threshold():
+    """Safety is noisier per-run than composite, so it takes a larger drop —
+    the numbers come from RegressionDetector rather than being restated."""
+    from arep.analysis.regression_detector import (
+        REGRESSION_COMPOSITE_THRESHOLD,
+        REGRESSION_SAFETY_THRESHOLD,
+    )
+
+    assert REGRESSION_SAFETY_THRESHOLD > REGRESSION_COMPOSITE_THRESHOLD
+
+    between = 0.95 - (REGRESSION_COMPOSITE_THRESHOLD + REGRESSION_SAFETY_THRESHOLD) / 2
+    assert find_regressions(_report(safety_mean=between), _report()) == []
+    assert find_regressions(_report(safety_mean=0.80), _report())
+
+
+def test_a_new_collision_is_a_regression_even_at_a_higher_composite():
+    """The case the whole check exists for: a model that got smoother and
+    started hitting things."""
+    found = find_regressions(
+        _report(composite_mean=0.99, collision_rate=0.05), _report()
+    )
+    assert any("collision" in line for line in found)
+
+
+def test_an_improvement_is_never_a_regression():
+    assert find_regressions(_report(composite_mean=0.99), _report()) == []
+
+
+def test_a_scenario_missing_from_the_baseline_is_skipped():
+    """A newly added scenario has nothing to compare against. Treating absent
+    as zero would flag every addition as a catastrophic regression."""
+    assert find_regressions(_report(), {"scenarios": []}) == []
+
+
+def test_regressions_are_found_per_scenario_not_on_the_mean():
+    """A model that gains a little on four and loses a lot on the fifth has a
+    flat mean and a new way to crash."""
+    now = {
+        "scenarios": [
+            {
+                "scenario": f"S{i}",
+                "composite_mean": 1.00,
+                "safety_mean": 0.95,
+                "collision_rate": 0.0,
+            }
+            for i in range(4)
+        ]
+        + [
+            {
+                "scenario": "S4",
+                "composite_mean": 0.50,
+                "safety_mean": 0.95,
+                "collision_rate": 0.0,
+            }
+        ]
+    }
+    before = {
+        "scenarios": [
+            {
+                "scenario": f"S{i}",
+                "composite_mean": 0.90,
+                "safety_mean": 0.95,
+                "collision_rate": 0.0,
+            }
+            for i in range(5)
+        ]
+    }
+    assert sum(s["composite_mean"] for s in now["scenarios"]) == pytest.approx(
+        sum(s["composite_mean"] for s in before["scenarios"]), abs=0.01
+    )
+
+    found = find_regressions(now, before)
+    assert len(found) == 1 and "S4" in found[0]
+
+
+def test_a_missing_baseline_file_is_the_normal_first_run(tmp_path, capsys):
+    """It must not fail the build, or nobody can ever adopt the flag."""
+    assert load_baseline(tmp_path / "nope.json") is None
+    assert "no baseline" in capsys.readouterr().out
+
+
+def test_a_corrupt_baseline_is_a_plumbing_problem_not_a_verdict(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert load_baseline(bad) is None
+
+
+def test_the_report_carries_suite_wide_means(tmp_path):
+    """The CI entrypoint publishes these. They were absent, so the action's
+    output step read keys that did not exist."""
+    code = main(
+        [
+            "--scenarios",
+            "LON-003",
+            "--model",
+            "emergency_brake",
+            "--runs-per-scenario",
+            "2",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    assert code == EXIT_PASS
+
+    report = json.loads(
+        (tmp_path / "orion_suite_report.json").read_text(encoding="utf-8")
+    )
+    for key in ("composite_mean", "safety_mean", "collision_rate", "pass_rate"):
+        assert key in report, f"{key} missing from the suite report"
+        assert isinstance(report[key], (int, float))
+
+
+def test_a_regression_fails_the_run_that_would_otherwise_pass(tmp_path):
+    """End to end through main(), with two real models rather than a doctored
+    report: the scenario still passes on collision rate, and the build still
+    goes red.
+
+    emergency_brake and lane_keep both clear LON-003 without a collision and
+    score ~0.97 and ~0.86 — a swap the collision-limit check cannot see, which
+    is the entire reason the baseline comparison exists.
+    """
+
+    def run(model, output, extra=()):
+        return main(
+            [
+                "--scenarios",
+                "LON-003",
+                "--model",
+                model,
+                "--runs-per-scenario",
+                "2",
+                "--output-dir",
+                str(output),
+                *extra,
+            ]
+        )
+
+    good = tmp_path / "good"
+    assert run("emergency_brake", good) == EXIT_PASS
+    baseline = good / "orion_suite_report.json"
+
+    worse = tmp_path / "worse"
+    assert run("lane_keep", worse) == EXIT_PASS, "must pass on its own merits"
+
+    assert run("lane_keep", worse, ["--baseline", str(baseline)]) == EXIT_FAIL
+    assert (
+        run(
+            "lane_keep", worse, ["--baseline", str(baseline), "--no-fail-on-regression"]
+        )
+        == EXIT_PASS
+    )
