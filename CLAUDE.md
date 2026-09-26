@@ -572,10 +572,21 @@ with session_scope() as db:
 
 Never use raw `Session` — always go through repository classes in `database/repository.py`.
 
-Migrations live in `arep/database/migrations/versions/` (latest: `009_subscription_state`).
+Migrations live in `arep/database/migrations/versions/` (latest: `013_webhooks`).
 Note: `alembic upgrade head` does **not** run on SQLite — migration `002` uses an `ALTER`
 with a constraint, which SQLite cannot do. Dev uses `init_database()` (`create_all`); the
 migration chain is only exercised against Postgres. Tracked as D-13 (Phase 0.6).
+
+**That gap is load-bearing, so treat a new migration as untested code.** `create_all` builds
+the schema from the ORM, where every table is defined exactly once, so it cannot see a name
+two migrations both claim — and 013 claimed `webhook_deliveries`, which 002 already creates,
+making `alembic upgrade head` fail on every fresh database while the whole suite stayed
+green. `tests/test_migration_chain.py` now renders the chain as Postgres SQL offline (no
+server, under a second) and fails on a table created while one of that name exists, a
+boolean defaulted with an integer (`sa.text("1")` → `BOOLEAN DEFAULT 1`, which SQLite takes
+and Postgres refuses — use `sa.true()`/`sa.false()`), and a downgrade that leaves a table
+behind. Run it when you add a migration; it is not a substitute for the Postgres job, it
+just moves the common failures to two seconds.
 `OrganisationRepository.allows_pickle_models(org_id)` is the single read of the D-01 gate —
 check it there, never by reading the column directly.
 
