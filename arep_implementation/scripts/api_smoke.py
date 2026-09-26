@@ -32,8 +32,8 @@ os.environ.setdefault("ORION_ENV", "dev")
 os.environ["ORION_DATABASE_URL"] = "sqlite:///" + _db.replace("\\", "/")
 os.environ["ORION_RATE_LIMIT_ENABLED"] = "true"
 
-import uvicorn                                    # noqa: E402
-from arep.api.app import create_app               # noqa: E402
+import uvicorn  # noqa: E402
+from arep.api.app import create_app  # noqa: E402
 
 HOST, PORT = "127.0.0.1", 8123
 BASE = f"http://{HOST}:{PORT}"
@@ -42,7 +42,9 @@ _failures: list[str] = []
 
 
 def check(label: str, ok: bool, detail: object = "") -> None:
-    print(("  PASS  " if ok else "  FAIL  ") + label + ("" if ok else f"   <- {detail}"))
+    print(
+        ("  PASS  " if ok else "  FAIL  ") + label + ("" if ok else f"   <- {detail}")
+    )
     if not ok:
         _failures.append(label)
 
@@ -54,7 +56,9 @@ _cookies: dict[str, str] = {}
 _cookie_flags: dict[str, str] = {}
 
 
-def call(method: str, path: str, body=None, headers=None, origin=None, use_cookies=False):
+def call(
+    method: str, path: str, body=None, headers=None, origin=None, use_cookies=False
+):
     """Return (status, lowercased headers, body text).
 
     Header names are lowercased because uvicorn emits them that way on the wire,
@@ -73,13 +77,17 @@ def call(method: str, path: str, body=None, headers=None, origin=None, use_cooki
     try:
         with urllib.request.urlopen(req, data) as response:
             _remember_cookies(response.headers)
-            return (response.status,
-                    {k.lower(): v for k, v in response.headers.items()},
-                    response.read().decode())
+            return (
+                response.status,
+                {k.lower(): v for k, v in response.headers.items()},
+                response.read().decode(),
+            )
     except urllib.error.HTTPError as exc:
-        return (exc.code,
-                {k.lower(): v for k, v in exc.headers.items()},
-                exc.read().decode())
+        return (
+            exc.code,
+            {k.lower(): v for k, v in exc.headers.items()},
+            exc.read().decode(),
+        )
 
 
 def _remember_cookies(headers) -> None:
@@ -91,9 +99,14 @@ def _remember_cookies(headers) -> None:
 
 
 def main() -> int:
-    server = uvicorn.Server(uvicorn.Config(
-        create_app(), host=HOST, port=PORT, log_level="error",
-    ))
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_app(),
+            host=HOST,
+            port=PORT,
+            log_level="error",
+        )
+    )
     threading.Thread(target=server.run, daemon=True).start()
     for _ in range(100):
         if server.started:
@@ -106,23 +119,40 @@ def main() -> int:
     print("\n-- health + security headers (D-03) --")
     status, headers, _ = call("GET", "/health")
     check("GET /health 200", status == 200, status)
-    check("nosniff", headers.get("x-content-type-options") == "nosniff",
-          headers.get("x-content-type-options"))
-    check("frame-options DENY", headers.get("x-frame-options") == "DENY",
-          headers.get("x-frame-options"))
-    check("CSP locked down", "default-src 'none'" in headers.get("content-security-policy", ""),
-          headers.get("content-security-policy"))
-    check("no HSTS over plain http", "strict-transport-security" not in headers,
-          headers.get("strict-transport-security"))
+    check(
+        "nosniff",
+        headers.get("x-content-type-options") == "nosniff",
+        headers.get("x-content-type-options"),
+    )
+    check(
+        "frame-options DENY",
+        headers.get("x-frame-options") == "DENY",
+        headers.get("x-frame-options"),
+    )
+    check(
+        "CSP locked down",
+        "default-src 'none'" in headers.get("content-security-policy", ""),
+        headers.get("content-security-policy"),
+    )
+    check(
+        "no HSTS over plain http",
+        "strict-transport-security" not in headers,
+        headers.get("strict-transport-security"),
+    )
 
     print("\n-- CORS whitelist (D-03) --")
     _, headers, _ = call("GET", "/health", origin="https://evil.example")
-    check("foreign origin gets no grant", headers.get("access-control-allow-origin") is None,
-          headers.get("access-control-allow-origin"))
+    check(
+        "foreign origin gets no grant",
+        headers.get("access-control-allow-origin") is None,
+        headers.get("access-control-allow-origin"),
+    )
     _, headers, _ = call("GET", "/health", origin="http://localhost:5173")
-    check("whitelisted origin granted",
-          headers.get("access-control-allow-origin") == "http://localhost:5173",
-          headers.get("access-control-allow-origin"))
+    check(
+        "whitelisted origin granted",
+        headers.get("access-control-allow-origin") == "http://localhost:5173",
+        headers.get("access-control-allow-origin"),
+    )
 
     print("\n-- route auth (D-07) --")
     for path in ("/models/", "/scenarios/", "/jobs/", "/results/model/x", "/api/runs/"):
@@ -130,10 +160,16 @@ def main() -> int:
         check(f"unauthenticated {path} -> 401", status == 401, status)
 
     print("\n-- signup / login / authenticated reads --")
-    status, _, body = call("POST", "/api/auth/signup", {
-        "email": "smoke@example.com", "username": "smoke",
-        "password": "smoke-password-123", "org_name": "Smoke Org",
-    })
+    status, _, body = call(
+        "POST",
+        "/api/auth/signup",
+        {
+            "email": "smoke@example.com",
+            "username": "smoke",
+            "password": "smoke-password-123",
+            "org_name": "Smoke Org",
+        },
+    )
     check("signup 201", status == 201, f"{status} {body[:160]}")
 
     # Signup leaves the address unverified (D-04), which blocks key creation
@@ -141,14 +177,20 @@ def main() -> int:
     # the real flow has its own tests.
     from arep.database.connection import session_scope
     from arep.database.models import UserRecord
+
     with session_scope() as session:
         user = session.query(UserRecord).filter_by(email="smoke@example.com").first()
         if user is not None:
             user.email_verified = True
 
-    status, headers, body = call("POST", "/api/auth/login", {
-        "identifier": "smoke@example.com", "password": "smoke-password-123",
-    })
+    status, headers, body = call(
+        "POST",
+        "/api/auth/login",
+        {
+            "identifier": "smoke@example.com",
+            "password": "smoke-password-123",
+        },
+    )
     check("login 200", status == 200, f"{status} {body[:160]}")
     token = json.loads(body)["access_token"] if status == 200 else ""
     auth = {"Authorization": f"Bearer {token}"}
@@ -156,23 +198,37 @@ def main() -> int:
     status, _, body = call("GET", "/scenarios/", headers=auth)
     check("authenticated /scenarios/ 200", status == 200, f"{status} {body[:120]}")
     status, _, body = call("GET", "/models/", headers=auth)
-    check("authenticated /models/ lists built-ins", status == 200 and "EmergencyBrake" in body,
-          f"{status} {body[:120]}")
+    check(
+        "authenticated /models/ lists built-ins",
+        status == 200 and "EmergencyBrake" in body,
+        f"{status} {body[:120]}",
+    )
 
     print("\n-- rate limiting (D-03) --")
     # The successful login above already spent one of the five per-minute
     # attempts, so four real 401s remain before the limiter takes over.
-    codes = [call("POST", "/api/auth/login",
-                  {"identifier": "smoke@example.com", "password": "wrong"})[0]
-             for _ in range(7)]
+    codes = [
+        call(
+            "POST",
+            "/api/auth/login",
+            {"identifier": "smoke@example.com", "password": "wrong"},
+        )[0]
+        for _ in range(7)
+    ]
     check("remaining budget answers with real 401s", codes[:4] == [401] * 4, codes)
     check("limit then holds", set(codes[5:]) == {429}, codes)
 
-    status, headers, _ = call("POST", "/api/auth/login",
-                              {"identifier": "smoke@example.com", "password": "wrong"})
+    status, headers, _ = call(
+        "POST",
+        "/api/auth/login",
+        {"identifier": "smoke@example.com", "password": "wrong"},
+    )
     check("429 body is the platform error shape", status == 429)
-    check("rate-limit headers reach the client", "x-ratelimit-limit" in headers,
-          sorted(k for k in headers if "ratelimit" in k))
+    check(
+        "rate-limit headers reach the client",
+        "x-ratelimit-limit" in headers,
+        sorted(k for k in headers if "ratelimit" in k),
+    )
 
     print("\n-- health stays exempt --")
     check("health still 200 after the limit bit", call("GET", "/health")[0] == 200)
@@ -183,12 +239,16 @@ def main() -> int:
     # which is the point, a browser keeps them across requests.
     check("session cookie issued", "orion_session" in _cookies, sorted(_cookies))
     check("csrf cookie issued", "orion_csrf" in _cookies, sorted(_cookies))
-    check("session cookie is HttpOnly",
-          "HttpOnly" in _cookie_flags.get("orion_session", ""),
-          _cookie_flags.get("orion_session", "")[:100])
-    check("csrf cookie is readable on purpose",
-          "HttpOnly" not in _cookie_flags.get("orion_csrf", ""),
-          _cookie_flags.get("orion_csrf", "")[:100])
+    check(
+        "session cookie is HttpOnly",
+        "HttpOnly" in _cookie_flags.get("orion_session", ""),
+        _cookie_flags.get("orion_session", "")[:100],
+    )
+    check(
+        "csrf cookie is readable on purpose",
+        "HttpOnly" not in _cookie_flags.get("orion_csrf", ""),
+        _cookie_flags.get("orion_csrf", "")[:100],
+    )
 
     status, _, _ = call("GET", "/api/auth/me", use_cookies=True)
     check("cookie alone authenticates /me", status == 200, status)
@@ -196,23 +256,40 @@ def main() -> int:
     status, _, body = call("POST", "/api/keys/", {"label": "no-csrf"}, use_cookies=True)
     # Assert *why* it was refused: the verification gate also answers 403, and a
     # test that cannot tell them apart passes for the wrong reason.
-    check("cookie write without CSRF is refused", status == 403 and "CSRF" in body,
-          f"{status} {body[:120]}")
+    check(
+        "cookie write without CSRF is refused",
+        status == 403 and "CSRF" in body,
+        f"{status} {body[:120]}",
+    )
 
-    status, _, body = call("POST", "/api/keys/", {"label": "with-csrf"},
-                           headers={"X-CSRF-Token": _cookies.get("orion_csrf", "")},
-                           use_cookies=True)
+    status, _, body = call(
+        "POST",
+        "/api/keys/",
+        {"label": "with-csrf"},
+        headers={"X-CSRF-Token": _cookies.get("orion_csrf", "")},
+        use_cookies=True,
+    )
     check("cookie write with CSRF is allowed", status == 201, f"{status} {body[:100]}")
 
     print("\n-- webhook (0.3) --")
-    status, _, body = call("POST", "/api/billing/webhook",
-                           {"id": "evt_smoke", "type": "invoice.paid"})
-    check("unsigned beta webhook is a 200 no-op", status == 200 and "beta_noop" in body,
-          f"{status} {body[:80]}")
+    status, _, body = call(
+        "POST", "/api/billing/webhook", {"id": "evt_smoke", "type": "invoice.paid"}
+    )
+    check(
+        "unsigned beta webhook is a 200 no-op",
+        status == 200 and "beta_noop" in body,
+        f"{status} {body[:80]}",
+    )
 
     server.should_exit = True
-    print("\n" + ("ALL SMOKE CHECKS PASSED" if not _failures
-                  else f"FAILURES ({len(_failures)}): {_failures}"))
+    print(
+        "\n"
+        + (
+            "ALL SMOKE CHECKS PASSED"
+            if not _failures
+            else f"FAILURES ({len(_failures)}): {_failures}"
+        )
+    )
     return 1 if _failures else 0
 
 

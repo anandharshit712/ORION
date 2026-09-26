@@ -41,7 +41,9 @@ HOST = "127.0.0.1"
 PORT = 8765
 SCENARIO = str(
     Path(__file__).resolve().parent.parent
-    / "scenarios" / "basic" / "straight_road_lead_vehicle.yaml"
+    / "scenarios"
+    / "basic"
+    / "straight_road_lead_vehicle.yaml"
 )
 
 
@@ -49,7 +51,10 @@ def _start_server() -> uvicorn.Server:
     from arep.api.app import create_app
 
     config = uvicorn.Config(
-        create_app(), host=HOST, port=PORT, log_level="warning",
+        create_app(),
+        host=HOST,
+        port=PORT,
+        log_level="warning",
     )
     server = uvicorn.Server(config)
 
@@ -74,45 +79,61 @@ async def run_smoke() -> int:
     try:
         async with httpx.AsyncClient(base_url=f"http://{HOST}:{PORT}") as http:
             email = f"ws-smoke-{int(time.time())}@example.com"
-            resp = await http.post("/api/auth/signup", json={
-                "email": email,
-                "username": email.split("@")[0],
-                "password": "ws-smoke-password",
-                "org_name": "WS Smoke Org",
-            })
+            resp = await http.post(
+                "/api/auth/signup",
+                json={
+                    "email": email,
+                    "username": email.split("@")[0],
+                    "password": "ws-smoke-password",
+                    "org_name": "WS Smoke Org",
+                },
+            )
             resp.raise_for_status()
 
             # Starting a run needs a verified address. Flipping the flag
             # directly is the local stand-in for clicking the emailed link.
             from arep.database.connection import session_scope
             from arep.database.models import UserRecord
+
             with session_scope() as session:
                 user = session.query(UserRecord).filter_by(email=email).first()
                 user.email_verified = True
 
-            resp = await http.post("/api/auth/login", json={
-                "identifier": email, "password": "ws-smoke-password",
-            })
+            resp = await http.post(
+                "/api/auth/login",
+                json={
+                    "identifier": email,
+                    "password": "ws-smoke-password",
+                },
+            )
             resp.raise_for_status()
             auth = {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
-            resp = await http.post("/api/runs/", headers=auth, json={
-                "scenario_path": SCENARIO,
-                "model_name": "EmergencyBrake",
-                "master_seed": 42,
-                "tick_interval": 0.02,
-            })
+            resp = await http.post(
+                "/api/runs/",
+                headers=auth,
+                json={
+                    "scenario_path": SCENARIO,
+                    "model_name": "EmergencyBrake",
+                    "master_seed": 42,
+                    "tick_interval": 0.02,
+                },
+            )
             resp.raise_for_status()
             body = resp.json()
-            print(f"[ws_smoke] run started: {body['run_id']} "
-                  f"scenario={body['scenario_name']}")
+            print(
+                f"[ws_smoke] run started: {body['run_id']} "
+                f"scenario={body['scenario_name']}"
+            )
             run_id = body["run_id"]
 
             resp = await http.post(f"/api/runs/{run_id}/ws-ticket", headers=auth)
             resp.raise_for_status()
             ticket = resp.json()["ticket"]
-            print(f"[ws_smoke] ticket minted (expires in "
-                  f"{resp.json()['expires_in']}s)")
+            print(
+                f"[ws_smoke] ticket minted (expires in "
+                f"{resp.json()['expires_in']}s)"
+            )
 
         ws_url = f"ws://{HOST}:{PORT}/ws/simulation/{run_id}?ticket={ticket}"
         print(f"[ws_smoke] connecting to {ws_url}")
@@ -146,8 +167,10 @@ async def run_smoke() -> int:
                         f"verdict={msg['monitor']['verdict_so_far']}"
                     )
             elapsed = time.monotonic() - t0
-            print(f"[ws_smoke] received {received} frames in {elapsed:.2f}s "
-                  f"(~{received/elapsed:.1f} Hz)")
+            print(
+                f"[ws_smoke] received {received} frames in {elapsed:.2f}s "
+                f"(~{received/elapsed:.1f} Hz)"
+            )
         return 0
     finally:
         server.should_exit = True

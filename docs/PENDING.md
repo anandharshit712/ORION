@@ -224,6 +224,19 @@ parsed by test the way the platforms parse them. What no local check can answer 
 GitHub accepts `action.yml` and pulls the image — the first push to `main` publishes it, and
 one PR that adds the action settles it.
 
+### Widening the ruff rule set
+`[tool.ruff] lint.select` is pinned to `E4, E7, E9, F` — what ruff shipped as its default
+through 0.15 and what the tree is clean against. Ruff 0.16 turns on `UP`, `I`, `DTZ`, `SIM`,
+`PL`, `BLE` and `RUF` by default; against this tree that is **862 findings**, 729 of them
+auto-fixable.
+
+Worth doing family by family, each as its own commit, because the diff is large and
+mechanical and would otherwise bury a real change. One of them is not cosmetic: **27
+`DTZ003` hits for `datetime.utcnow()`**, which is deprecated in Python 3.12 and returns a
+naive datetime — this repo already bans wall-clock reads inside simulation code, and these
+are in the API and database layers where a naive UTC timestamp compared against an aware one
+raises.
+
 ---
 
 ## Product decisions outstanding

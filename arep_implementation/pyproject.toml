@@ -17,9 +17,15 @@ dependencies = [
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
-    "black>=23.0",
-    "ruff>=0.1.0",
-    "mypy>=1.6",
+    # Linters are pinned for the same reason numpy and scipy are: an unpinned
+    # tool makes CI fail on a day nobody changed any code. Ruff 0.16 turned on
+    # whole rule families by default (UP, I, DTZ, SIM, PL, RUF) and produced 862
+    # findings against a tree that had been clean for months, which is what
+    # every Lint run on this repo had been failing on. Upgrade deliberately,
+    # with the diff in its own commit.
+    "black==26.3.1",
+    "ruff==0.15.12",
+    "mypy==1.20.2",
     "pytest-asyncio>=0.23.0",
     "httpx>=0.25.0",            # async test client for FastAPI
 ]
@@ -71,6 +77,17 @@ where = ["."]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.ruff]
+# The rule set is a decision this repository makes, not whatever the installed
+# ruff defaults to this month. These four are what ruff shipped as its default
+# through 0.15 and what the tree is clean against: pycodestyle errors (E4/E7/E9)
+# and pyflakes (F).
+#
+# Widening it is welcome and is its own piece of work: turn on one family, fix
+# what it finds, land that. Doing it by accident through a version bump means a
+# red pipeline on an unrelated change, which is how a lint gate gets ignored.
+lint.select = ["E4", "E7", "E9", "F"]
 
 [tool.mypy]
 python_version = "3.10"

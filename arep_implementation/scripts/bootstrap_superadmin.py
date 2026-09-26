@@ -29,10 +29,14 @@ from arep.database.repository import OrganisationRepository
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed/promote the first superadmin user.")
+    parser = argparse.ArgumentParser(
+        description="Seed/promote the first superadmin user."
+    )
     parser.add_argument("--email", required=True)
     parser.add_argument("--username", required=True)
-    parser.add_argument("--password", default=None, help="Required if user does not exist")
+    parser.add_argument(
+        "--password", default=None, help="Required if user does not exist"
+    )
     parser.add_argument("--full-name", default=None)
     parser.add_argument(
         "--reset-password",
@@ -49,7 +53,8 @@ def main() -> int:
         existing = (
             session.query(UserRecord)
             .filter(
-                (UserRecord.email == args.email) | (UserRecord.username == args.username)
+                (UserRecord.email == args.email)
+                | (UserRecord.username == args.username)
             )
             .first()
         )
@@ -61,7 +66,9 @@ def main() -> int:
                 existing.full_name = args.full_name
             if args.reset_password:
                 if not args.password:
-                    print("ERROR: --reset-password requires --password", file=sys.stderr)
+                    print(
+                        "ERROR: --reset-password requires --password", file=sys.stderr
+                    )
                     return 2
                 existing.hashed_password = hash_password(args.password)
             session.flush()
@@ -73,7 +80,10 @@ def main() -> int:
             return 0
 
         if not args.password:
-            print("ERROR: user does not exist; --password required to create", file=sys.stderr)
+            print(
+                "ERROR: user does not exist; --password required to create",
+                file=sys.stderr,
+            )
             return 2
 
         user = UserRecord(

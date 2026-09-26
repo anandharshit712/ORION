@@ -7,6 +7,7 @@ Usage (run from arep_implementation/):
 
 Does NOT require the API to be running — writes directly to the database.
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -14,10 +15,15 @@ from pathlib import Path
 # Make sure arep package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Reset a user password directly in the DB")
+    parser = argparse.ArgumentParser(
+        description="Reset a user password directly in the DB"
+    )
     parser.add_argument("--email", required=True, help="Email of the account to reset")
-    parser.add_argument("--new-password", required=True, help="New password (min 6 chars)")
+    parser.add_argument(
+        "--new-password", required=True, help="New password (min 6 chars)"
+    )
     args = parser.parse_args()
 
     if len(args.new_password) < 6:
@@ -45,10 +51,13 @@ def main() -> None:
         user.hashed_password = hash_password(args.new_password)
         session.flush()
 
-    print(f"Password updated for {user.email} (username: {user.username}, role: {user.role})")
+    print(
+        f"Password updated for {user.email} (username: {user.username}, role: {user.role})"
+    )
     if invalidated:
         print(f"Invalidated {invalidated} outstanding reset token(s)")
     print("You can now log in via POST /api/auth/login")
+
 
 if __name__ == "__main__":
     main()

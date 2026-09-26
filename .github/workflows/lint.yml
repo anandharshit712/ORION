@@ -16,13 +16,16 @@ jobs:
           python-version: "3.11"
       - name: Install linting tools
         working-directory: arep_implementation
+        # The versions are pinned in pyproject. This step used to install
+        # whatever ruff had published that morning, which is why Lint had been
+        # red on every run since 0.16 changed the default rule set.
         run: pip install -e ".[dev]"
       - name: Black
         working-directory: arep_implementation
-        run: black --check arep/ tests/
+        run: black --check arep/ tests/ scripts/
       - name: Ruff
         working-directory: arep_implementation
-        run: ruff check arep/ tests/
+        run: ruff check arep/ tests/ scripts/
       - name: Mypy
         working-directory: arep_implementation
         run: mypy arep/
