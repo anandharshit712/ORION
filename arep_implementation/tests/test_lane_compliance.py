@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from arep.core.state import LaneInfo, Vector2D  # noqa: E402
@@ -133,8 +135,13 @@ def test_mean_offset_reveals_a_persistent_bias():
     )
 
     assert biased.lane_compliance_fraction == weaving.lane_compliance_fraction == 1.0
-    assert biased.mean_lane_offset == 0.4
+    # approx, not ==: this is a mean of twenty floats, and summation order puts
+    # it at 0.4000000000000001 on CPython 3.11 and exactly 0.4 on 3.12. An exact
+    # comparison here tests the accumulation order of the interpreter, not the
+    # metric, and it failed on the only Python versions CI runs.
+    assert biased.mean_lane_offset == pytest.approx(0.4)
     assert abs(weaving.mean_lane_offset) < 1e-9
+    # max is a selection rather than an arithmetic result, so it is exact.
     assert weaving.max_abs_lane_offset == 0.4
 
 

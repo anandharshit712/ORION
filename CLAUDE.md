@@ -723,6 +723,15 @@ The rules that follow:
   response header sat on `main` behind an already-red light. If CI is red for a
   reason that is not yours, fix that first — you cannot see your own breakage
   through it.
+- **Never assert exact equality on a computed float.** Use `pytest.approx`. A mean
+  of twenty copies of 0.4 is 0.4000000000000001 on CPython 3.11 and exactly 0.4
+  on 3.12 — `==` there tests the interpreter's accumulation order, not the
+  metric, and it failed on both Python versions CI actually runs. A `max` or a
+  count is a selection rather than an arithmetic result and stays exact.
+- **The local venv is Python 3.12; CI runs 3.10 and 3.11.** A version-specific
+  failure is invisible to every local check. `uv python install 3.11` plus
+  `uv pip install -e ".[dev,api,worker,search]"` builds a matching environment in
+  about a minute when CI fails somewhere the local suite passes.
 
 ### CI integrations (GitHub Action, GitLab component)
 
