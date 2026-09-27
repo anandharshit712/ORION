@@ -401,6 +401,10 @@ POST   /api/runs/{run_id}/ws-ticket  mint a single-use 60s WebSocket ticket (aut
 WS     /ws/simulation/{run_id}   live tick frames (auth: ?ticket=<single-use ticket>; 4401 close if refused)
 POST   /api/runs/batch           async batch — body: {scenario_path, model_name, num_runs, master_seed}; returns 202 {batch_id, status, num_runs, enqueued, credits_remaining}
 GET    /api/runs/batch/{id}/status   live progress {status, total, queued, running, completed, failed, composite_mean, collision_rate, error_message}
+POST   /api/search/              body: {scenario_path->scenario_id, model_id, max_evals?, optimizer, physics_mode, seed} — 202; costs max_evals credits, refunded on failure
+GET    /api/search/{id}/status   progress only — evals_done, best_fitness, falsification_found
+GET    /api/search/{id}/result   the above plus best_params, every distinct failure, failure_rate, evaluation history
+GET    /api/search/              this org's searches, newest first
 ```
 
 POST `/api/auth/logout` clears both cookies (public — clearing cookies you may not have is a no-op).
@@ -864,7 +868,24 @@ Artefact fetching verifies the recorded SHA-256 before returning bytes that get 
 ### Deferred (Phase 2+, see `docs/ROADMAP.md`)
 
 - ~~**Statistical CIs surfaced to API/dashboard (2.1)**~~ — **DONE.** `ScoreDistribution` (mean, sample std, 95% interval, 5/25/75/95 percentiles, min/max, n) per metric; `GET /api/runs/batch/{id}/results` recomputes from the stored run rows, not the batch-job scalars, so an old batch summarises the same way as a new one. **A mean must never ship without its n** — `ScoreCard` takes `ciLow`/`ciHigh`/`n`, and below 5 scored runs the response is flagged `low_confidence` and every card says so in words. Collision rate uses Wilson, not the normal approximation, which reports lower bounds below zero exactly where a good model sits. Worst/best runs are named by **seed** (re-runnable) and a collision outranks a low composite. See `docs/METHODOLOGY.md` §8.5.
-- **Failure clustering (2.2)**, **adversarial search (2.3)**, **model comparison + PDF (2.4)**.
+- ~~**Adversarial search reachable over HTTP (2.3)**~~ — **DONE 2026-09-27.** `POST /api/search`
+  + status/result endpoints, `SearchJobRecord` (migration `014`), Celery `run_search` with
+  `analysis/search_runner.py` shared by the inline fallback.
+
+  **Pricing is `max_evals` credits, charged up front, refunded on failure, no tier gate.**
+  That is honest only because `stop_on_first_falsification` is off — the search always
+  spends its budget, so the price is the compute. Never re-enable stop-at-first on the API
+  path without changing the price with it.
+
+  **Omitting `max_evals` charges `recommended_evals(n_dims)`**, not a flat default: the
+  library runs 1–11 dimensions and a flat floor overcharges a one-dimensional scenario
+  fifteenfold.
+
+  **A scenario with no `parameterization` block is refused with a 400.** Searching zero
+  dimensions reports "no failure found" about a model that faced one fixed setting, which
+  reads exactly like a real pass — see `docs/ARCHITECTURE.md` §1.6.1, every new scenario
+  must be parameterised.
+- **Failure clustering (2.2)**, **model comparison + PDF (2.4)**.
 - **Deterministic replay (2.5)** — promoted from Phase 5; depends on Phase 0.5 frame hash. Closes `RunPage` stub.
 - **CompositeEvaluator wired to live runs** — dashboard scores are per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
 - **Sensor simulation** — no LiDAR, camera, GPS/IMU today; observation = ground-truth state. Scheduled as **Phase 6** (`docs/ROADMAP.md`), which starts only after Phase 5 exits — structured sensor output (object lists, ranges), never rendered pixels. Until it ships, ORION = planning/control eval: don't promise perception testing anywhere, and don't build sensor code early.

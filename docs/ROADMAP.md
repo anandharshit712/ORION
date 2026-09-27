@@ -1027,12 +1027,34 @@ Add `cma>=3.3.0` to `pyproject.toml` under `[project.optional-dependencies] sear
 ### 2.3.3 API
 
 ```
-POST /api/search                  { scenario_id, max_evals=200, optimizer: "cma_es"|"random", physics_mode, seed }
+POST /api/search                  { scenario_id, model_id, max_evals?, optimizer: "cma_es"|"random", physics_mode, seed }
 GET  /api/search/{search_id}/status    { status, evals_done, best_fitness, falsification_found }
-GET  /api/search/{search_id}/result    { best_params, best_fitness, falsification_found, falsification_params, all_evaluations }
+GET  /api/search/{search_id}/result    { ...status, result: { best_params, falsifications, failure_rate, all_evaluations } }
+GET  /api/search/                      this org's searches, newest first
 ```
 
-**SaaS wrapping**: Pro tier and above (402 below Pro); consumes `max_evals` credits.
+**Built 2026-09-27** (`api/search.py`, `analysis/search_runner.py`, migration `014`).
+`model_id` is required — the spec omitted it, and a search needs something to break.
+
+**SaaS wrapping**: `max_evals` credits, charged up front and refunded if the search fails,
+the same contract as batches and comparisons. Per-evaluation pricing is honest only because
+`stop_on_first_falsification` is off: the search always spends its budget and reports every
+distinct failure, so the price is exactly the compute. Under the old stop-at-first behaviour
+it would have billed 200 evaluations and run one.
+
+**No tier gate — a deliberate departure from "Pro tier and above".** That would need the
+first real entitlement in the codebase (plans differ only by credit allocation today), and
+a customer who hits adversarial search once on the free plan is the best argument for the
+paid one. Credits are the limiter.
+
+Two behaviours that follow from the pricing:
+
+- **`max_evals` is optional.** Omitted, it charges `recommended_evals(n_dims)` —
+  `max(30, 10 × dims)`. A flat 150 bills a one-dimensional scenario fifteen times over for
+  a search that converged at evaluation ten.
+- **A scenario with no `parameterization` block is refused (400), not queued.** A search
+  over zero dimensions reports "no failure found" about a model that faced one fixed
+  setting, which is indistinguishable from a real pass over 200 — the dangerous answer.
 
 ### Acceptance Criteria
 

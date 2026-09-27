@@ -447,6 +447,68 @@ class RunFrameRecord(Base):
         return f"<RunFrames run={self.run_id} frames={self.frame_count} {self.reason}>"
 
 
+class SearchJobRecord(Base):
+    """One queued adversarial search (Phase 2.3).
+
+    A search is `max_evals` simulations of one scenario against one model,
+    steered rather than sampled, so it is queued like a comparison rather than
+    run inside the request.
+
+    ``credits_charged`` equals the evaluation budget. That is honest because the
+    search always spends its whole budget: `stop_on_first_falsification` is off
+    by default, so it keeps going past the first collision and reports every
+    distinct failure it finds. Under the old stop-at-first behaviour the same
+    price would have charged for 200 evaluations and run one.
+
+    It is recorded rather than recomputed at refund time — the pricing formula
+    can change, and a customer is owed what they actually paid.
+    """
+
+    __tablename__ = "search_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organisations.id"), nullable=True, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    scenario_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    optimizer: Mapped[str] = mapped_column(String(16), nullable=False, default="cma_es")
+    physics_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="kinematic"
+    )
+    max_evals: Mapped[int] = mapped_column(Integer, nullable=False, default=200)
+    seed: Mapped[int] = mapped_column(Integer, nullable=False, default=42)
+    n_dims: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    credits_charged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="queued", index=True
+    )
+    evals_done: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    best_fitness: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    falsification_found: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # Every distinct failure, its seed, and the full evaluation history. The
+    # search *is* the deliverable: a customer wants the settings that broke
+    # their model, not the news that some exist.
+    result_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.datetime.utcnow
+    )
+    completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SearchJobRecord(id={self.id}, scenario={self.scenario_id!r}, "
+            f"status={self.status!r})>"
+        )
+
+
 class ComparisonJobRecord(Base):
     """One queued model-vs-model comparison (Phase 2.4).
 

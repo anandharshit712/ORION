@@ -352,3 +352,26 @@ def run_comparison(task, comparison_id: int) -> None:
     from arep.analysis.comparison_runner import execute_comparison
 
     execute_comparison(comparison_id)
+
+
+@celery_app.task(
+    name="arep.worker.tasks.run_search",
+    bind=True,
+    acks_late=True,
+    max_retries=MAX_RETRIES,
+)
+def run_search(task, search_id: int) -> None:
+    """Execute a queued adversarial search (Phase 2.3).
+
+    The body lives in `analysis.search_runner` so the inline fallback in
+    `api/search.py` runs exactly the same code. It handles its own failure and
+    refund and never raises, so there is nothing to retry here.
+
+    Retrying would be actively wrong: a search spends its whole evaluation
+    budget, so a re-run is the entire cost again. `execute_search` refuses to
+    re-run a job that is no longer queued, which is what makes an `acks_late`
+    redelivery safe.
+    """
+    from arep.analysis.search_runner import execute_search
+
+    execute_search(search_id)

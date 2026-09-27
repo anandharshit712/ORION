@@ -245,6 +245,11 @@ raises.
 Plans currently differ only by credit allocation. Scenario access and concurrent-run caps
 are unspecified.
 
+**One decision is made**: adversarial search has **no tier gate** (2026-09-27), against the
+roadmap's "Pro tier and above". Credits are the limiter, and a customer who hits the feature
+once on the free plan is the best argument for the paid one. That keeps the codebase free of
+entitlement machinery — the first feature that genuinely needs a gate will have to add it.
+
 The open question is what happens to in-flight work on a downgrade. Suggested starting
 point: count running tasks only, a batch counts as one, return 429 at the cap, and let
 in-flight work finish.

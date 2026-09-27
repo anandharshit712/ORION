@@ -29,6 +29,7 @@ from arep.api.middleware import (
 )
 from arep.api.ratelimit import limiter, rate_limit_exceeded_handler
 from arep.api.compare import compare_router
+from arep.api.search import search_router
 from arep.api.webhooks import webhooks_router
 from arep.api.models_routes import models_api_router
 from arep.api.orgs import keys_router, orgs_router
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     app.include_router(keys_router)
     app.include_router(models_api_router)
     app.include_router(compare_router)
+    app.include_router(search_router)
     app.include_router(webhooks_router)
     app.include_router(health_router)
     app.include_router(models_router)
