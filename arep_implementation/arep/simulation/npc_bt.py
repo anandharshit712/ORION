@@ -642,6 +642,329 @@ class JunctionYieldBT(BaseBT):
 
 # ── Registry ──────────────────────────────────────────────────────────────────
 
+# ── Phase 4.3 behaviour trees ────────────────────────────────────────────────
+#
+# Written before the scenarios that need them, on purpose. A scenario whose
+# hazard has no behaviour tree still runs and still produces a score — it just
+# scores the model against a car driving straight. That is the most dangerous
+# failure available here: a pass that tested nothing looks exactly like a pass
+# that tested everything.
+
+
+class OncomingDriftBT(BaseBT):
+    """
+    Oncoming vehicle that drifts across the centre line, and may correct.
+
+    State machine:
+      cruising --trigger--> drifting --correct_prob--> correcting --> cruising
+                                     \\--------------> committed
+
+    The correction probability is what makes this a test rather than a script.
+    A drift that always corrects teaches a model to wait; one that never
+    corrects teaches it to swerve at every wobble. Sampling per run means it
+    has to handle both, which is the actual road.
+
+    Parameters (all support {min, max}):
+      drift_rate      m/s  lateral speed toward the ego's lane
+      drift_target_y  m    lateral position to drift toward
+      correct_prob    0-1  chance of correcting once the drift is under way
+      correct_delay   s    how long it drifts before deciding
+      correct_rate    m/s  lateral speed back toward its own lane
+    """
+
+    def tick(self, obj, behavior, world, rng, dt):
+        params = behavior["parameters"]
+        state = behavior.setdefault("_bt_state", "cruising")
+        data = behavior.setdefault("_bt_data", {})
+        gen = rng.get("traffic")
+
+        if state == "cruising":
+            if _check_trigger(behavior, obj, world):
+                behavior["_bt_state"] = "drifting"
+                data["origin_y"] = obj.position.y
+                data["drift_rate"] = _sample(
+                    params.get("drift_rate", {"min": 0.4, "max": 1.2}), gen
+                )
+                data["drift_target_y"] = float(params.get("drift_target_y", 0.0))
+                data["correct_prob"] = float(params.get("correct_prob", 0.5))
+                data["correct_delay"] = _sample(
+                    params.get("correct_delay", {"min": 0.8, "max": 2.5}), gen
+                )
+                data["correct_rate"] = _sample(
+                    params.get("correct_rate", {"min": 1.0, "max": 3.0}), gen
+                )
+                data["elapsed"] = 0.0
+            return _const_vel(obj, dt)
+
+        if state == "drifting":
+            data["elapsed"] = data.get("elapsed", 0.0) + dt
+            dy = data["drift_target_y"] - obj.position.y
+            direction = dy if abs(dy) > 1e-9 else 1.0
+            step = math.copysign(min(data["drift_rate"] * dt, abs(dy)), direction)
+
+            if data["elapsed"] >= data["correct_delay"]:
+                # Decided once, not re-rolled every tick: a per-tick roll turns
+                # any probability into "eventually, always".
+                behavior["_bt_state"] = (
+                    "correcting" if gen.random() < data["correct_prob"] else "committed"
+                )
+
+            new_obj = obj.copy()
+            new_obj.position = Vector2D(
+                obj.position.x + obj.velocity * math.cos(obj.heading) * dt,
+                obj.position.y + step,
+            )
+            return new_obj
+
+        if state == "correcting":
+            dy = data["origin_y"] - obj.position.y
+            if abs(dy) < 0.05:
+                behavior["_bt_state"] = "recovered"
+                return _const_vel(obj, dt)
+            step = math.copysign(min(data["correct_rate"] * dt, abs(dy)), dy)
+            new_obj = obj.copy()
+            new_obj.position = Vector2D(
+                obj.position.x + obj.velocity * math.cos(obj.heading) * dt,
+                obj.position.y + step,
+            )
+            return new_obj
+
+        if state == "recovered":
+            return _const_vel(obj, dt)
+
+        # committed: keeps going past the target, into the ego's path.
+        toward = data["drift_target_y"] - data["origin_y"]
+        new_obj = obj.copy()
+        new_obj.position = Vector2D(
+            obj.position.x + obj.velocity * math.cos(obj.heading) * dt,
+            obj.position.y
+            + math.copysign(data.get("drift_rate", 0.8) * dt, toward or 1.0),
+        )
+        return new_obj
+
+
+class RedLightRunnerBT(BaseBT):
+    """
+    Cross-traffic vehicle that stops at the line, then runs the light.
+
+    State machine:
+      approaching --reaches line--> waiting --delay--> running
+
+    The delay is the whole point. A vehicle that never stops is an obstacle the
+    model sees from far off; one that stops and *then* moves is the case where
+    a model has already concluded the intersection is clear.
+
+    Parameters:
+      stop_x        m     longitudinal position of the stop line
+      wait_delay    s     how long it sits before running
+      launch_accel  m/s2  acceleration once it goes
+      max_velocity  m/s   speed cap while running
+    """
+
+    def tick(self, obj, behavior, world, rng, dt):
+        params = behavior["parameters"]
+        state = behavior.setdefault("_bt_state", "approaching")
+        data = behavior.setdefault("_bt_data", {})
+        gen = rng.get("traffic")
+
+        if state == "approaching":
+            # No default stop line. Defaulting to the vehicle's own position
+            # made it stop on the first tick, before any trigger — and a BT
+            # that acts before its trigger fires is a hazard the scenario did
+            # not schedule.
+            stop_x = params.get("stop_x")
+            reached = False
+            if stop_x is not None:
+                stop_x = float(stop_x)
+                # Whichever way its heading points.
+                reached = (
+                    obj.position.x >= stop_x
+                    if math.cos(obj.heading) > 0
+                    else obj.position.x <= stop_x
+                )
+            if reached or _check_trigger(behavior, obj, world):
+                behavior["_bt_state"] = "waiting"
+                data["elapsed"] = 0.0
+                data["wait_delay"] = _sample(
+                    params.get("wait_delay", {"min": 0.5, "max": 2.5}), gen
+                )
+                data["launch_accel"] = _sample(
+                    params.get("launch_accel", {"min": 2.0, "max": 4.5}), gen
+                )
+                stopped = obj.copy()
+                stopped.velocity = 0.0
+                stopped.acceleration = 0.0
+                return stopped
+            return _const_vel(obj, dt)
+
+        if state == "waiting":
+            data["elapsed"] = data.get("elapsed", 0.0) + dt
+            if data["elapsed"] >= data["wait_delay"]:
+                behavior["_bt_state"] = "running"
+            held = obj.copy()
+            held.velocity = 0.0
+            held.acceleration = 0.0
+            return held
+
+        return _apply_accel(
+            obj,
+            data.get("launch_accel", 3.0),
+            0.0,
+            float(params.get("max_velocity", 14.0)),
+            dt,
+        )
+
+
+class ErraticCyclistBT(BaseBT):
+    """
+    Cyclist: forward progress with a periodic lateral swerve.
+
+    Unlike `erratic_pedestrian`, which wanders in any direction, a cyclist
+    holds a heading and wobbles around it. The swerve is a sine rather than a
+    per-tick random step so the path is smooth and reproducible from the seed
+    alone — a per-tick jitter would depend on how many ticks had elapsed and so
+    would move under any change to the timestep.
+
+    Parameters:
+      forward_speed     m/s
+      swerve_magnitude  m    peak lateral excursion
+      swerve_period     s    time for one full left-right cycle
+      swerve_phase      rad  starting phase, sampled per run
+    """
+
+    def tick(self, obj, behavior, world, rng, dt):
+        params = behavior["parameters"]
+        data = behavior.setdefault("_bt_data", {})
+        gen = rng.get("traffic")
+
+        if "phase" not in data:
+            data["phase"] = _sample(
+                params.get("swerve_phase", {"min": 0.0, "max": 6.28318}), gen
+            )
+            data["magnitude"] = _sample(
+                params.get("swerve_magnitude", {"min": 0.2, "max": 0.9}), gen
+            )
+            data["period"] = max(
+                0.2,
+                _sample(params.get("swerve_period", {"min": 1.5, "max": 4.0}), gen),
+            )
+            data["t"] = 0.0
+            data["last_offset"] = 0.0
+            data["speed"] = (
+                _sample(params["forward_speed"], gen)
+                if "forward_speed" in params
+                else obj.velocity
+            )
+
+        speed = data["speed"]
+        data["t"] = data.get("t", 0.0) + dt
+        omega = 2.0 * math.pi / data["period"]
+        offset = data["magnitude"] * math.sin(omega * data["t"] + data["phase"])
+        lateral_step = offset - data.get("last_offset", 0.0)
+        data["last_offset"] = offset
+
+        new_obj = obj.copy()
+        new_obj.velocity = speed
+        new_obj.position = Vector2D(
+            obj.position.x + speed * math.cos(obj.heading) * dt,
+            obj.position.y + speed * math.sin(obj.heading) * dt + lateral_step,
+        )
+        return new_obj
+
+
+class WrongWayDriverBT(BaseBT):
+    """
+    Head-on vehicle that keeps building speed unless the ego yields.
+
+    The escalation is the test: braking alone does not resolve a head-on
+    closing speed, so a model that only brakes runs out of road. Scenarios
+    using this are expected to fail brake-only models, the way EMG-002 and
+    LAT-003 already do — that is correct behaviour, not a scenario to weaken.
+
+    Parameters:
+      escalate_accel    m/s2  applied while the ego is not braking
+      ego_brake_thresh  m/s2  what counts as the ego reacting (negative)
+      max_velocity      m/s
+    """
+
+    def tick(self, obj, behavior, world, rng, dt):
+        params = behavior["parameters"]
+        data = behavior.setdefault("_bt_data", {})
+        gen = rng.get("traffic")
+
+        if not _check_trigger(behavior, obj, world):
+            return _const_vel(obj, dt)
+
+        if "escalate_accel" not in data:
+            data["escalate_accel"] = _sample(
+                params.get("escalate_accel", {"min": 0.5, "max": 2.0}), gen
+            )
+
+        threshold = float(params.get("ego_brake_thresh", -1.5))
+        ego_yielding = world.ego_vehicle.acceleration <= threshold
+
+        # Holds speed once the ego commits to braking; keeps building otherwise.
+        accel = 0.0 if ego_yielding else data["escalate_accel"]
+        return _apply_accel(
+            obj,
+            accel,
+            0.0,
+            float(params.get("max_velocity", 30.0)),
+            dt,
+        )
+
+
+class TireBlowoutBT(BaseBT):
+    """
+    Lead vehicle suffering a blowout: yaw impulse plus rapid deceleration.
+
+    Two things happen at once, and that is the point — it both slows hard *and*
+    leaves its lane, so a model that only manages following distance still gets
+    hit by something arriving sideways.
+
+    Parameters:
+      yaw_impulse   rad/s  magnitude of the heading rate; direction is sampled
+      decel         m/s2   (negative)
+      yaw_duration  s      how long the yaw rate applies
+      min_velocity  m/s
+    """
+
+    def tick(self, obj, behavior, world, rng, dt):
+        params = behavior["parameters"]
+        state = behavior.setdefault("_bt_state", "normal")
+        data = behavior.setdefault("_bt_data", {})
+        gen = rng.get("traffic")
+
+        if state == "normal":
+            if _check_trigger(behavior, obj, world):
+                behavior["_bt_state"] = "blown"
+                magnitude = _sample(
+                    params.get("yaw_impulse", {"min": 0.15, "max": 0.5}), gen
+                )
+                # Direction sampled, not fixed: a blowout that always veers the
+                # same way is one manoeuvre, not a hazard.
+                data["yaw_rate"] = magnitude if gen.random() < 0.5 else -magnitude
+                data["decel"] = _sample(
+                    params.get("decel", {"min": -8.0, "max": -4.0}), gen
+                )
+                data["yaw_left"] = _sample(
+                    params.get("yaw_duration", {"min": 0.6, "max": 1.6}), gen
+                )
+            return _const_vel(obj, dt)
+
+        new_obj = _apply_accel(
+            obj,
+            data.get("decel", -6.0),
+            float(params.get("min_velocity", 0.0)),
+            50.0,
+            dt,
+        )
+        if data.get("yaw_left", 0.0) > 0.0:
+            new_obj.heading = obj.heading + data["yaw_rate"] * dt
+            data["yaw_left"] -= dt
+        return new_obj
+
+
 _BT_REGISTRY: dict[str, BaseBT] = {
     "hesitant_brake": HesitantBrakeBT(),
     "hesitant_cut_in": HesitantCutInBT(),
@@ -649,6 +972,13 @@ _BT_REGISTRY: dict[str, BaseBT] = {
     "cautious_pedestrian": CautiousPedestrianBT(),
     "erratic_pedestrian": ErraticPedestrianBT(),
     "junction_yield": JunctionYieldBT(),
+    # Phase 4.3 — written for the 21-to-60 library expansion, before the
+    # scenarios that use them.
+    "oncoming_drift": OncomingDriftBT(),
+    "red_light_runner": RedLightRunnerBT(),
+    "erratic_cyclist": ErraticCyclistBT(),
+    "wrong_way_driver": WrongWayDriverBT(),
+    "tire_blowout": TireBlowoutBT(),
 }
 
 

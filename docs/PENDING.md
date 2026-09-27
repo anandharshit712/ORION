@@ -10,7 +10,7 @@ item that becomes one gets moved into the roadmap and out of this file.
 Each entry says what is missing, why it is open, and what would unblock it. An item with
 no "unblocked by" line is simply not scheduled yet.
 
-Last reviewed: 2026-09-23.
+Last reviewed: 2026-09-28.
 
 ---
 
@@ -185,6 +185,24 @@ the `RunPage` stub. `PlaybackControls` is still a `TODO [P5]` placeholder.
 Plausible defaults, not fitted to a measured tire. Documented in `docs/METHODOLOGY.md`.
 Do not publish absolute handling claims from them, and do not tune them to make a
 scenario pass.
+
+### Weather does not reach the physics
+Friction is one global value per evaluation, set in config, and the default `kinematic` mode
+ignores it. `weather.condition` and `visibility` in scenario YAML are labels that physics and
+`Observation` never read. `friction_mu` in the tick frame is hardcoded to 1.0. There is no
+wind model. The agreed direction: environmental physics varies per run, and may change during
+a run through zones (friction, visibility) and timed events (wind gusts). Every change is
+fixed by a few numbers drawn at run start, never random drift from tick to tick.
+
+**Full finding, design and open questions**: `docs/DISCUSSIONS.md` DI-01. It is not ready to
+build until the parameter list, the NPC-fairness question and the mode policy are settled
+there. It changes scoring, so it needs a `METHODOLOGY.md` change-log entry.
+
+### Unknown scenario events are silently dropped
+`EventExecutor` implements only `spawn_vehicle` and `spawn_pedestrian`; any other event type
+does nothing. EMG-004's black-ice `change_weather` event is dropped, so the scenario runs and
+scores on dry-road grip. An unknown event type should fail at load. This is a small change and
+a prerequisite for the item above. Details: `docs/DISCUSSIONS.md` DI-02.
 
 ### TTC approximations
 Constant-acceleration projection, with acceleration held constant over the projection and
