@@ -202,6 +202,14 @@ class BatchResultsResponse(BaseModel):
     worst_run_seed: Optional[int] = None
     best_run_seed: Optional[int] = None
 
+    # The stored row ids for those same two runs, so a client can deep-link to
+    # a replay. Kept *alongside* the seeds rather than replacing them: the seed
+    # is what makes the run reproducible anywhere, the id is only meaningful
+    # against this database. Without these the dashboard could name the worst
+    # run but not open it, which is the one thing a reviewer wants to do next.
+    worst_run_id: Optional[int] = None
+    best_run_id: Optional[int] = None
+
     histogram: List[HistogramBin] = []
 
     # True when the sample is too small for the interval to say much. The

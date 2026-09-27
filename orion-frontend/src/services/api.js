@@ -174,4 +174,71 @@ export const api = {
     request(`${API}/runs/${runId}/ws-ticket`, { method: 'POST' }),
 
   cancelLiveRun: (runId) => request(`${API}/runs/${runId}`, { method: 'DELETE' }),
+
+  // Deterministic replay (2.5). Two modes, and they are not interchangeable:
+  //
+  //   getRunFrames  — stored tick frames, no compute. Kept only for runs that
+  //                   collided or left the road, so a 404 here is the normal
+  //                   answer for a clean run, not an error.
+  //   replayRun     — re-simulates from the stored seed. Exact and free to
+  //                   store, but it produces a *live* run to watch over the
+  //                   WebSocket rather than an array to scrub.
+  getRunFrames: (runId) => request(`${API}/runs/${runId}/frames`),
+
+  replayRun: (runId) => request(`${API}/runs/${runId}/replay`, { method: 'POST' }),
+
+  // Model comparison (2.4). Queued, so the response is a job id to poll.
+  listComparisons: (limit = 50) => request(`${API}/compare/?limit=${limit}`),
+
+  getComparison: (comparisonId) => request(`${API}/compare/${comparisonId}`),
+
+  startComparison: (modelAId, modelBId, scenarioIds, runsPerScenario = 10, seed = 42) =>
+    request(`${API}/compare/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        model_a_id: modelAId,
+        model_b_id: modelBId,
+        scenario_ids: scenarioIds,
+        runs_per_scenario: runsPerScenario,
+        seed,
+      }),
+    }),
+
+  // Not a request() call: the response is a file, not JSON. Returned as a URL
+  // for an <a download> rather than fetched — the browser handles the
+  // Content-Disposition, and there is no body for us to parse anyway.
+  comparisonReportUrl: (comparisonId) => `${API}/compare/${comparisonId}/report.pdf`,
+
+  // Adversarial search (2.3). Costs max_evals credits; omit maxEvals to let the
+  // backend charge the budget recommended for the scenario's dimensionality.
+  listSearches: (limit = 50) => request(`${API}/search/?limit=${limit}`),
+
+  getSearchStatus: (searchId) => request(`${API}/search/${searchId}/status`),
+
+  getSearchResult: (searchId) => request(`${API}/search/${searchId}/result`),
+
+  startSearch: ({ scenarioId, modelId, maxEvals, optimizer = 'cma_es', physicsMode = 'kinematic', seed = 42 }) =>
+    request(`${API}/search/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        scenario_id: scenarioId,
+        model_id: modelId,
+        // Omitted rather than null: the backend treats absent as "use the
+        // recommendation", and a null would fail validation.
+        ...(maxEvals ? { max_evals: Number(maxEvals) } : {}),
+        optimizer,
+        physics_mode: physicsMode,
+        seed,
+      }),
+    }),
+
+  // Org + API keys, for Settings.
+  getOrg: () => request(`${API}/orgs/me`),
+
+  listApiKeys: () => request(`${API}/keys/`),
+
+  createApiKey: (label) =>
+    request(`${API}/keys/`, { method: 'POST', body: JSON.stringify({ label }) }),
+
+  revokeApiKey: (keyId) => request(`${API}/keys/${keyId}`, { method: 'DELETE' }),
 };

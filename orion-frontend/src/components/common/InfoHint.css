@@ -1,0 +1,66 @@
+/* ══ InfoHint — hover/focus "i" affordance (docs/UI_DESIGN.md §9.15) ══════ */
+
+.info-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  /* The label it sits in is uppercase mono; the hint must not inherit that. */
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.info-hint__trigger {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-mute);
+  cursor: help;
+}
+.info-hint__trigger:hover,
+.info-hint__trigger:focus-visible {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.info-hint__trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.info-hint__bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: var(--shadow);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+  /* Present in the DOM for screen readers, hidden from sight until hover or
+     focus. `display:none` would take it out of the accessibility tree too. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--motion-fast) ease;
+}
+.info-hint__bubble.is-open { opacity: 1; visibility: visible; }
+
+@media (prefers-reduced-motion: reduce) {
+  .info-hint__bubble { transition: none; }
+}

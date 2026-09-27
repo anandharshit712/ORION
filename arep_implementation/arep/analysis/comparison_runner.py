@@ -103,6 +103,52 @@ def execute_comparison(comparison_id: int) -> None:
         len(report.regressions),
     )
 
+    _notify(comparison_id, params, report)
+
+
+def _notify(comparison_id: int, params: "_JobParams", report) -> None:
+    """Tell the customer's endpoints, and never let that fail the job.
+
+    `regression.detected` is a separate event from `comparison.completed`, not
+    a flag on it. A CI pipeline subscribes to the one it acts on, and making it
+    filter a payload to find out whether to block a deploy is how a regression
+    gets shipped past a webhook that fired correctly.
+    """
+    from arep.api.webhooks import dispatch
+
+    payload = {
+        "comparison_id": comparison_id,
+        "model_a_id": params.model_a_id,
+        "model_b_id": params.model_b_id,
+        "overall_winner": report.overall_winner,
+        "recommendation": report.recommendation,
+        "regression_count": len(report.regressions),
+        "scenario_count": len(params.scenario_ids),
+    }
+
+    try:
+        dispatch("comparison.completed", params.org_id, payload)
+        if report.regressions:
+            dispatch(
+                "regression.detected",
+                params.org_id,
+                {
+                    **payload,
+                    "regressions": [
+                        {
+                            "metric": d.metric,
+                            "baseline": d.value_a,
+                            "candidate": d.value_b,
+                            "delta": d.delta,
+                            "threshold": d.threshold_used,
+                        }
+                        for d in report.regressions
+                    ],
+                },
+            )
+    except Exception:  # noqa: BLE001 - a customer's endpoint is not our failure
+        logger.exception("Could not dispatch webhooks for comparison %s", comparison_id)
+
 
 def _fail(comparison_id: int, params: "_JobParams", exc: Exception) -> None:
     """Mark the job failed and refund what was charged.

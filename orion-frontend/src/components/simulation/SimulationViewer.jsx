@@ -79,7 +79,9 @@ function Vehicle({ x, y, heading, length = 4.5, width = 2.0, height = 1.5, color
   );
 }
 
-function Scene({ frame }) {
+// Exported so replay renders the identical scene rather than a second one
+// that drifts from it — the point of replay is that it looks the same.
+export function Scene({ frame }) {
   const ego = frame?.ego;
   const npcs = frame?.npcs ?? [];
   return (
@@ -175,7 +177,7 @@ function Readout({ label, value, unit, tone }) {
   );
 }
 
-function HUD({ frame, status, latencyRef, runId }) {
+export function HUD({ frame, status, latencyRef, runId }) {
   if (!frame) {
     return (
       <div className="panel sim-hud sim-hud-empty">

@@ -19,7 +19,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from arep.api.auth import get_request_principal, require_verified_email
@@ -189,6 +189,74 @@ def get_comparison(comparison_id: int, request: Request):
             created_at=job.created_at,
             completed_at=job.completed_at,
         )
+
+
+@compare_router.get("/{comparison_id}/report.pdf")
+def download_comparison_report(comparison_id: int, request: Request):
+    """The comparison as a PDF a safety reviewer can be handed.
+
+    **Falls back to HTML rather than failing.** WeasyPrint needs GTK native
+    libraries that are absent on Windows and on any slim container, and the
+    report's value is its content, not its container — an executive summary,
+    the score tables, the failure highlights and the methodology section.
+    Returning HTML with `Content-Type: text/html` means a developer on Windows
+    still gets the report; returning 503 would mean the feature only exists on
+    machines that happen to have GTK.
+
+    The distinction is visible to the caller: `Content-Disposition` names
+    either a `.pdf` or a `.html` file, and `X-ORION-Report-Format` says which.
+    """
+    org_id, _, _ = get_request_principal(request)
+
+    with session_scope() as db:
+        job = db.get(ComparisonJobRecord, comparison_id)
+        if job is None or (org_id is not None and job.org_id != org_id):
+            raise HTTPException(404, "Comparison not found")
+        if job.status != "completed":
+            raise HTTPException(
+                409,
+                f"Comparison {comparison_id} is {job.status}; a report exists "
+                "only once it has completed.",
+            )
+        report = job.report_json
+        model_a, model_b = job.model_a_id, job.model_b_id
+
+    if not report:
+        # Completed with no report is a bug, not a state to paper over with an
+        # empty PDF that reads like a clean comparison.
+        raise HTTPException(500, "Comparison completed without a report")
+
+    from arep.reporting.pdf_generator import PDFGenerator
+
+    stem = f"orion-comparison-{comparison_id}"
+    try:
+        generator = PDFGenerator(require_pdf=True)
+        body = generator.render_comparison_report(report)
+        media_type, filename, fmt = "application/pdf", f"{stem}.pdf", "pdf"
+    except ImportError as exc:
+        logger.info(
+            "PDF toolchain unavailable for comparison %s (%s); serving HTML",
+            comparison_id,
+            exc,
+        )
+        generator = PDFGenerator(require_pdf=False)
+        body = generator.render_html(
+            "comparison_report.html", {"comparison": report}
+        ).encode("utf-8")
+        media_type, filename, fmt = "text/html; charset=utf-8", f"{stem}.html", "html"
+
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # So a client can tell without sniffing the bytes, and so the
+            # dashboard can say "HTML report" rather than offering a download
+            # that is not the format the button promised.
+            "X-ORION-Report-Format": fmt,
+            "X-ORION-Comparison-Models": f"{model_a} vs {model_b}",
+        },
+    )
 
 
 @compare_router.get("/", response_model=List[CompareStatusResponse])

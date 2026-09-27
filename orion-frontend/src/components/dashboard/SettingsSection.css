@@ -1,0 +1,106 @@
+/* ══ SettingsSection — grouped instrument panels (docs/UI_DESIGN.md §11.4) ══ */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.settings-panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+/* API keys carry a table, so they take the full row rather than a third of it. */
+.settings-panel--wide { grid-column: 1 / -1; }
+
+.settings-hint { margin: 0; font-size: 12px; color: var(--text-mute); line-height: 1.5; }
+.settings-hint code,
+.settings-rows__id {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--cyan);
+}
+
+.settings-rows { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.settings-rows > div {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-rows > div:last-child { border-bottom: 0; padding-bottom: 0; }
+.settings-rows dt {
+  font-family: var(--ff-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.settings-rows dd {
+  margin: 0;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  color: var(--text);
+  text-align: right;
+  word-break: break-word;
+}
+
+.settings-theme { display: flex; gap: 8px; }
+
+.settings-keyform {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.settings-keyform .field { flex: 1 1 200px; }
+
+.settings-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--fail);
+  background: var(--bg-panel);
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  color: var(--fail);
+}
+
+/* The shown-once key. Deliberately loud: this is the only time it exists in a
+   readable form, and a customer who scrolls past it has lost it. */
+.settings-newkey { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.settings-newkey__warn {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--amber);
+}
+
+.settings-newkey__value {
+  display: block;
+  padding: 10px 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  color: var(--text);
+  /* Selectable and fully visible — truncating a secret the server will never
+     show again would make manual copying impossible. */
+  word-break: break-all;
+  user-select: all;
+}
+
+.settings-newkey__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-newkey__ok,
+.settings-newkey__fail {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+}
+.settings-newkey__ok { color: var(--pass); }
+.settings-newkey__fail { color: var(--fail); }
+
+@media (max-width: 899px) {
+  .settings-grid { grid-template-columns: 1fr; }
+  /* Tables scroll inside their panel rather than pushing the page wide
+     (docs/UI_DESIGN.md §10). */
+  .settings-panel--wide .data-table { display: block; overflow-x: auto; }
+}

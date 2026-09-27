@@ -1,27 +1,35 @@
-/* ORION — RunPage (placeholder) */
+/* ══ RunPage — stored-frame replay (docs/UI_DESIGN.md §11.5) ════════════ */
+
 .runpage {
-  min-height: 60vh;
-  display: grid;
-  place-items: center;
-  padding: 48px 24px;
-}
-.runpage-card {
-  max-width: 520px;
-  padding: var(--space-10);
-  text-align: center;
+  min-height: 100vh;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+  background: var(--bg-base);
+}
+
+.runpage-head {
+  display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
-.runpage-card h1 {
-  font-family: var(--ff-disp);
-  font-weight: 700;
-  font-size: 24px;
-  letter-spacing: 0.02em;
+.runpage-head .flip { transform: rotate(180deg); }
+
+/* The scene needs a fixed height: a Canvas in a flex column with no height
+   collapses to zero and renders nothing, which looks like a broken replay
+   rather than a layout bug. */
+.runpage-stage {
+  position: relative;
+  height: min(62vh, 560px);
+  min-height: 320px;
+  overflow: hidden;
 }
-.runpage-card p {
-  color: var(--text-mute);
-  max-width: 420px;
+
+.runpage-stage canvas { display: block; }
+
+@media (max-width: 899px) {
+  .runpage { padding: var(--space-3); }
+  .runpage-stage { height: 46vh; }
 }
-.runpage-card .flip { transform: rotate(180deg); }

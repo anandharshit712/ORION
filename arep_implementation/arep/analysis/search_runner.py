@@ -100,6 +100,32 @@ def execute_search(search_id: int) -> None:
         result.distinct_failure_count,
     )
 
+    # `search.completed` is a declared webhook event that nothing fired. A
+    # search is minutes of work, so the whole reason to register an endpoint is
+    # to not sit polling for it.
+    try:
+        from arep.api.webhooks import dispatch
+
+        dispatch(
+            "search.completed",
+            params.org_id,
+            {
+                "search_id": search_id,
+                "scenario_id": params.scenario_id,
+                "model_id": params.model_id,
+                "optimizer": result.optimizer_used,
+                "evals": result.n_evals,
+                "falsification_found": bool(result.falsification_found),
+                "distinct_failure_count": result.distinct_failure_count,
+                "failure_rate": result.failure_rate,
+                # The settings that broke the model, so a pipeline can act on
+                # the notification without a second request.
+                "falsification_params": result.falsification_params,
+            },
+        )
+    except Exception:  # noqa: BLE001 - a customer's endpoint is not our failure
+        logger.exception("Could not dispatch webhook for search %s", search_id)
+
 
 def _run(params: _JobParams, org_id: Optional[str] = None):
     """Build the space, objective and optimizer, and run the search."""

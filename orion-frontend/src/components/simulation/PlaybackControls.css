@@ -5,6 +5,7 @@
   gap: var(--space-4);
   padding: 10px var(--space-5);
   background: var(--bg-panel);
+  flex-wrap: wrap;
 }
 
 .playback-btn {
@@ -17,6 +18,8 @@
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-2);
+  font-family: var(--ff-mono);
+  font-size: 14px;
   cursor: pointer;
   transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
 }
@@ -24,18 +27,73 @@
 .playback-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .playback-btn--primary { color: var(--amber); border-color: var(--amber-line); }
 
-.playback-scrub { flex: 1; min-width: 120px; }
+/* The native range sits transparently on top of the drawn track: it keeps
+   keyboard, touch and pointer-capture behaviour that a custom div would have
+   to reimplement, while the visible bar stays on-brand. */
+.playback-scrub { flex: 1 1 200px; min-width: 140px; position: relative; height: 18px; }
+
+.playback-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.playback-range:disabled { cursor: not-allowed; }
+.playback-range:focus-visible + .playback-scrub-track {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
 .playback-scrub-track {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
   height: 4px;
   background: var(--bg-inset);
   border-radius: var(--radius-sm);
-  overflow: hidden;
 }
-.playback-scrub-fill { height: 100%; background: var(--amber); }
+.playback-scrub-fill { height: 100%; background: var(--amber); border-radius: var(--radius-sm); }
+
+/* Where something happened. Visible on the track so a reviewer can see the
+   collision is near the end before pressing anything. */
+.playback-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 10px;
+  background: var(--cyan);
+  transform: translateX(-1px);
+}
+.playback-marker--collision,
+.playback-marker--off_road { background: var(--fail); }
 
 .playback-time { font-size: 13px; color: var(--text); }
+.playback-frame { color: var(--text-mute); }
 
 .playback-speed { display: inline-flex; align-items: center; gap: var(--space-2); }
-.playback-speed-v { font-size: 13px; color: var(--cyan); }
 
-.playback-note { color: var(--text-mute); }
+.playback-speed-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--text-mute);
+  cursor: pointer;
+}
+.playback-speed-btn:hover { color: var(--text); }
+.playback-speed-btn.is-active { color: var(--amber); border-color: var(--amber-line); }
+
+.playback-jumps { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.playback-jump--collision,
+.playback-jump--off_road { border-color: var(--fail); color: var(--fail); }
+
+@media (max-width: 899px) {
+  .playback-bar { gap: var(--space-3); }
+  .playback-scrub { flex-basis: 100%; order: 10; }
+}

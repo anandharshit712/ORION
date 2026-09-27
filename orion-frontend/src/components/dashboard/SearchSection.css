@@ -1,0 +1,102 @@
+/* ══ SearchSection — adversarial search (docs/UI_DESIGN.md §11.4) ════════ */
+
+.search-form {
+  padding: 16px;
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search-form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.search-form__narrow { max-width: 180px; }
+
+.search-form__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* The label holds the InfoHint, so it has to be a flex line rather than a
+   plain inline label — otherwise the "i" drops to its own row. */
+.search-form .field > .mono-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.search-section .data-table tbody tr { cursor: pointer; }
+.search-section .data-table tbody tr.is-selected { background: var(--amber-dim); }
+
+.search-muted { color: var(--text-mute); }
+
+.search-result { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+
+.search-verdict { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.search-verdict.is-broken { border-left: 2px solid var(--fail); }
+
+.search-verdict__text {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-size: 18px;
+  color: var(--text);
+}
+
+.search-verdict__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.search-failures { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+.search-failure-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-failure {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.search-failure:last-child { border-bottom: 0; }
+
+.search-params {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 4px var(--space-4);
+  flex: 1;
+}
+.search-params li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+}
+.search-params__key { color: var(--text-mute); word-break: break-all; }
+
+.search-pending { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+@media (max-width: 899px) {
+  .search-form__row { grid-template-columns: 1fr; }
+  .search-form__narrow { max-width: none; }
+  .search-section .data-table { display: block; overflow-x: auto; }
+}

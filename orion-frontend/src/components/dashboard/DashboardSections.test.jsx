@@ -18,6 +18,9 @@ import RunsSection from './RunsSection';
 import BatchesSection from './BatchesSection';
 import ModelsSection from './ModelsSection';
 import ScenariosSection from './ScenariosSection';
+import CompareSection from './CompareSection';
+import SearchSection from './SearchSection';
+import SettingsSection from './SettingsSection';
 import { api } from '../../services/api';
 
 function renderSection(Component) {
@@ -33,6 +36,8 @@ const SECTIONS = [
   { name: 'Batches', Component: BatchesSection, method: 'getBatchJobs', empty: /no batch jobs/i },
   { name: 'Models', Component: ModelsSection, method: 'getModels', empty: /no submitted models/i },
   { name: 'Scenarios', Component: ScenariosSection, method: 'getScenarios', empty: /no scenarios registered/i },
+  { name: 'Compare', Component: CompareSection, method: 'listComparisons', empty: /no comparisons yet/i },
+  { name: 'Search', Component: SearchSection, method: 'listSearches', empty: /no searches yet/i },
 ];
 
 beforeEach(() => {

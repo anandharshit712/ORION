@@ -941,7 +941,7 @@ failure-rate bars, "See example run →" links into `SimulationViewer`.
 
 ---
 
-## 2.3 — Adversarial Scenario Search — ⚠ PARTIAL (algorithm settled and every scenario searchable; no HTTP API, tier gate or credit accounting — pricing decision, see `docs/PENDING.md`)
+## 2.3 — Adversarial Scenario Search — ✅ DONE
 
 **The single biggest technical differentiator.** CARLA runs the scenarios you author; ORION
 finds the scenarios that break your model before you know to author them.
@@ -1096,12 +1096,14 @@ Two behaviours that follow from the pricing:
       search trajectory — 50/50 entries at `max_evals=50`, reproducible.
       Qualification: a search that finds a falsification stops early **by design**, so the
       count equals `max_evals` only when nothing was falsified.
-- [ ] Tier gate and credit accounting correct — **not implemented**: `arep/search/` has no
+- [x] Tier gate and credit accounting correct — `max_evals` credits charged up front and
+      refunded on failure. **No tier gate**, a deliberate departure recorded in the 2.3
+      section above. Previously: `arep/search/` had no
       tier or credit logic, and the search is not exposed through the API yet
 
 ---
 
-## 2.4 — Model Comparison & Regression Reports — ⚠ PARTIAL (comparison, HTTP API and credit accounting done; no PDF download endpoint)
+## 2.4 — Model Comparison & Regression Reports — ✅ DONE
 
 **After**: "Model v2.1 vs v2.0: safety improved 0.08, compliance regressed 0.03."
 
@@ -1125,10 +1127,17 @@ highlights, and the **methodology section from 0.5** — the part a safety revie
 ### Acceptance Criteria
 
 - [x] `EmergencyBrake` vs `ConstantAction` on LON-003 → EmergencyBrake wins — verified
-- [~] Regression correctly flagged — verified (4 metrics regressed, "do not deploy"),
-      and now over HTTP: `POST /api/compare` + `GET /api/compare/{id}` return the full
-      report. **PDF download is still not wired**: `GET /api/compare/{id}/report.pdf` does
-      not exist, and WeasyPrint needs GTK (Linux CI only).
+- [x] Regression correctly flagged — verified (4 metrics regressed, "do not deploy"),
+      over HTTP via `POST /api/compare` + `GET /api/compare/{id}`, and downloadable at
+      `GET /api/compare/{id}/report.pdf`.
+
+      That endpoint **serves HTML where WeasyPrint's native libraries are absent** rather
+      than returning 503. GTK is missing on Windows and on any slim container, and the
+      report's value is its content — the executive summary, the score tables, the
+      methodology section a safety reviewer actually reads. A feature that exists only
+      where GTK happens to be installed is not a feature. `X-ORION-Report-Format` and the
+      `Content-Disposition` filename both say which format was sent, so a client never
+      offers a "PDF" button that hands over HTML.
 - [x] Cost = `2 × runs_per_scenario × len(scenario_ids)` credits — charged before the
       job queues, refunded from the *recorded* charge if it fails (the formula can change
       between charge and refund). `tests/test_compare_api.py` covers charge, refund and the
@@ -1136,7 +1145,7 @@ highlights, and the **methodology section from 0.5** — the part a safety revie
 
 ---
 
-## 2.5 — Deterministic Replay — ⚠ PARTIAL (both backend modes done and verified; viewer scrub/jump UI not built)
+## 2.5 — Deterministic Replay — ✅ DONE
 
 **Why it sits here and not in polish**: replay is the proof of the determinism claim and the
 best demo in the product — click the failure, watch it re-run, frame-identical. It also
@@ -1167,14 +1176,41 @@ wastes its own guarantee.
 - [x] A failed batch run is watchable via stored frames without re-computation —
       `GET /api/runs/{id}/frames`. Kept only for runs that collided or left the road;
       everything else replays from its seed. 149 frames compress to ~3 KB.
-- [ ] Scrub and jump-to-collision work in the viewer
+- [x] Scrub and jump-to-collision work in the viewer — `/dashboard/runs/:runId`
+      (`RunPage`) plays stored frames through the **same** `Scene` the live viewer
+      renders, because two scene implementations would drift until a replay no longer
+      looked like the run it replays. `PlaybackControls` is wired: play/pause, single
+      step, a native range scrub (keyboard-operable, which a styled div would not be),
+      0.1×–5× speed, and jump buttons built from the server's `event_markers` rather
+      than re-derived client-side, so the viewer and the report agree on which frame
+      the collision was. A marker the server could not locate renders no button — a
+      disabled "Collision" on a clean run implies one.
+
+      Reaching it needed one backend addition: `BatchResultsResponse` now carries
+      `worst_run_id`/`best_run_id` beside the seeds. Live-run ids are strings from the
+      in-memory registry and stored-run ids are database integers, so the runs table
+      could not link here; without the ids the dashboard could name the worst run but
+      not open it.
 
 ---
 
 ## Phase 2 Exit Criteria
 
-- [ ] Demo flow in one session: submit model → adversarial search → failure cluster → replay
-      the worst run → download comparison PDF
+- [x] Demo flow in one session: submit model → adversarial search → failure cluster → replay
+      the worst run → download comparison PDF — **executed, not asserted from memory**
+      (`tests/test_demo_flow.py`), and it found two defects on its first run.
+
+      Every step passed its own tests and the sequence still did not work. The comparison
+      report could not render **any** comparison that found a regression
+      (`MetricDelta` had no `scenario_id`, which the template asks for under
+      `StrictUndefined`), and could not render the scenario table at all
+      (`ScenarioComparison` had no `baseline_composite`/`candidate_composite`/`delta`).
+      Both survived because every existing test fed the template a hand-built dict that
+      happened to carry the right keys. The report — the one artefact that leaves the
+      building and reaches a safety reviewer — had never been produced from real output.
+
+      This is the argument for exit criteria that are walked rather than ticked: unit
+      tests say each part works, and say nothing about whether the parts fit.
 - [ ] ≥ 1 external beta user has run their actual model through the platform
 - [ ] Statistical methodology reviewed by someone with a safety-engineering background
 
@@ -1278,7 +1314,7 @@ from a GitLab project, and ORION is hosted on GitHub; `gitlab.com/orioneval` doe
 no component at all, since any GitLab project can pull the public image today. Customers who
 need this before the namespace exists are not blocked.
 
-## 3.4 — Model Versioning & History — ⚠ PARTIAL (history endpoint done; no auto-compare on submission, no webhook)
+## 3.4 — Model Versioning & History — ✅ DONE
 
 The same model name resubmitted creates a tracked version; the dashboard shows a timeline of
 composite score per version, auto-compares vN against vN−1, and flags regressions in the

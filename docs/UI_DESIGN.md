@@ -319,6 +319,14 @@ Left 2px accent border colored by severity (info=cyan, warn/caution=amber, error
 ### 9.13 Tabs / segmented control
 Mono uppercase labels, 2px bottom-border indicator amber on active, `--text-2`→`--text` on hover.
 
+### 9.15 Info hint (`InfoHint`)
+A 14px circular `i` beside a field label that reveals **one line** of context on hover *and* focus. `src/components/common/InfoHint.jsx`.
+- Trigger: transparent, 1px `--border-strong`, mono 9px `--text-mute`; hover/focus to `--cyan` + focus ring.
+- Bubble: `--bg-elev`, 1px `--border`, radius 3px, `--shadow`, mono 11px `--text-2`, max-width 220px, above the trigger. Hidden with `opacity`+`visibility` (never `display:none`, which removes it from the accessibility tree).
+- **Must be a real `<button type="button">`** with `aria-label`, `aria-describedby` pointing at the bubble's `role="tooltip"`, and `aria-expanded`. Hover-only is the interaction a keyboard user never gets; focus parity is not optional.
+- One sentence. Not a popover, not a positioning engine, no portal - if it needs more than a line, it is body copy or a panel.
+- **Introduced for the adversarial-search budget field**, where the product decision is to signal that a larger budget costs more **without quoting a price**: no estimate, no numbers. A number beside an input reads as a quote. A test asserts the hint text contains no digits.
+
 ### 9.14 Badge / KPI cell
 Spec-strip cell (§6.10): mono value (cyan small unit) + mono micro-label beneath, 1px dividers between cells.
 
@@ -338,7 +346,9 @@ Spec-strip cell (§6.10): mono value (cyan small unit) + mono micro-label beneat
 
 ## 11. Page-by-page specifications
 
-Routes today: `/` `/login` `/signup` `/reset-password` `/dashboard/*` `/simulation/:runId`. Sub-pages exist as files but most are unwired (dashboard switches sections via internal `view` state with "coming soon" placeholders). **This redesign restyles every page/component file so it conforms whether or not it is currently routed. Wiring/new features are out of scope unless explicitly requested.**
+Routes today: `/` `/login` `/signup` `/reset-password` `/dashboard/*` `/simulation/:runId`.
+
+**Dashboard sections are components, not routes.** The dashboard switches between them with internal `view` state; `SECTIONS` in `DashboardPage.jsx` maps a view key to a component and `NAV_ITEMS` in `Sidebar.jsx` carries a matching `ready` flag, with a test asserting the two agree. Settled 2026-09-27, when the last sections were wired: five already worked this way, and adding a router layer for the rest would have been machinery for nothing. The unrouted `ComparePage` / `SearchPage` / `SettingsPage` files were deleted rather than left as a second, dead pattern. A section that genuinely needs a URL - a deep link to one run - gets a real route (`/simulation/:runId` already does); a list view does not.
 
 ### 11.0 App shell (authed)
 HUD status bar (§6.1, includes ThemeToggle) → below it the page surface. Dashboard pages additionally render the sidebar (§9.6). Global grid backdrop + footer system line (`ORION//AREP · DETERMINISTIC dt=0.02s · BUILD <hash> · © 2026 BEAMHASH`).
@@ -357,7 +367,7 @@ HUD status bar (§6.1, includes ThemeToggle) → below it the page surface. Dash
 - **Reset:** reads `?token=`; no token → error panel; valid → new+confirm password (min 6, must match) → success state replaces form with `Go to Login`.
 
 ### 11.3 Dashboard shell + Overview (`/dashboard`) — `DashboardPage`, real `Sidebar`
-- Sidebar (§9.6, sections: Overview, Scenarios, Runs, Models, Batches, Compare, Settings — numbered; Billing if enabled). Main: page header (Chakra Petch h1 + mono sub `N RUNS · ORG=… · status`) + actions (`↻ Refresh` ghost, `▶ Launch Run` primary).
+- Sidebar (§9.6, sections: Overview, Scenarios, Runs, Models, Batches, **Search**, Compare, Settings — numbered; Billing if enabled). Search was added when `POST /api/search` shipped (2.3); it sits before Compare because a search produces the failing model a comparison then measures. Main: page header (Chakra Petch h1 + mono sub `N RUNS · ORG=… · status`) + actions (`↻ Refresh` ghost, `▶ Launch Run` primary).
 - **Overview:** Launch panel (scenario/model/seed/tick inputs → `▶ Launch`), 5 metric panels (Composite=amber/live, Safety/Compliance/Stability/Reactivity=cyan), charts row (Run History line + Metric Breakdown radar/bars), Recent Runs table (§9.7) with PASS/FAIL chips. Replace all emoji metric icons with §7 icons. Define empty/loading/error states (§9.12).
 - Section views currently "coming soon" → render as styled empty-state panels (§9.12) until wired.
 
@@ -366,9 +376,9 @@ HUD status bar (§6.1, includes ThemeToggle) → below it the page surface. Dash
 - **Runs:** full runs table (§9.7) + filters; row → run detail.
 - **Models (`ModelsPage`, `ModelCard`, `ModelUploadForm`):** model panels (name, type built-in/uploaded/docker, mono id, created); upload form (multipart) + register-Docker form in instrument-frame card.
 - **Batches (`BatchPage`):** batch list + live progress (queued/running/completed/failed counts as mono numerals + thin progress bar + status chip), composite mean / collision rate readouts.
-- **Compare (`ComparePage`, `ComparisonTable`):** side-by-side model columns, mono values, win/loss deltas (pass/fail colored).
-- **Search (`SearchPage`):** adversarial-search UI — instrument form + results table.
-- **Settings (`SettingsPage`):** grouped instrument panels (Profile, Org, API Keys w/ `key` icon + copy + revoke, Theme). Theme control mirrors the HUD toggle.
+- **Compare (`CompareSection`, `ComparisonTable`):** side-by-side model columns, mono values, win/loss deltas (pass/fail colored). The queue form states the credit cost before the button, per-scenario tabs flag the ones that regressed, and the download link says 'report' rather than 'PDF' - the endpoint serves HTML where WeasyPrint's native libraries are absent.
+- **Search (`SearchSection`):** adversarial-search UI - instrument form + results table. Budget field carries an `InfoHint` (§9.15); leaving it empty uses the backend's per-scenario recommendation. Results list every distinct failing parameter set, worst first, plus the failure *rate* - when most of the space fails the rate is the finding, and a list of eighty settings buries it.
+- **Settings (`SettingsSection`):** grouped instrument panels (Profile, Org, API Keys w/ `key` icon + copy + revoke, Theme). Theme control mirrors the HUD toggle. The new-key panel is `.panel--live` and states that the plaintext is shown once; it is `user-select:all` and never truncated, because the server keeps only a hash and a customer may have to copy it by hand.
 - **Billing (`BillingPage`, `PlanCard`, `UsageBar`):** behind `billing_enabled`. Plan panels (mono price), `UsageBar` (credits used vs total, cyan fill, mono numerals).
 - **Dashboard analytics components:** `ScoreCard` (metric-panel pattern), `ScoreDistribution` (histogram bars), `RegressionChart` (line on grid), `FailureClusterPanel` (clustered failures list/scatter), `SmartAlerts` (alert-banner stack §9.11) — all re-themed per §9.8.
 

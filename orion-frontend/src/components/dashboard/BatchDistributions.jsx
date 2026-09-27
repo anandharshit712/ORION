@@ -16,6 +16,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { api } from '../../services/api';
 import { useApiData } from '../../hooks/useApiData';
+import { Link } from 'react-router-dom';
 import Icon from '../common/Icon';
 import ScoreCard from './ScoreCard';
 import DataStates from './DataStates';
@@ -151,15 +152,27 @@ export default function BatchDistributions({ batchId }) {
           </div>
 
           {/* Seeds, not row ids: these are the two runs worth re-running, and a
-              seed is what makes that possible. */}
+              seed is what makes that possible. The row id rides along only so
+              the worst run can be *opened* — it means nothing outside this
+              database, which is why the seed is still what is displayed. */}
           <div className="spec-strip dist-seeds">
             <div>
               <span className="num">{data.worst_run_seed ?? '—'}</span>
               <span className="mono-label">worst run seed</span>
+              {data.worst_run_id != null && (
+                <Link className="dist-replay" to={`/dashboard/runs/${data.worst_run_id}`}>
+                  Replay →
+                </Link>
+              )}
             </div>
             <div>
               <span className="num">{data.best_run_seed ?? '—'}</span>
               <span className="mono-label">best run seed</span>
+              {data.best_run_id != null && (
+                <Link className="dist-replay" to={`/dashboard/runs/${data.best_run_id}`}>
+                  Replay →
+                </Link>
+              )}
             </div>
             <div>
               <span className="num">{data.master_seed}</span>

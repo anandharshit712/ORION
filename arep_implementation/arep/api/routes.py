@@ -853,6 +853,8 @@ def get_batch_results(batch_id: int, request: Request):
             collision_rate_ci_95_high=col_high,
             worst_run_seed=worst.master_seed,
             best_run_seed=best.master_seed,
+            worst_run_id=worst.id,
+            best_run_id=best.id,
             histogram=histogram,
             low_confidence=len(rows) < _LOW_CONFIDENCE_N,
         )

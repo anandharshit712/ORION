@@ -60,6 +60,13 @@ class ModelResponse(BaseModel):
     error: Optional[str]
     created_at: datetime.datetime
 
+    # Set when resubmitting a name that already had a version: ORION queues a
+    # comparison against the previous one (Phase 3.4). Reported here because it
+    # spends credits the customer did not explicitly ask to spend, and finding
+    # that out from a balance later is not acceptable.
+    auto_comparison_id: Optional[int] = None
+    auto_comparison_credits: Optional[int] = None
+
     class Config:
         from_attributes = True
 
@@ -150,7 +157,12 @@ async def upload_python_model(
             org_id,
             size,
         )
-        return ModelResponse.model_validate(record)
+        response = ModelResponse.model_validate(record)
+
+    # After the session closes: the comparison opens its own, and queuing it
+    # inside this one would hold the upload's transaction open across a
+    # broker call.
+    return _with_auto_compare(response, org_id, user_id, name, model_id)
 
 
 @models_api_router.post(
@@ -196,7 +208,9 @@ def register_docker_model(req: RegisterDockerRequest, request: Request):
             req.image,
             org_id,
         )
-        return ModelResponse.model_validate(record)
+        response = ModelResponse.model_validate(record)
+
+    return _with_auto_compare(response, org_id, user_id, req.name, model_id)
 
 
 @models_api_router.get("/", response_model=List[ModelResponse])
@@ -352,3 +366,121 @@ def get_model_history(name: str, request: Request):
             latest_version=entries[-1].version if entries else None,
             has_regression=bool(scored and scored[-1].is_regression),
         )
+
+
+# ── Auto-compare on resubmission (Phase 3.4) ─────────────────────────────
+
+# Scenarios the automatic comparison runs. Deliberately small: this fires on
+# every resubmission without anyone asking for it, and a full-library compare
+# would spend a customer's credits the moment they pushed a model.
+AUTO_COMPARE_SCENARIOS = [
+    "../scenarios/lon/LON-003_emergency_stop.yaml",
+    "../scenarios/vru/VRU-001_pedestrian_crosswalk.yaml",
+]
+AUTO_COMPARE_RUNS = 5
+
+
+def maybe_auto_compare(
+    org_id: Optional[str],
+    user_id: Optional[int],
+    name: str,
+    new_model_id: str,
+) -> Optional[int]:
+    """Queue vN against vN−1 when a model name is resubmitted.
+
+    The point of version history is catching the submission that made things
+    worse, and nobody runs that comparison by hand on the day they ship. It is
+    queued rather than run inline: the upload response must not wait on
+    minutes of simulation.
+
+    Returns the comparison id, or None when there is nothing to compare
+    against or the org cannot afford it.
+
+    **Never raises.** A failure here must not fail the upload — the model is
+    already stored, and losing the artefact because a convenience comparison
+    could not be queued would be a much worse outcome than not getting the
+    comparison.
+    """
+    from arep.api.compare import comparison_cost
+    from arep.database.models import ComparisonJobRecord
+    from arep.database.repository import OrganisationRepository
+
+    if org_id is None:
+        # No org means no tenancy to scope versions by and no credits to spend.
+        # A local upload has nothing to auto-compare against.
+        return None
+
+    try:
+        with session_scope() as session:
+            previous = [
+                m
+                for m in ModelRepository(session).list_for_org(org_id)
+                if m.name == name and m.id != new_model_id
+            ]
+            if not previous:
+                return None
+
+            # Compare against the most recent *other* version by submission
+            # time. Not by version string: "v10" sorts before "v9" as text, and
+            # a customer's numbering scheme is not ours to parse.
+            previous.sort(key=lambda m: m.created_at)
+            baseline_id = previous[-1].id
+
+            cost = comparison_cost(AUTO_COMPARE_RUNS, len(AUTO_COMPARE_SCENARIOS))
+            org_repo = OrganisationRepository(session)
+
+            if org_id is not None and not org_repo.deduct_credits(org_id, cost):
+                # Not an error. The upload succeeded; the customer simply
+                # cannot afford an extra they did not ask for.
+                logger.info(
+                    "Skipping auto-compare for %s: org %s has fewer than %d credits",
+                    name,
+                    org_id,
+                    cost,
+                )
+                return None
+
+            job = ComparisonJobRecord(
+                org_id=org_id,
+                user_id=user_id,
+                model_a_id=baseline_id,
+                model_b_id=new_model_id,
+                scenario_ids="\n".join(AUTO_COMPARE_SCENARIOS),
+                runs_per_scenario=AUTO_COMPARE_RUNS,
+                seed=42,
+                credits_charged=cost,
+                status="queued",
+            )
+            session.add(job)
+            session.flush()
+            comparison_id = job.id
+
+        from arep.api.compare import _dispatch
+
+        _dispatch(comparison_id)
+        logger.info(
+            "Auto-compare %s queued: %s vs %s", comparison_id, baseline_id, new_model_id
+        )
+        return comparison_id
+    except Exception:  # noqa: BLE001 - see docstring
+        logger.exception("Could not queue auto-compare for model %r", name)
+        return None
+
+
+def _with_auto_compare(
+    response: "ModelResponse",
+    org_id: Optional[str],
+    user_id: Optional[int],
+    name: str,
+    model_id: str,
+) -> "ModelResponse":
+    """Queue the vN-vs-vN-1 comparison and report it on the response."""
+    from arep.api.compare import comparison_cost
+
+    comparison_id = maybe_auto_compare(org_id, user_id, name, model_id)
+    if comparison_id is not None:
+        response.auto_comparison_id = comparison_id
+        response.auto_comparison_credits = comparison_cost(
+            AUTO_COMPARE_RUNS, len(AUTO_COMPARE_SCENARIOS)
+        )
+    return response

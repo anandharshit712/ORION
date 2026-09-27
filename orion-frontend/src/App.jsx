@@ -9,6 +9,7 @@ import BillingPage from './pages/BillingPage';
 import DashboardPage from './pages/DashboardPage';
 import SimulationViewer from './components/simulation/SimulationViewer';
 import NotFoundPage from './pages/NotFoundPage';
+import RunPage from './pages/RunPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -32,6 +33,18 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* More specific than /dashboard/*, which React Router v6 ranks by
+          specificity rather than order. A single run gets a real URL because
+          it is a thing people link each other to — unlike the dashboard's
+          list sections, which are view state. */}
+      <Route
+        path="/dashboard/runs/:runId"
+        element={
+          <ProtectedRoute>
+            <RunPage />
           </ProtectedRoute>
         }
       />

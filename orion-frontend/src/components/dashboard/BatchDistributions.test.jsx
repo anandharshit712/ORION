@@ -6,6 +6,7 @@
 // nobody notices, because a number with no interval still looks like a number.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { render, screen, within } from '@testing-library/react';
 
 import ScoreCard from './ScoreCard';
@@ -57,9 +58,11 @@ const RESULTS = {
 function renderDist(overrides = {}) {
   vi.spyOn(api, 'getBatchResults').mockResolvedValue({ ...RESULTS, ...overrides });
   return render(
-    <ThemeProvider>
-      <BatchDistributions batchId={1} />
-    </ThemeProvider>,
+    <MemoryRouter>
+      <ThemeProvider>
+        <BatchDistributions batchId={1} />
+      </ThemeProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -152,5 +155,25 @@ describe('BatchDistributions', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.queryByText(/no scored runs yet/i)).not.toBeInTheDocument();
+  });
+});
+
+
+describe('Replay deep link', () => {
+  it('links the worst run to its replay when the row id came back', async () => {
+    // The seed stays the headline number — it is what reproduces the run
+    // anywhere. The id only makes the run *openable* against this database.
+    renderDist({ worst_run_id: 42, best_run_id: 7 });
+
+    const links = await screen.findAllByRole('link', { name: /replay/i });
+    expect(links[0]).toHaveAttribute('href', '/dashboard/runs/42');
+  });
+
+  it('shows no link when there is no row id, rather than a dead one', async () => {
+    // A batch summarised from older rows may not carry ids.
+    renderDist({ worst_run_id: null, best_run_id: null });
+
+    await screen.findByText('57');
+    expect(screen.queryByRole('link', { name: /replay/i })).toBeNull();
   });
 });

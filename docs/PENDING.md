@@ -208,6 +208,18 @@ Phase 4.3. All 21 execute; 18 pass against `emergency_brake`, and the three that
 (EMG-002, LAT-003, MLT-007) fail correctly — each needs evasive steering or gentle
 braking, which a brake-only model cannot do. Do not "fix" them by weakening the scenario.
 
+### Phases 2 and 3: what is left needs people, not code
+Every buildable item in both phases is done as of 2026-09-27. What remains cannot be
+closed from this machine:
+
+- **≥1 external beta user** running their own model. Needs an external person.
+- **Statistical methodology reviewed by someone with a safety-engineering background.**
+  `docs/METHODOLOGY.md` is written for exactly that review — every weight, threshold and
+  stated approximation — but the reviewer cannot be us.
+- **The GitHub Action against a real pull request** (3.2). The image is published and
+  anonymously pullable; one PR settles it.
+- **Publishing the GitLab component** (3.3) — see below.
+
 ### Publishing the GitLab CI component (3.3)
 The component source is written, tested and pinned to the same image as the GitHub Action
 (`ci/gitlab/templates/evaluate-model.yml`). Publishing it needs a `gitlab.com/orioneval`

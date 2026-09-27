@@ -61,3 +61,18 @@
   .dist-row { grid-template-columns: 1fr; }
   .dist-seeds > div { border-left: none; padding: 0; }
 }
+
+/* Deep link to the stored-frame replay of that run (Phase 2.5). Shown only
+   when the row id came back — a batch summarised from older rows may not have
+   one, and a dead link is worse than no link. */
+.dist-replay {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-decoration: none;
+}
+.dist-replay:hover { text-decoration: underline; }

@@ -21,8 +21,9 @@ export const NAV_ITEMS = [
   // Compare needs a regression endpoint the API does not expose yet
   // (RegressionDetector is CLI-only), and Settings needs the org/API-key views.
   // Both stay disabled until there is something behind them.
-  { key: 'compare', icon: 'compare', label: 'Compare', ready: false },
-  { key: 'settings', icon: 'settings', label: 'Settings', ready: false },
+  { key: 'search', icon: 'search', label: 'Search', ready: true },
+  { key: 'compare', icon: 'compare', label: 'Compare', ready: true },
+  { key: 'settings', icon: 'settings', label: 'Settings', ready: true },
 ];
 
 export default function Sidebar({ active, onNavigate }) {

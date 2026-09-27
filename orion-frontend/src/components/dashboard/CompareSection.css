@@ -1,0 +1,87 @@
+/* ══ CompareSection — side-by-side comparison (docs/UI_DESIGN.md §11.4) ══ */
+
+.compare-form {
+  padding: 16px;
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compare-form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.compare-form__narrow { max-width: 140px; }
+
+.compare-form__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.compare-section .data-table tbody tr { cursor: pointer; }
+.compare-section .data-table tbody tr.is-selected {
+  /* The selected row drives the report below, so it has to stay obvious after
+     scrolling past it. */
+  background: var(--amber-dim);
+}
+
+.compare-report { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+
+.compare-verdict { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.compare-verdict.is-regressed { border-left: 2px solid var(--fail); }
+
+.compare-verdict__text {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-size: 18px;
+  color: var(--text);
+}
+
+.compare-verdict__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.compare-regressions { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.compare-delta.is-fail { color: var(--fail); }
+
+.compare-scenario-tabs {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.compare-tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.compare-tab:hover { color: var(--text); }
+.compare-tab.is-active { color: var(--amber); border-bottom-color: var(--amber); }
+
+/* A scenario that regressed is the one worth opening, so it is marked in the
+   tab rather than only inside the panel nobody clicked. */
+.compare-tab__flag { margin-left: 6px; color: var(--fail); font-weight: 700; }
+
+.compare-pending { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+@media (max-width: 899px) {
+  .compare-form__row { grid-template-columns: 1fr; }
+  .compare-form__narrow { max-width: none; }
+  .compare-section .data-table { display: block; overflow-x: auto; }
+}

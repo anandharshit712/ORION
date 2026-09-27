@@ -15,8 +15,8 @@ preferable to missed regressions in a safety-critical system.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass, field, replace
+from typing import List, Optional
 
 from arep.utils.logging_config import get_logger
 
@@ -38,6 +38,12 @@ class MetricDelta:
     delta: float  # value_b - value_a (positive = improved)
     is_regression: bool
     threshold_used: float
+    # Which scenario this delta came from. Set when the deltas are flattened
+    # into `ComparisonReport.regressions`, because a regression detached from
+    # its scenario cannot be acted on - and the PDF template asks for it. It
+    # stayed unset until then, so the report could not render *any* comparison
+    # that found a regression: the one case the report exists for.
+    scenario_id: Optional[str] = None
 
 
 @dataclass
@@ -51,6 +57,16 @@ class ScenarioComparison:
     has_regression: bool = False
     winner: str = "tie"  # "a" | "b" | "tie"
     runs_per_model: int = 0
+
+    # The composite pair, lifted out of `metric_deltas` as real fields rather
+    # than left as a property. The report and the HTTP API both go through
+    # `dataclasses.asdict`, which serialises fields and silently drops
+    # properties - so a property here would render as a missing key in the PDF
+    # template and nowhere else, which is how the comparison report came to
+    # crash only on reports that had something to say.
+    baseline_composite: float = 0.0
+    candidate_composite: float = 0.0
+    delta: float = 0.0
 
 
 @dataclass
@@ -232,6 +248,10 @@ class RegressionDetector:
             value_a = float(getattr(agg_a, attribute))
             value_b = float(getattr(agg_b, attribute))
             delta = value_b - value_a
+            if metric == "composite_score":
+                comparison.baseline_composite = value_a
+                comparison.candidate_composite = value_b
+                comparison.delta = delta
             comparison.metric_deltas.append(
                 MetricDelta(
                     metric=metric,
@@ -276,7 +296,7 @@ class RegressionDetector:
 
     def _finalise(self, report: ComparisonReport) -> ComparisonReport:
         report.regressions = [
-            delta
+            replace(delta, scenario_id=comparison.scenario_id)
             for comparison in report.scenario_comparisons
             for delta in comparison.metric_deltas
             if delta.is_regression

@@ -11,6 +11,9 @@ import RunsSection from '../components/dashboard/RunsSection';
 import BatchesSection from '../components/dashboard/BatchesSection';
 import ModelsSection from '../components/dashboard/ModelsSection';
 import ScenariosSection from '../components/dashboard/ScenariosSection';
+import CompareSection from '../components/dashboard/CompareSection';
+import SettingsSection from '../components/dashboard/SettingsSection';
+import SearchSection from '../components/dashboard/SearchSection';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, RadarChart, Radar, PolarGrid,
@@ -140,6 +143,9 @@ export const SECTIONS = {
   batches: BatchesSection,
   models: ModelsSection,
   scenarios: ScenariosSection,
+  search: SearchSection,
+  compare: CompareSection,
+  settings: SettingsSection,
 };
 
 export default function DashboardPage() {
