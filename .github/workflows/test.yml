@@ -50,6 +50,11 @@ jobs:
             tail -40 pytest.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # Also as annotations. A job summary is stored separately and needs an
+          # authenticated call to read; annotations come back in the check-run
+          # payload of a public repo without credentials. That difference is
+          # the whole reason a red build was undiagnosable from outside.
+          grep -E "^(FAILED|ERROR)" pytest.log | head -20             | while IFS= read -r line; do echo "::error::py${{ matrix.python-version }} $line"; done
 
   # Postgres job: dev/prod parity (D-13).
   #
@@ -138,6 +143,7 @@ jobs:
             tail -60 pytest.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(FAILED|ERROR)|Required test coverage" pytest.log | head -20             | while IFS= read -r line; do echo "::error::postgres $line"; done
 
       - name: Upload coverage
         if: always()
@@ -163,7 +169,22 @@ jobs:
         run: npm ci
       - name: Unit tests
         working-directory: orion-frontend
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee vitest.log
+
+      - name: Summarise frontend failures
+        if: failure()
+        working-directory: orion-frontend
+        run: |
+          {
+            echo "### frontend failures"
+            echo
+            echo '```'
+            tail -60 vitest.log 2>/dev/null || echo "no vitest output — the failure was earlier (npm ci?)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E "FAIL|✕|Error:" vitest.log 2>/dev/null | head -20             | while IFS= read -r line; do echo "::error::frontend $line"; done || true
       - name: Production build
         working-directory: orion-frontend
         # A build failure is a real failure: the app ships as a bundle.
