@@ -1,11 +1,46 @@
 /* ══ Dashboard shell ═══════════════════════════════════════════════════ */
-.dash-shell { display: flex; flex-direction: column; min-height: 100vh; }
+/* The shell owns the viewport and nothing above the content scrolls.
+   Previously the whole page scrolled, so the sidebar — the thing you navigate
+   with — slid off the top, and the system line, being a child of the shell
+   rather than of the content column, ran the full width underneath the
+   sidebar. Now the sidebar and the footer are fixed and only .dash-main
+   scrolls. */
+.dash-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  /* Belt and braces: the inner regions scroll, so nothing should reach this,
+     and if something does it must not scroll the shell out from under the
+     HUD bar. */
+  overflow: hidden;
+}
+
 .dash-body { display: flex; flex: 1; min-height: 0; align-items: stretch; }
-.dash-body .side { align-self: stretch; }
+
+.dash-body .side {
+  align-self: stretch;
+  flex: 0 0 var(--sidebar-width);
+  /* A short window must not clip the nav or the credits gauge; the sidebar
+     scrolls within itself rather than pushing the page. */
+  overflow-y: auto;
+}
+
+/* The content column: everything to the right of the sidebar. The footer
+   lives here so it starts where the sidebar ends. */
+.dash-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .dash-main {
   flex: 1;
   min-width: 0;
+  /* The one scrolling region on the page. */
+  overflow-y: auto;
+  min-height: 0;
   padding: 22px 24px;
   display: flex;
   flex-direction: column;
@@ -26,6 +61,9 @@
 .dash-actions { display: flex; gap: 10px; }
 
 .dash-foot {
+  /* Pinned to the bottom of the content column: it neither scrolls with the
+     content nor sits under the sidebar. */
+  flex: 0 0 auto;
   border-top: 1px solid var(--border);
   padding: 18px 24px;
   display: flex;

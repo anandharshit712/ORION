@@ -208,6 +208,7 @@ export default function DashboardPage() {
       <HudBar seed={42} />
       <div className="dash-body">
         <Sidebar active={view} onNavigate={setView} />
+        <div className="dash-col">
         <main className="dash-main" id="dashboard-main">
           <header className="dash-head">
             <div>
@@ -339,13 +340,17 @@ export default function DashboardPage() {
             <ComingSoon view={view} />
           )}
         </main>
+          {/* Inside the right-hand column, not under the whole shell: the
+              system line belongs beside the sidebar, not beneath it. It also
+              stays put while the content above it scrolls. */}
+          <footer className="dash-foot">
+            <span className="amb">ORION//AREP</span>
+            <span>DETERMINISTIC · dt=0.02s · SEED-PINNED</span>
+            <span>BUILD {BUILD_HASH}</span>
+            <span>© 2026 BEAMHASH</span>
+          </footer>
+        </div>
       </div>
-      <footer className="dash-foot">
-        <span className="amb">ORION//AREP</span>
-        <span>DETERMINISTIC · dt=0.02s · SEED-PINNED</span>
-        <span>BUILD {BUILD_HASH}</span>
-        <span>© 2026 BEAMHASH</span>
-      </footer>
     </div>
   );
 }

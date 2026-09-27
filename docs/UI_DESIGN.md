@@ -353,6 +353,11 @@ Routes today: `/` `/login` `/signup` `/reset-password` `/dashboard/*` `/simulati
 ### 11.0 App shell (authed)
 HUD status bar (§6.1, includes ThemeToggle) → below it the page surface. Dashboard pages additionally render the sidebar (§9.6). Global grid backdrop + footer system line (`ORION//AREP · DETERMINISTIC dt=0.02s · BUILD <hash> · © 2026 BEAMHASH`).
 
+**The dashboard shell owns the viewport; only the content scrolls.** `.dash-shell` is `height:100vh`, and `.dash-main` is the single scrolling region. The HUD bar, the sidebar and the system line stay put.
+- The sidebar is `flex: 0 0 var(--sidebar-width)` with its own `overflow-y:auto`, so a short window scrolls the nav inside the rail rather than sliding the whole rail off the top. Navigation you have to scroll back up to reach is not navigation.
+- The system line lives **inside the content column** (`.dash-col`), not as a child of the shell, so it begins where the sidebar ends instead of running the full width underneath it. Below the 760px breakpoint the sidebar is hidden and it spans the full width, which is correct there.
+- Anything added to the shell goes inside `.dash-col` unless it is deliberately meant to span beneath the sidebar.
+
 ### 11.1 Landing (`/`) — `LandingPage`, `Navbar`, `landing/Hero`, `FeatureCards`, `StatsSection`, `Footer`
 - **Navbar:** transparent over hero → `--scrim`+blur on scroll. Wordmark left; links (`Platform`, `Scenarios`, `Docs`) center/right mono uppercase; `Sign in` ghost + `Start Evaluating` primary; ThemeToggle.
 - **Hero:** two-column. Left: amber-bordered eyebrow badge, Chakra Petch display headline ("Robustness, **measured.** not guessed." — amber emphasis + outline-stroke treatment), Saira 300 lead, primary+ghost CTAs, spec strip (`50Hz`, `0.02s dt`, `6` classes, `4` axes). Right: **live instrument cluster** — reticle composite gauge + cyan sparkline + telemetry readout grid in a `--panel--live`. The existing R3F starfield/constellation is **replaced** by this instrument cluster (or, if a 3D element is kept, it becomes a subtle wireframe road/trajectory in carbon+amber — no purple, no glow orbs). Staggered load reveal.
