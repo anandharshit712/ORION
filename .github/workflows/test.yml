@@ -31,7 +31,25 @@ jobs:
         run: pip install -e ".[dev,api,worker,search]"
       - name: Run tests
         working-directory: arep_implementation
-        run: pytest --tb=short -q
+        # Captured so the failure can be summarised below. pipefail keeps
+        # pytest's exit code rather than tee's, which is always 0.
+        run: |
+          set -o pipefail
+          pytest --tb=short -q 2>&1 | tee pytest.log
+
+      - name: Summarise failures
+        if: failure()
+        working-directory: arep_implementation
+        run: |
+          {
+            echo "### pytest failures (Python ${{ matrix.python-version }})"
+            echo
+            echo '```'
+            grep -E "^(FAILED|ERROR)" pytest.log | head -40 || true
+            echo
+            tail -40 pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Postgres job: dev/prod parity (D-13).
   #
@@ -97,9 +115,29 @@ jobs:
       - name: Run tests against Postgres with a coverage gate
         working-directory: arep_implementation
         run: |
+          set -o pipefail
           pytest --tb=short -q \
             --cov=arep --cov-report=term-missing --cov-report=xml \
-            --cov-fail-under=70
+            --cov-fail-under=70 2>&1 | tee pytest.log
+
+      - name: Summarise failures
+        if: failure()
+        working-directory: arep_implementation
+        # Job logs need an authenticated API call; a job *summary* is readable
+        # on a public repo without one. Putting the failures here is the
+        # difference between diagnosing a red build and guessing at it.
+        run: |
+          {
+            echo "### pytest failures (Postgres)"
+            echo
+            echo '```'
+            grep -E "^(FAILED|ERROR)" pytest.log | head -40 || true
+            echo
+            grep -E "Required test coverage|TOTAL" pytest.log || true
+            echo
+            tail -60 pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage
         if: always()
