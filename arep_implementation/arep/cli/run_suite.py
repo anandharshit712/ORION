@@ -198,12 +198,26 @@ def run_suite(
     """Run every scenario and collect one report structure."""
     from arep.execution.runner import EvaluationRunner
 
+    from arep.utils.exceptions import ScenarioParseError, ScenarioValidationError
+
     runner = EvaluationRunner()
     scenarios: List[Dict[str, Any]] = []
+    unloadable: List[Dict[str, str]] = []
 
     for path in scenario_paths:
         logger.info("Running %s", path.name)
-        batch = runner.run_batch(str(path), model, runs_per_scenario, seed)
+        try:
+            batch = runner.run_batch(str(path), model, runs_per_scenario, seed)
+        except (ScenarioParseError, ScenarioValidationError) as exc:
+            # Skipped *and reported*, which is the project rule for unsupported
+            # input. Aborting the whole suite would mean one scenario the
+            # engine cannot execute takes every other scenario's score with it;
+            # dropping it quietly would mean a suite that silently shrank.
+            # EMG-004 is here deliberately until DI-01 gives weather something
+            # to change.
+            logger.error("Cannot load %s: %s", path.name, exc)
+            unloadable.append({"scenario": path.stem, "error": str(exc).strip()})
+            continue
         aggregated = batch.aggregated
 
         # A scenario passes on collision rate, not on composite score. A model
@@ -246,6 +260,10 @@ def run_suite(
         "collision_rate": _mean("collision_rate"),
         "collision_rate_limit": COLLISION_RATE_LIMIT,
         "scenarios": scenarios,
+        # Named, not omitted: a suite that quietly ran fewer scenarios than the
+        # selector asked for is reporting a pass rate over a set nobody chose.
+        "unloadable": unloadable,
+        "scenarios_requested": len(scenarios) + len(unloadable),
     }
 
 
@@ -406,6 +424,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"{report['scenarios_passed']}/{report['scenario_count']} scenarios passed "
         f"({report['pass_rate'] * 100:.0f}%) — report: {written}"
     )
+    for skipped in report.get("unloadable", []):
+        # Loud, and above the per-scenario failures: a scenario that could not
+        # run is a different problem from one the model failed.
+        print(
+            f"  NOT RUN {skipped['scenario']}: {skipped['error'].splitlines()[-1].strip()}"
+        )
     for scenario in report["scenarios"]:
         if not scenario["passed"]:
             print(

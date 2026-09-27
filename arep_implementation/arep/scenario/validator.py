@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import List
 
+from arep.scenario.events import IMPLEMENTED_EVENT_TYPES
 from arep.scenario.schema import ScenarioDefinition
 
 
@@ -94,6 +95,17 @@ class ScenarioValidator:
                 errors.append(
                     f"Event {i} trigger_time ({event.trigger_time}) "
                     f"exceeds scenario duration ({s.duration})"
+                )
+            # DI-02: an event type with no handler used to do nothing at all,
+            # so a scenario kept its hazard in the YAML and lost it at runtime
+            # while still producing a score. Refusing at load is the only
+            # honest outcome.
+            if event.type not in IMPLEMENTED_EVENT_TYPES:
+                errors.append(
+                    f"Event {i} has unimplemented type {event.type!r}; "
+                    f"implemented types are {sorted(IMPLEMENTED_EVENT_TYPES)}. "
+                    "A scenario cannot declare a hazard the engine will not "
+                    "execute."
                 )
         return errors
 
