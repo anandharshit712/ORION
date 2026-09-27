@@ -194,6 +194,23 @@ class RunRepository:
             q = q.filter(RunRecord.org_id == org_id)
         return q.order_by(RunRecord.created_at.desc()).limit(limit).all()
 
+    def list_recent(
+        self,
+        limit: int = 100,
+        org_id: Optional[str] = None,
+    ) -> List[RunRecord]:
+        """Every stored run for an org, newest first.
+
+        The dashboard's Runs section had nothing to call: `GET /api/runs/`
+        lists the *live* registry, which is in-memory and empty the moment the
+        process restarts. A customer with a finished 500-run batch saw "no runs
+        recorded".
+        """
+        q = self.session.query(RunRecord)
+        if org_id is not None:
+            q = q.filter(RunRecord.org_id == org_id)
+        return q.order_by(RunRecord.created_at.desc()).limit(limit).all()
+
     def get_runs_for_scenario(
         self,
         scenario_id: int,

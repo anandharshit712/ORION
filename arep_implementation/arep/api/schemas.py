@@ -222,6 +222,10 @@ class RunRecordResponse(BaseModel):
 
     id: int
     model_name: str
+    # Which scenario this run was. Absent until the dashboard listed stored
+    # runs and every row's Scenario column rendered "—": a run list that does
+    # not say what was being driven is a list of numbers.
+    scenario_id: Optional[str] = None
     master_seed: int
     duration: float
     termination_reason: Optional[str]

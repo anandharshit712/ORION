@@ -319,6 +319,28 @@ def get_job(job_id: int, request: Request):
 # ── Results ──────────────────────────────────────────────────────────────
 
 
+@results_router.get("/runs", response_model=List[RunRecordResponse])
+def list_stored_runs(
+    request: Request,
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Completed runs for this org, newest first.
+
+    Distinct from `GET /api/runs/`, which lists the **live** registry: that one
+    is in-memory, holds only runs currently streaming, and is empty after a
+    restart. The dashboard's Runs section was pointed at it, so a customer who
+    had just finished a 500-run batch was told "no runs recorded".
+
+    Ids here are `RunRecord.id` — database integers, and the ones replay and
+    stored frames take. Live-run ids are strings from the registry and are not
+    interchangeable with them.
+    """
+    org_id, _, _ = get_request_principal(request)
+    with session_scope() as session:
+        runs = RunRepository(session).list_recent(limit, org_id=org_id)
+        return [RunRecordResponse.model_validate(r) for r in runs]
+
+
 @results_router.get("/model/{model_name}", response_model=List[RunRecordResponse])
 def get_results_by_model(
     model_name: str,

@@ -32,7 +32,7 @@ function renderSection(Component) {
 }
 
 const SECTIONS = [
-  { name: 'Runs', Component: RunsSection, method: 'getRuns', empty: /no runs recorded/i },
+  { name: 'Runs', Component: RunsSection, method: 'getStoredRuns', empty: /no runs recorded/i },
   { name: 'Batches', Component: BatchesSection, method: 'getBatchJobs', empty: /no batch jobs/i },
   { name: 'Models', Component: ModelsSection, method: 'getModels', empty: /no submitted models/i },
   { name: 'Scenarios', Component: ScenariosSection, method: 'getScenarios', empty: /no scenarios registered/i },
@@ -81,12 +81,19 @@ describe.each(SECTIONS)('$name section', ({ Component, method, empty }) => {
 });
 
 describe('Runs section', () => {
+  // The *stored* run shape, from GET /results/runs. It has no `status` — a run
+  // is in the database because it finished — and integer ids, which are the
+  // ones replay takes. The section used to read the live registry, whose ids
+  // are strings and which is empty after a restart, so a customer with a
+  // finished batch was told they had no runs.
   const RUNS = [
     {
-      run_id: 'abcdef1234567890',
+      id: 41,
       model_name: 'EmergencyBrake',
-      scenario_path: 'scenarios/lon/LON-003_emergency_stop.yaml',
-      status: 'completed',
+      scenario_id: 'scenarios/lon/LON-003_emergency_stop.yaml',
+      master_seed: 42,
+      duration: 12.4,
+      termination_reason: 'completed',
       composite_score: 0.912,
       safety_score: 0.95,
       compliance_score: 0.9,
@@ -95,17 +102,20 @@ describe('Runs section', () => {
       collision_occurred: false,
     },
     {
-      run_id: 'running000000000',
+      id: 42,
       model_name: 'Random',
-      scenario_path: 'scenarios/basic/straight_road_empty.yaml',
-      status: 'running',
+      scenario_id: 'scenarios/basic/straight_road_empty.yaml',
+      master_seed: 43,
+      duration: 3.1,
+      termination_reason: 'collision',
       composite_score: null,
+      collision_occurred: true,
     },
   ];
 
-  it('renders a dash, not 0.0, for a run that has not been scored', async () => {
-    // A zero here reads as "scored badly" rather than "not finished yet".
-    vi.spyOn(api, 'getRuns').mockResolvedValue(RUNS);
+  it('renders a dash, not 0.0, for a run that has no score', async () => {
+    // A zero here reads as "scored badly" rather than "no score recorded".
+    vi.spyOn(api, 'getStoredRuns').mockResolvedValue(RUNS);
     renderSection(RunsSection);
 
     await screen.findByText('91.2');
@@ -114,18 +124,38 @@ describe('Runs section', () => {
     expect(row.textContent).not.toContain('0.0');
   });
 
-  it('filters by status', async () => {
+  it('filters to the runs that collided', async () => {
     // fireEvent rather than user-event: a click on a plain button needs no
     // pointer simulation, and user-event is not a dependency of this project.
-    vi.spyOn(api, 'getRuns').mockResolvedValue(RUNS);
+    vi.spyOn(api, 'getStoredRuns').mockResolvedValue(RUNS);
 
     renderSection(RunsSection);
     await screen.findByText('EmergencyBrake');
 
-    fireEvent.click(screen.getByRole('tab', { name: /running/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /collided/i }));
 
     expect(screen.queryByText('EmergencyBrake')).not.toBeInTheDocument();
     expect(screen.getByText('Random')).toBeInTheDocument();
+  });
+
+  it('a collision is a fail even without a composite score', async () => {
+    // The verdict used to require status === 'completed', which a stored run
+    // never has, so every row rendered no verdict at all.
+    vi.spyOn(api, 'getStoredRuns').mockResolvedValue(RUNS);
+    renderSection(RunsSection);
+
+    const row = (await screen.findByText('Random')).closest('tr');
+    expect(row.textContent.toLowerCase()).toContain('fail');
+  });
+
+  it('opens the replay, not the live viewer, for a stored run', async () => {
+    // Live-run ids are strings from the in-memory registry; these are database
+    // integers. Sending one to /simulation/:runId 404s.
+    vi.spyOn(api, 'getStoredRuns').mockResolvedValue(RUNS);
+    renderSection(RunsSection);
+
+    const row = (await screen.findByText('EmergencyBrake')).closest('tr');
+    expect(row.getAttribute('title')).toMatch(/replay/i);
   });
 });
 

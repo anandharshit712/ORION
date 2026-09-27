@@ -28,11 +28,16 @@ export const NAV_ITEMS = [
 
 export default function Sidebar({ active, onNavigate }) {
   const { user, logout } = useAuth();
-  const credits =
-    user?.credits_remaining ??
-    user?.organization?.credits_remaining ??
-    user?.org?.credits_remaining ??
-    null;
+  // `organisation.run_credits`, which is what GET /api/auth/me actually
+  // returns. This read three keys that have never existed — `credits_remaining`
+  // on the user, and an American-spelled `organization` — so the gauge showed
+  // "—" for every account while Settings, reading the same org through
+  // /api/orgs/me, showed the real number two panels away.
+  const rawCredits = user?.organisation?.run_credits;
+  // -1 is OrganisationRepository.UNLIMITED_CREDITS. Rendered raw it reads as a
+  // negative balance, which is the opposite of what it means.
+  const unlimited = rawCredits === -1;
+  const credits = typeof rawCredits === 'number' && !unlimited ? rawCredits : null;
   const initial = (user?.username || user?.email || 'U').charAt(0).toUpperCase();
 
   return (
@@ -71,7 +76,9 @@ export default function Sidebar({ active, onNavigate }) {
             page, and without this link it had no way in at all. */}
         <Link className="credits panel" to="/billing" id="sidebar-billing">
           <div className="credits-k mono-label">Run Credits</div>
-          <div className="credits-v num">{credits != null ? credits.toLocaleString() : '—'}</div>
+          <div className="credits-v num">
+            {unlimited ? 'unlimited' : credits != null ? credits.toLocaleString() : '—'}
+          </div>
           <span className="credits-cta mono-label">Manage plan</span>
         </Link>
         <div className="side-user">

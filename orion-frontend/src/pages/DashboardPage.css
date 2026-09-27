@@ -89,7 +89,15 @@
 /* ══ Table ═════════════════════════════════════════════════════════════ */
 .table-card { padding: 0; overflow: hidden; }
 .table-cap { padding: 14px 16px; border-bottom: 1px solid var(--border); }
-.table-wrap { overflow-x: auto; }
+.table-wrap {
+  overflow-x: auto;
+  /* min-width:0 is the load-bearing half. A grid/flex item defaults to
+     min-width:auto, which lets its content push it wider than its track — so
+     `overflow-x: auto` never engages and the *page* scrolls instead of the
+     panel. That is what made the dashboard 79px wider than a 390px viewport
+     while this rule was already here and looked correct. */
+  min-width: 0;
+}
 .data-table .t-id { color: var(--cyan); }
 .data-table .t-model { color: var(--text); }
 .data-table .t-score { color: var(--text); font-weight: 600; }
@@ -115,4 +123,18 @@
 }
 @media (max-width: 760px) {
   .dash-body .side { display: none; }
+}
+
+/* Phone. docs/UI_DESIGN.md §10: nothing unreachable, and tables scroll inside
+   their panel rather than widening the page. A browser walkthrough measured
+   the dashboard 79px wider than a 390px viewport — from the launch form, whose
+   two-column grid still does not fit, and from the runs table, which had no
+   scroll container at all. Horizontal page scroll is invisible in a
+   screenshot, because the shot is taken at the document width. */
+@media (max-width: 620px) {
+  .launch-grid { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+
+  /* The panel scrolls; the page does not. */
+  .table-card { min-width: 0; }
 }

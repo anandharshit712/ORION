@@ -14,6 +14,18 @@
   background: var(--bg-base);
 }
 
+/* ── Overlay positioning vs the global .panel ──────────────────────────
+   Every HUD element below is `position: absolute` so it floats over the
+   canvas. They also carry `.panel`, and `.panel` in index.css sets
+   `position: relative` at the *same* specificity — and index.css is imported
+   last in main.jsx, so it won. The whole HUD therefore stacked underneath the
+   canvas in normal flow instead of overlaying it, on the live viewer as well
+   as on the replay page. Nobody had opened either in a browser.
+
+   Selectors below are written as `.panel.sim-x` so they outrank `.panel`
+   regardless of import order. Do not "simplify" them back to `.sim-x`.
+   ──────────────────────────────────────────────────────────────────── */
+
 /* ── Overlay panels share a glassless instrument frame ─────────────────── */
 .sim-viewer .panel {
   background: var(--bg-panel);
@@ -22,7 +34,7 @@
 }
 
 /* ── Top status strip ──────────────────────────────────────────────────── */
-.sim-statusbar {
+.panel.sim-statusbar {
   position: absolute;
   top: var(--space-4);
   left: var(--space-4);
@@ -45,7 +57,7 @@
 }
 
 /* ── Right telemetry cluster ───────────────────────────────────────────── */
-.sim-cluster {
+.panel.sim-cluster {
   position: absolute;
   top: calc(var(--space-4) + 56px);
   right: var(--space-4);
@@ -113,7 +125,7 @@
 }
 
 /* ── Bottom metric bars + verdict ──────────────────────────────────────── */
-.sim-bottombar {
+.panel.sim-bottombar {
   position: absolute;
   bottom: var(--space-4);
   left: var(--space-4);
@@ -192,7 +204,7 @@
 .sim-event-detail { color: var(--text-2); }
 
 /* ── Empty state (no frame yet) ────────────────────────────────────────── */
-.sim-hud-empty {
+.panel.sim-hud-empty {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -218,7 +230,7 @@
 .sim-back-icon { transform: rotate(180deg); }
 
 /* ── Error banner ──────────────────────────────────────────────────────── */
-.sim-error {
+.panel.sim-error {
   position: absolute;
   top: calc(var(--space-4) + 56px);
   left: 50%;

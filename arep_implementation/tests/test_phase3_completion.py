@@ -436,3 +436,86 @@ def test_the_scenario_table_has_the_composites_it_renders():
 
     for key in ("baseline_composite", "candidate_composite", "delta"):
         assert key in scenario, f"{key} is missing from the serialised comparison"
+
+
+# -- Stored runs vs the live registry --------------------------------------
+#
+# Found by opening the dashboard in a browser. The Runs section read
+# `GET /api/runs/`, which lists the in-memory live registry — empty after a
+# restart and never containing a finished batch run. A seeded database with 24
+# completed runs rendered "No runs recorded".
+
+
+def test_stored_runs_are_listable_for_the_dashboard(client, account):
+    """`GET /results/runs`. Without it there is no endpoint that answers
+    "what has this org actually run"."""
+    from arep.database.connection import session_scope
+    from arep.database.models import RunRecord
+
+    headers, org_id = account
+
+    with session_scope() as db:
+        db.add(
+            RunRecord(
+                org_id=org_id,
+                scenario_id="../scenarios/lon/LON-003_emergency_stop.yaml",
+                model_name="EmergencyBrake",
+                master_seed=42,
+                duration=12.0,
+                termination_reason="completed",
+                num_timesteps=600,
+                composite_score=0.88,
+                safety_score=0.93,
+                collision_occurred=False,
+                min_ttc=4.2,
+                compliance_score=0.9,
+                speed_compliance=0.98,
+                stability_score=0.8,
+                mean_jerk=1.5,
+                reactivity_score=0.85,
+                brake_response_time=0.4,
+            )
+        )
+
+    r = client.get("/results/runs?limit=10", headers=headers)
+    assert r.status_code == 200, r.text
+
+    rows = r.json()
+    assert rows, "a stored run exists but the endpoint returned nothing"
+    assert rows[0]["id"], "a stored run needs its row id — replay takes it"
+    assert rows[0]["scenario_id"], (
+        "a run list that does not say which scenario was driven is a list of " "numbers"
+    )
+
+
+def test_another_orgs_runs_are_not_listed(client, account):
+    from arep.database.connection import session_scope
+    from arep.database.models import RunRecord
+
+    headers, _ = account
+
+    with session_scope() as db:
+        db.add(
+            RunRecord(
+                org_id="some-other-org",
+                scenario_id="secret.yaml",
+                model_name="TheirModel",
+                master_seed=1,
+                duration=1.0,
+                termination_reason="completed",
+                num_timesteps=50,
+                composite_score=0.5,
+                safety_score=0.5,
+                collision_occurred=False,
+                min_ttc=1.0,
+                compliance_score=0.5,
+                speed_compliance=0.5,
+                stability_score=0.5,
+                mean_jerk=1.0,
+                reactivity_score=0.5,
+                brake_response_time=0.5,
+            )
+        )
+
+    rows = client.get("/results/runs?limit=100", headers=headers).json()
+    assert all(r["model_name"] != "TheirModel" for r in rows)

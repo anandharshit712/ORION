@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "node e2e/walkthrough.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.92.0",
@@ -26,6 +27,7 @@
     "@vitejs/plugin-react": "^4.2.0",
     "jsdom": "^25.0.1",
     "vite": "^5.0.0",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "playwright": "^1.48.0"
   }
 }

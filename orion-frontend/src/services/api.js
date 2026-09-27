@@ -98,7 +98,15 @@ export const api = {
   getScenarios: () => request('/scenarios/'),
 
   // Runs / Results
+  // The *live* registry: in-memory, only runs currently streaming, empty after
+  // a restart. For the historical record use getStoredRuns.
   getRuns: (limit = 50) => request(`${API}/runs/?limit=${limit}`),
+
+  // Completed runs from the database. Root-mounted, like the rest of
+  // /results/* — see the path split in CLAUDE.md section 8. Ids here are
+  // integers and are the ones replay takes; live-run ids are strings and are
+  // not interchangeable.
+  getStoredRuns: (limit = 100) => request(`/results/runs?limit=${limit}`),
 
   getRunDetail: (runId) => request(`${API}/runs/${runId}`),
 

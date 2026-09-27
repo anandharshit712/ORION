@@ -48,7 +48,15 @@ function when(value) {
  * renders. The backend names metrics `composite_score`; the table's default
  * rows are keyed `composite`, so the suffix is trimmed rather than widening
  * the table's vocabulary.
+ *
+ * Scaled to 0-100, which is what the rest of the dashboard shows and what
+ * ComparisonTable formats for: it rounds to one decimal, so a 0-1 score came
+ * out as "0.9" against "0.8" and an 0.084 regression looked like 0.1. The
+ * regressions table above it was meanwhile printing three decimals of the
+ * same numbers.
  */
+const PCT = 100;
+
 function toTableModels(scenario, nameA, nameB) {
   const scoresA = {};
   const scoresB = {};
@@ -56,9 +64,9 @@ function toTableModels(scenario, nameA, nameB) {
 
   for (const d of scenario?.metric_deltas || []) {
     const key = String(d.metric || '').replace(/_score$/, '');
-    scoresA[key] = d.value_a;
-    scoresB[key] = d.value_b;
-    deltas[key] = d.delta;
+    scoresA[key] = d.value_a * PCT;
+    scoresB[key] = d.value_b * PCT;
+    deltas[key] = d.delta * PCT;
   }
 
   return [
