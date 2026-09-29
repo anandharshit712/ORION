@@ -20,6 +20,10 @@ import sys
 import traceback
 from pathlib import Path
 
+# Repository root. Two checks below compute this by hand for historical reasons;
+# new ones use this.
+REPO = Path(__file__).resolve().parent.parent.parent
+
 RESULTS: list[tuple[str, str, str]] = []
 
 
@@ -347,6 +351,118 @@ def _pdf_report_sections():
 # ── 4.2 / 4.4 interop ─────────────────────────────────────────────────────
 
 
+def _library_is_sixty_scenarios():
+    """4.3's headline number, counted rather than remembered."""
+    root = REPO / "scenarios"
+    per_category = {
+        d.name.upper(): sorted(d.glob("*.yaml"))
+        for d in sorted(root.iterdir())
+        if d.is_dir()
+    }
+    total = sum(len(v) for v in per_category.values())
+    short = {k: len(v) for k, v in per_category.items() if len(v) != 10}
+    assert not short, f"categories not at 10: {short}"
+    assert total == 60, f"expected 60 scenarios, found {total}"
+    return f"60 scenarios, 10 in each of {len(per_category)} categories"
+
+
+def _every_scenario_loads_or_is_refused_on_purpose():
+    """A scenario that neither loads nor is refused for a stated reason is a hole.
+
+    The dangerous outcome is not a refusal - it is a scenario that loads while
+    its hazard is silently dropped, which still produces a score.
+    """
+    from arep.scenario.parser import ScenarioParser
+    from arep.utils.exceptions import ScenarioParseError, ScenarioValidationError
+
+    parser = ScenarioParser()
+    loaded, refused = 0, []
+    for path in sorted((REPO / "scenarios").glob("*/*.yaml")):
+        try:
+            parser.parse_file(str(path))
+            loaded += 1
+        except (ScenarioParseError, ScenarioValidationError) as exc:
+            refused.append((path.stem, str(exc).strip().splitlines()[-1].strip()))
+
+    for name, reason in refused:
+        assert (
+            "unimplemented type" in reason
+        ), f"{name} refused for an unstated reason: {reason}"
+    names = ", ".join(n for n, _ in refused) or "none"
+    return f"{loaded} load; refused for a stated reason: {names}"
+
+
+def _new_behaviour_trees_are_registered():
+    from arep.simulation.npc_bt import _BT_REGISTRY
+
+    required = {
+        "oncoming_drift",
+        "red_light_runner",
+        "erratic_cyclist",
+        "wrong_way_driver",
+        "tire_blowout",
+    }
+    missing = required - set(_BT_REGISTRY)
+    assert not missing, f"unregistered: {sorted(missing)}"
+    return f"{len(_BT_REGISTRY)} trees registered, including all 5 from 4.3"
+
+
+def _importance_sampling_biases_and_weights_back():
+    """The claim the sampling upgrade rests on, measured end to end.
+
+    A quantity whose true value is known by construction - "the NPC starts in
+    the lowest 10% of its declared range" is exactly 0.10 under uniform
+    sampling. Oversample that corner and the raw rate is far higher; the
+    weighted estimate has to come back to 0.10. Parameter draws only, no
+    simulation.
+    """
+    import numpy as np
+
+    from arep.core.random_manager import RandomManager
+    from arep.scenario.importance import ImportanceRegion
+    from arep.scenario.parameterizer import ScenarioParameterizer
+    from arep.scenario.parser import ScenarioParser
+
+    path = str(REPO / "scenarios" / "lon" / "LON-003_emergency_stop.yaml")
+    probe, _ = ScenarioParser().parse_file(path)
+    npc_id, spec = next(
+        (k, v["initial_x"])
+        for k, v in probe.parameterization["npc_overrides"].items()
+        if isinstance(v.get("initial_x"), dict)
+    )
+    low, high = float(spec["min"]), float(spec["max"])
+    corner = (low, low + 0.10 * (high - low))
+    region = ImportanceRegion(bounds={f"{npc_id}.initial_x": corner}, fraction=0.5)
+
+    param = ScenarioParameterizer()
+    weights, hits = [], []
+    for seed in range(1500):
+        scenario, _ = ScenarioParser().parse_file(path)
+        weights.append(param.apply(scenario, RandomManager(seed), region))
+        npc = next(o for o in scenario.traffic_objects if o.id == npc_id)
+        hits.append(1.0 if corner[0] <= npc.initial.x <= corner[1] else 0.0)
+
+    raw = float(np.mean(hits))
+    estimate = float(np.average(hits, weights=np.array(weights)))
+    assert raw > 0.4, f"region was not oversampled: raw rate {raw:.3f}"
+    assert (
+        abs(estimate - 0.10) < 0.02
+    ), f"weighted estimate {estimate:.4f} does not recover 0.10 (raw {raw:.4f})"
+    return f"raw {raw:.2f} biased -> weighted {estimate:.3f} recovers 0.10"
+
+
+def _suites_partition_the_library():
+    """A scenario in no suite cannot be sold; one in two is double-counted."""
+    from arep.cli.run_suite import SUITES, resolve_scenarios
+
+    sellable = [name for name in SUITES if name != "full"]
+    seen = [p for name in sellable for p in resolve_scenarios(name, REPO)]
+    assert len(seen) == len(set(seen)), "a scenario appears in two suites"
+    everything = set(resolve_scenarios("all", REPO))
+    assert set(seen) == everything, "a scenario belongs to no sellable suite"
+    return f"{len(sellable)} sellable suites partition {len(everything)} scenarios"
+
+
 def _xodr_named_fixture():
     raise NotImplementedError(
         "tests/fixtures/TownSimple.xodr does not exist; the parser is tested "
@@ -555,6 +671,27 @@ CRITERIA = [
         "GitLab component matches the action",
         _gitlab_component_matches_the_action,
     ),
+    (
+        "4.3",
+        "The library is 60 scenarios, 10 per category",
+        _library_is_sixty_scenarios,
+    ),
+    (
+        "4.3",
+        "Every scenario loads, or is refused for a stated reason",
+        _every_scenario_loads_or_is_refused_on_purpose,
+    ),
+    (
+        "4.3",
+        "The five new behaviour trees are registered",
+        _new_behaviour_trees_are_registered,
+    ),
+    (
+        "4.3",
+        "Importance sampling biases the draw and weights it back",
+        _importance_sampling_biases_and_weights_back,
+    ),
+    ("4.3", "Sellable suites partition the library", _suites_partition_the_library),
     ("4.2", "Parsing TownSimple.xodr", _xodr_named_fixture),
     ("4.2", "XODR line+arc geometry parses to a RoadGraph", _xodr_parses_at_all),
     ("4.4", "Importing the ASAM CutIn.osc sample", _osc_named_fixture),
