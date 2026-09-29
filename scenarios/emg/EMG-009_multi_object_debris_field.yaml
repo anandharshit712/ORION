@@ -1,0 +1,103 @@
+scenario:
+  name: "EMG-009 Debris Field - Several Objects Across Both Lanes"
+  version: "2.0"
+  description: >
+    Several objects scattered across both lanes at different distances, none of
+    them blocking the road completely. The requirement is choosing a path rather
+    than reacting to the nearest thing: the gap that avoids the first object
+    lines the car up with the second, and the positions are randomised so the
+    usable line differs every run.
+
+    Substituted for the roadmap's "flash-flood water" theme, which needs surface
+    friction the physics does not read.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 25.0
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: debris_near
+    type: car
+    initial:
+      x: 70.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+      length: 1.0
+      width: 1.2
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: debris_mid
+    type: car
+    initial:
+      x: 105.0
+      y: 1.75
+      heading: 0.0
+      velocity: 0.0
+      length: 1.0
+      width: 1.2
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: debris_far
+    type: car
+    initial:
+      x: 145.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+      length: 1.0
+      width: 1.2
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 5009
+
+parameterization:
+  ego_velocity:
+    min: 18.06
+    max: 27.78
+  ego_x_jitter:
+    min: 0.0
+    max: 8.0
+  npc_overrides:
+    debris_near:
+      initial_x:
+        min: 55.0
+        max: 88.0
+    debris_mid:
+      initial_x:
+        min: 92.0
+        max: 125.0
+    debris_far:
+      initial_x:
+        min: 130.0
+        max: 175.0

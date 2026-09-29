@@ -1,0 +1,91 @@
+scenario:
+  name: "EMG-010 Blowout Beside the Ego - Loss of Control in the Next Lane"
+  version: "2.0"
+  description: >
+    A vehicle in the adjacent lane suffers a blowout while level with the ego:
+    it decelerates hard and yaws, in a direction drawn per run, so on some runs
+    it comes toward the ego and on others it leaves. The requirement is
+    responding to a loss of control that is not in the ego's path yet and may
+    never be - braking hard for the runs where it veers away is its own kind of
+    wrong. LON-010 puts the same failure ahead of the ego, where the answer is
+    unambiguous.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: blowout_neighbour
+    type: car
+    initial:
+      x: 6.0
+      y: 1.75
+      heading: 0.0
+      velocity: 27.78
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: tire_blowout
+        trigger_type: time
+        trigger_value: 4.0
+        yaw_impulse:
+          min: 0.15
+          max: 0.5
+        decel:
+          min: -8.0
+          max: -4.5
+        yaw_duration:
+          min: 0.6
+          max: 1.6
+        min_velocity: 0.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 5010
+
+parameterization:
+  ego_velocity:
+    min: 22.22
+    max: 31.94
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    blowout_neighbour:
+      initial_velocity:
+        min: 25.00
+        max: 30.56
+      initial_x:
+        min: -6.0
+        max: 16.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 7.0
+        yaw_impulse:
+          min: 0.1
+          max: 0.6

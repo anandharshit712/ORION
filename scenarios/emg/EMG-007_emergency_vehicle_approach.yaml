@@ -1,0 +1,86 @@
+scenario:
+  name: "EMG-007 Emergency Vehicle Approaching From Behind"
+  version: "2.0"
+  description: >
+    An emergency vehicle closes from behind at well above the traffic speed
+    while a slower vehicle sits ahead in the ego lane. The requirement is
+    awareness of something overtaking that the forward sensors do not see, and
+    the trap is that the obvious response to the lead - move over - is into the
+    lane the emergency vehicle needs.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: slow_lead
+    type: car
+    initial:
+      x: 70.0
+      y: -1.75
+      heading: 0.0
+      velocity: 18.06
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: emergency_vehicle
+    type: car
+    initial:
+      x: -90.0
+      y: 1.75
+      heading: 0.0
+      velocity: 36.11
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 5007
+
+parameterization:
+  ego_velocity:
+    min: 20.83
+    max: 29.17
+  ego_x_jitter:
+    min: 0.0
+    max: 7.0
+  npc_overrides:
+    slow_lead:
+      initial_velocity:
+        min: 13.89
+        max: 20.83
+      initial_x:
+        min: 52.0
+        max: 95.0
+    emergency_vehicle:
+      initial_velocity:
+        min: 33.33
+        max: 38.89
+      initial_x:
+        min: -130.0
+        max: -55.0

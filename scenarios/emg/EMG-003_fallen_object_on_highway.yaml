@@ -1,0 +1,81 @@
+scenario:
+  name: "EMG-003 Fallen Object on the Highway - Load Shed From a Lead Vehicle"
+  version: "2.0"
+  description: >
+    A lead vehicle sheds part of its load, which appears in the ego lane as a
+    stationary obstacle while the vehicle that dropped it carries on. The
+    requirement is that losing sight of the original hazard is not the same as
+    the hazard being gone: a model tracking the lead vehicle sees it continue
+    normally, and the thing that will be hit was never a vehicle at all.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: shedding_vehicle
+    type: car
+    initial:
+      x: 65.0
+      y: -1.75
+      heading: 0.0
+      velocity: 27.78
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+events:
+  - type: spawn_vehicle
+    trigger_time: 2.5
+    parameters:
+      id: fallen_object
+      x: 105.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+      length: 1.2
+      width: 1.4
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 5003
+
+parameterization:
+  ego_velocity:
+    min: 22.22
+    max: 31.94
+  ego_x_jitter:
+    min: 0.0
+    max: 7.0
+  npc_overrides:
+    shedding_vehicle:
+      initial_velocity:
+        min: 25.00
+        max: 30.56
+      initial_x:
+        min: 50.0
+        max: 85.0

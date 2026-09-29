@@ -1,0 +1,86 @@
+scenario:
+  name: "EMG-008 Lead Vehicle Reverses - Closing Speed From a Stationary Object"
+  version: "2.0"
+  description: >
+    A stopped vehicle ahead backs up toward the ego. The requirement is that a
+    gap can close without the ego moving into it: a model that computes
+    time-to-collision from its own speed against a stationary object concludes
+    it has stopped safely and stops updating.
+
+    Substituted for the roadmap's "dust storm (visibility 30 m)" theme, which
+    needs a visibility model the Observation does not carry.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 11.11
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 900.0
+
+traffic:
+  - id: reversing_vehicle
+    type: car
+    initial:
+      x: 35.0
+      y: -1.75
+      heading: 3.14159
+      velocity: 0.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: proximity
+        trigger_value: 22.0
+        initial_decel: 1.2
+        initial_brake_duration:
+          min: 2.0
+          max: 5.0
+        hesitation_prob: 0.0
+        final_decel: 0.8
+        min_velocity: 0.0
+        max_velocity: 3.5
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 5008
+
+parameterization:
+  ego_velocity:
+    min: 8.33
+    max: 13.89
+  ego_x_jitter:
+    min: 0.0
+    max: 5.0
+  npc_overrides:
+    reversing_vehicle:
+      initial_x:
+        min: 26.0
+        max: 48.0
+      parameters:
+        trigger_value:
+          min: 15.0
+          max: 28.0
+        max_velocity:
+          min: 2.0
+          max: 5.0

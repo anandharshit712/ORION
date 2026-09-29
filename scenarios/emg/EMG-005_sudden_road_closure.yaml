@@ -1,0 +1,80 @@
+scenario:
+  name: "EMG-005 Sudden Road Closure - Both Lanes Blocked Ahead"
+  version: "2.0"
+  description: >
+    Both lanes are blocked, so lateral evasion is not available and stopping is
+    the only answer. Included as the deliberate opposite of the lane-change
+    scenarios: a model that has learned to steer around obstacles has nowhere to
+    put the car, and the only safe behaviour is the one this category usually
+    treats as insufficient.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: closure_left
+    type: car
+    initial:
+      x: 140.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: closure_right
+    type: car
+    initial:
+      x: 140.0
+      y: 1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 5005
+
+parameterization:
+  ego_velocity:
+    min: 22.22
+    max: 31.94
+  ego_x_jitter:
+    min: 0.0
+    max: 10.0
+  npc_overrides:
+    closure_left:
+      initial_x:
+        min: 105.0
+        max: 175.0
+    closure_right:
+      initial_x:
+        min: 105.0
+        max: 175.0
