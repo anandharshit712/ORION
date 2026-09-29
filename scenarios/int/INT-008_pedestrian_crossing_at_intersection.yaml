@@ -1,0 +1,87 @@
+scenario:
+  name: "INT-008 Pedestrian at the Intersection - Crossing on the Ego Path"
+  version: "2.0"
+  description: >
+    A pedestrian steps into the crossing on the far side of the junction as the
+    ego arrives. The junction is the hazard: a model's attention is on cross
+    traffic and right of way, and the pedestrian appears inside the space it has
+    already cleared. Distinct from VRU-001, where the crossing is mid-block and
+    the only thing to watch.
+  duration: 25.0
+
+ego:
+  initial:
+    x: -60.0
+    y: -1.75
+    heading: 0.0
+    velocity: 8.33
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: crossing_pedestrian
+    type: pedestrian
+    initial:
+      x: 14.0
+      y: -9.0
+      heading: 1.5708
+      velocity: 1.4
+    behavior:
+      type: pedestrian
+      parameters:
+        bt_type: cautious_pedestrian
+        trigger_type: ttc
+        trigger_value: 4.0
+        walk_speed:
+          min: 0.9
+          max: 1.8
+        hesitate_prob: 0.35
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 3008
+
+parameterization:
+  ego_velocity:
+    min: 6.94
+    max: 11.11
+  ego_x_jitter:
+    min: 0.0
+    max: 10.0
+  npc_overrides:
+    crossing_pedestrian:
+      initial_x:
+        min: 8.0
+        max: 22.0
+      initial_y:
+        min: -12.0
+        max: -6.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 5.5
+        walk_speed:
+          min: 0.8
+          max: 2.0

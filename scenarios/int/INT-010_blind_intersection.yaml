@@ -1,0 +1,68 @@
+scenario:
+  name: "INT-010 Blind Intersection - Cross Traffic Revealed Late"
+  version: "2.0"
+  description: >
+    Cross traffic appears close to the junction partway through the approach,
+    standing in for a vehicle hidden behind a building line until the last
+    moment. The requirement is approach speed: a model that arrives at a
+    sight-restricted junction fast enough that a late reveal cannot be answered
+    has already failed, whatever it does next. Spawned rather than placed, so
+    it is genuinely absent from the scene until it is not.
+  duration: 25.0
+
+ego:
+  initial:
+    x: -60.0
+    y: -1.75
+    heading: 0.0
+    velocity: 9.72
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic: []
+
+events:
+  - type: spawn_vehicle
+    trigger_time: 4.5
+    parameters:
+      id: revealed_vehicle
+      x: 0.0
+      y: -14.0
+      heading: 1.5708
+      velocity: 11.11
+      length: 4.5
+      width: 2.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 3010
+
+parameterization:
+  ego_velocity:
+    min: 8.33
+    max: 12.50
+  ego_x_jitter:
+    min: 0.0
+    max: 12.0

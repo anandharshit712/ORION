@@ -1,0 +1,94 @@
+scenario:
+  name: "INT-006 Stop-Sign Violation - Cross Traffic Stops Then Pulls Out"
+  version: "2.0"
+  description: >
+    Cross traffic reaches the stop line, stops, and then pulls out in front of
+    the ego after a delay drawn per run. The stop is what makes this hard: a
+    vehicle that never stops is an obstacle a model tracks from far away, while
+    one that stops and then moves is the case where a model has already decided
+    the intersection is clear and stopped watching. Distinct from INT-001, where
+    the crossing vehicle holds right of way and behaves correctly.
+  duration: 25.0
+
+ego:
+  initial:
+    x: -60.0
+    y: -1.75
+    heading: 0.0
+    velocity: 8.33
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: violating_vehicle
+    type: car
+    initial:
+      x: 0.0
+      y: -40.0
+      heading: 1.5708
+      velocity: 8.33
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: red_light_runner
+        trigger_type: time
+        trigger_value: 3.5
+        wait_delay:
+          min: 0.4
+          max: 2.0
+        launch_accel:
+          min: 2.5
+          max: 4.5
+        max_velocity: 11.11
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 3006
+
+parameterization:
+  ego_velocity:
+    min: 6.94
+    max: 11.11
+  ego_x_jitter:
+    min: 0.0
+    max: 10.0
+  npc_overrides:
+    violating_vehicle:
+      initial_velocity:
+        min: 6.94
+        max: 9.72
+      initial_y:
+        min: -50.0
+        max: -30.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 5.5
+        wait_delay:
+          min: 0.2
+          max: 2.5
+        launch_accel:
+          min: 2.0
+          max: 5.0

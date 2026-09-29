@@ -1,0 +1,107 @@
+scenario:
+  name: "INT-009 Multi-Vehicle Gap Acceptance - Crossing a Stream"
+  version: "2.0"
+  description: >
+    Three vehicles cross the junction in sequence with gaps that vary per run.
+    The requirement is judging which gap is usable rather than reacting to a
+    single vehicle: some runs offer a comfortable opening between the second and
+    third, and some offer none within the scenario duration, where waiting is
+    the correct answer and a timeout is not a failure.
+  duration: 30.0
+
+ego:
+  initial:
+    x: -45.0
+    y: -1.75
+    heading: 0.0
+    velocity: 6.94
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: stream_first
+    type: car
+    initial:
+      x: 0.0
+      y: -55.0
+      heading: 1.5708
+      velocity: 9.72
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: stream_second
+    type: car
+    initial:
+      x: 0.0
+      y: -80.0
+      heading: 1.5708
+      velocity: 9.72
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: stream_third
+    type: car
+    initial:
+      x: 0.0
+      y: -115.0
+      heading: 1.5708
+      velocity: 9.72
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+master_seed: 3009
+
+parameterization:
+  ego_velocity:
+    min: 5.56
+    max: 9.72
+  ego_x_jitter:
+    min: 0.0
+    max: 12.0
+  npc_overrides:
+    stream_first:
+      initial_velocity:
+        min: 8.33
+        max: 11.11
+      initial_y:
+        min: -65.0
+        max: -45.0
+    stream_second:
+      initial_velocity:
+        min: 8.33
+        max: 11.11
+      initial_y:
+        min: -95.0
+        max: -70.0
+    stream_third:
+      initial_velocity:
+        min: 8.33
+        max: 11.11
+      initial_y:
+        min: -135.0
+        max: -100.0

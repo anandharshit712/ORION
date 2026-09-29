@@ -1,0 +1,100 @@
+scenario:
+  name: "INT-007 Amber-Light Dilemma - Signal Changes at the Decision Point"
+  version: "2.0"
+  description: >
+    The light turns amber while the ego is in the dilemma zone: too close to
+    stop comfortably, too far to clear the junction at the limit. Both answers
+    are defensible and both carry a cost, which is the point - the requirement
+    is a committed decision rather than an indecisive one, because braking late
+    and then releasing is the behaviour that gets a car rear-ended. The change
+    time is randomised, so the zone the ego is in when it happens varies.
+  duration: 22.0
+
+ego:
+  initial:
+    x: -70.0
+    y: -1.75
+    heading: 0.0
+    velocity: 13.89
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: true
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: cross_traffic
+    type: car
+    initial:
+      x: 0.0
+      y: -34.0
+      heading: 1.5708
+      velocity: 0.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: red_light_runner
+        trigger_type: time
+        trigger_value: 6.6
+        wait_delay: 0.0
+        launch_accel:
+          min: 2.5
+          max: 4.0
+        max_velocity: 11.11
+
+events:
+  - type: change_traffic_light
+    trigger_time: 0.0
+    parameters:
+      light_id: "tl_jct_main"
+      state: "green"
+  - type: change_traffic_light
+    trigger_time: 3.6
+    parameters:
+      light_id: "tl_jct_main"
+      state: "yellow"
+  - type: change_traffic_light
+    trigger_time: 6.6
+    parameters:
+      light_id: "tl_jct_main"
+      state: "red"
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 3007
+
+parameterization:
+  ego_velocity:
+    min: 11.11
+    max: 16.67
+  ego_x_jitter:
+    min: 0.0
+    max: 14.0
+  npc_overrides:
+    cross_traffic:
+      initial_y:
+        min: -40.0
+        max: -26.0
+      parameters:
+        launch_accel:
+          min: 2.0
+          max: 4.5
