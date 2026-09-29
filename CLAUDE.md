@@ -25,9 +25,9 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 - **`docs/ARCHITECTURE.md`** — governs **the scenario taxonomy and the 4-layer execution architecture**: the "one scenario = one behavioral requirement" rule, the six categories, the strict scenario schema, L1–L4 layer contracts, the integration contract. Read before touching `scenario/`, `simulation/`, or adding scenarios.
 - **`docs/UI_DESIGN.md`** (v1.0) — governs **ALL frontend/UI visual work**. The binding design system ("Mission Control"): tokens, typography, components, theming, page-by-page specs. Any change under `orion-frontend/` must conform. Approved sample = `design/sample-mission-control.html`. See Section 9.
 
-Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
+Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0 and 1 are complete** — see Section 13 for what each defect became. Current priority: **wiring the dashboard** (Phase 5.2) — six of seven sections still render `ComingSoon` while the APIs behind them exist, so nothing built in Phases 2–4 is reachable from a browser. Then the confidence intervals (2.1 remainder), then deterministic replay (2.5). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. Current priority: **Phase 4.3, the scenario library 21 → 60**. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -308,6 +308,14 @@ environment:
 
 **One scenario = one behavioral requirement.** Weather, lighting, surface friction = `parameterization` modifiers — NOT separate scenarios. Never create new scenario file just to change weather.
 
+**That is the rule, not yet the implementation (DI-01).** Today `ScenarioParameterizer`
+samples only positions, speeds and NPC parameters. `weather.condition` and `visibility` are
+labels that physics and `Observation` never read, friction is one global config value
+(`phys.surface_friction`), and the default `kinematic` mode ignores friction entirely.
+`change_weather` is not an implemented event type, so EMG-004 is refused at load (DI-02, see
+Section 13). Don't describe a scenario as testing rain or ice until `docs/DISCUSSIONS.md`
+DI-01 is built.
+
 ### NPC behavior types (available in `behavior.type`)
 
 Defined in `simulation/npc_bt.py`:
@@ -317,6 +325,13 @@ Defined in `simulation/npc_bt.py`:
 - `follow_lane` — basic lane following
 - `scripted` — event-driven via `events:` block in YAML
 - `pedestrian` — VRU movement model
+
+`behavior.parameters.bt_type` selects the tree. Registered trees (`_BT_REGISTRY`):
+`hesitant_brake`, `hesitant_cut_in`, `adaptive_tailgate`, `cautious_pedestrian`,
+`erratic_pedestrian`, `junction_yield`, and from Phase 4.3 `oncoming_drift`,
+`red_light_runner`, `erratic_cyclist`, `wrong_way_driver`, `tire_blowout`.
+**Write the tree before the scenario that needs it** — a scenario whose hazard has no tree
+still runs and still scores, against a vehicle going straight.
 
 ---
 
@@ -832,11 +847,22 @@ on the production host is an operational step, not development work.
    `RoadSegment`, `Junction`) and `core/road_templates.py` (six factories) exist and are wired
    through `environment.road.template`. See Section 6.
 
-**All 21 scenarios execute.** Verified with `arep.cli.run_suite --scenarios all`: 18 pass
-against `emergency_brake`. The three that fail — EMG-002, LAT-003, MLT-007 — fail *correctly*:
-each needs evasive steering or gentle braking, and a brake-only model cannot pass them. Same
-category as `ConstantAction` failing the LON scenarios. Don't "fix" them by weakening the
-scenario.
+**20 of 21 scenarios execute; 17 pass** against `emergency_brake`
+(`arep.cli.run_suite --scenarios all`). The three that fail — EMG-002, LAT-003, MLT-007 —
+fail *correctly*: each needs evasive steering or gentle braking, and a brake-only model
+cannot pass them. Same category as `ConstantAction` failing the LON scenarios. Don't "fix"
+them by weakening the scenario.
+
+**EMG-004 no longer loads, on purpose (DI-02).** It declares a `change_weather` event the
+engine cannot execute, and used to load, run and pass while testing a dry road. The old
+"18 of 21" figure counted it. Unimplemented event types are now refused by
+`ScenarioValidator`; `run_suite` skips such a scenario and names it in the report rather
+than aborting the suite or dropping it quietly. EMG-004 returns when `docs/DISCUSSIONS.md`
+DI-01 gives weather something to change.
+
+**Event types live in `IMPLEMENTED_EVENT_TYPES` (`scenario/events.py`)** — currently
+`spawn_vehicle`, `spawn_pedestrian`, `change_traffic_light`. Adding a name there without
+writing its handler re-opens the silent-drop hole, and a test asserts each name has one.
 
 ### Done (P1.1 + P1.2 + P1.3)
 

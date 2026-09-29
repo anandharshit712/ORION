@@ -194,15 +194,11 @@ wind model. The agreed direction: environmental physics varies per run, and may 
 a run through zones (friction, visibility) and timed events (wind gusts). Every change is
 fixed by a few numbers drawn at run start, never random drift from tick to tick.
 
-**Full finding, design and open questions**: `docs/DISCUSSIONS.md` DI-01. It is not ready to
-build until the parameter list, the NPC-fairness question and the mode policy are settled
-there. It changes scoring, so it needs a `METHODOLOGY.md` change-log entry.
-
-### Unknown scenario events are silently dropped
-`EventExecutor` implements only `spawn_vehicle` and `spawn_pedestrian`; any other event type
-does nothing. EMG-004's black-ice `change_weather` event is dropped, so the scenario runs and
-scores on dry-road grip. An unknown event type should fail at load. This is a small change and
-a prerequisite for the item above. Details: `docs/DISCUSSIONS.md` DI-02.
+**Post-build:** not picked up until the roadmap build is complete, and it does not change any
+remaining roadmap item. **Full finding, design and open questions**: `docs/DISCUSSIONS.md`
+DI-01. Even then, it is not ready to build until the parameter list, the NPC-fairness
+question and the mode policy are settled there. Until it ships, EMG-004 is refused at load
+(DI-02, built), so the suite runs 20 of 21 scenarios. It changes scoring, so it needs a `METHODOLOGY.md` change-log entry.
 
 ### TTC approximations
 Constant-acceleration projection, with acceleration held constant over the projection and
