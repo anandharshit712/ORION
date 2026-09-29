@@ -38,7 +38,7 @@ traffic:
   - id: debris_near
     type: car
     initial:
-      x: 70.0
+      x: 77.0
       y: -1.75
       heading: 0.0
       velocity: 0.0
@@ -50,7 +50,7 @@ traffic:
   - id: debris_mid
     type: car
     initial:
-      x: 105.0
+      x: 112.0
       y: 1.75
       heading: 0.0
       velocity: 0.0
@@ -62,7 +62,7 @@ traffic:
   - id: debris_far
     type: car
     initial:
-      x: 145.0
+      x: 152.0
       y: -1.75
       heading: 0.0
       velocity: 0.0
@@ -91,13 +91,13 @@ parameterization:
   npc_overrides:
     debris_near:
       initial_x:
-        min: 55.0
-        max: 88.0
+        min: 62.0
+        max: 95.0
     debris_mid:
       initial_x:
-        min: 92.0
-        max: 125.0
+        min: 99.0
+        max: 132.0
     debris_far:
       initial_x:
-        min: 130.0
-        max: 175.0
+        min: 137.0
+        max: 182.0

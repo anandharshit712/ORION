@@ -34,7 +34,7 @@ traffic:
   - id: lead_vehicle
     type: car
     initial:
-      x: 55.0          # overridden by parameterization
+      x: 68.0          # overridden by parameterization
       y: -1.75
       heading: 0.0
       velocity: 16.67  # overridden by parameterization
@@ -81,8 +81,8 @@ parameterization:
         min: 11.11    # 40 km/h
         max: 19.44    # 70 km/h
       initial_x:
-        min: 40.0
-        max: 80.0
+        min: 53.0
+        max: 93.0
       parameters:
         trigger_value:
           min: 2.5

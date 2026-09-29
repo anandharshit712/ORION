@@ -36,7 +36,7 @@ traffic:
   - id: chain_nearest
     type: car
     initial:
-      x: 32.0
+      x: 41.0
       y: -1.75
       heading: 0.0
       velocity: 25.0
@@ -57,7 +57,7 @@ traffic:
   - id: chain_middle
     type: car
     initial:
-      x: 62.0
+      x: 71.0
       y: -1.75
       heading: 0.0
       velocity: 25.0
@@ -75,7 +75,7 @@ traffic:
   - id: chain_front
     type: car
     initial:
-      x: 95.0
+      x: 104.0
       y: -1.75
       heading: 0.0
       velocity: 25.0
@@ -110,8 +110,8 @@ parameterization:
   npc_overrides:
     chain_nearest:
       initial_x:
-        min: 24.0
-        max: 44.0
+        min: 33.0
+        max: 53.0
       parameters:
         trigger_value:
           min: 5.4
@@ -121,16 +121,16 @@ parameterization:
           max: -8.0
     chain_middle:
       initial_x:
-        min: 55.0
-        max: 78.0
+        min: 64.0
+        max: 87.0
       parameters:
         trigger_value:
           min: 4.6
           max: 6.2
     chain_front:
       initial_x:
-        min: 88.0
-        max: 118.0
+        min: 97.0
+        max: 127.0
       parameters:
         trigger_value:
           min: 3.5

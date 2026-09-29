@@ -33,7 +33,7 @@ traffic:
   - id: cyclist
     type: bicycle
     initial:
-      x: 40.0
+      x: 42.0
       y: -1.75
       heading: 0.0
       velocity: 4.17    # 15 km/h
@@ -58,8 +58,8 @@ parameterization:
   npc_overrides:
     cyclist:
       initial_x:
-        min: 25.0
-        max: 60.0
+        min: 27.0
+        max: 62.0
       initial_velocity:
         min: 3.0
         max: 6.5

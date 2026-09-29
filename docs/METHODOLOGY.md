@@ -220,9 +220,26 @@ Stated so that nobody infers coverage that is not there:
   LiDAR, camera, radar, GPS or IMU model, and no sensor noise, occlusion or
   detection failure. ORION evaluates planning and control. A model that would fail
   because its perception stack missed an object will score well here.
-- **No road topology beyond a flat straight road.** Intersections, curves, merges
-  and gradients are not yet modelled, which is why the intersection and multi-agent
-  scenario categories are not yet executable.
+- **Nothing rewards making progress.** Safety, compliance, stability and
+  reactivity all measure how the vehicle behaves; none measures whether it got
+  anywhere. A model that brakes to a standstill in the first second and never
+  moves again scores 0.962 stability and 0.988 composite on LON-001, because a
+  stationary car has no jerk, no steering variance, no speeding and no
+  collisions. This is the single largest thing to know when reading a composite
+  score: **a high score is evidence of not crashing, not evidence of driving.**
+  Scenario pass/fail inherits it — the criterion is a collision and intervention
+  rate, so refusing to move passes most of the library. Any comparison between
+  two models has to be read with this in mind, and comparing a real model
+  against `EmergencyBrake` is not the compliment it looks like. Adding a
+  progress term is tracked in `docs/PENDING.md`; `tests/test_reference_model.py`
+  pins the current behaviour so it cannot change unnoticed.
+- **Road topology is modelled, but geometry is not sensed.** Since Phase 1.5 a
+  scenario can declare a junction, an on-ramp or a roundabout, and all six
+  categories execute. What the model receives is still lane offset and object
+  positions — there is no map, no route and no lookahead along the road graph,
+  so a model cannot plan through a junction, only react inside one. The
+  roundabout template in particular has a single-lane circulating carriageway
+  that only a lane-following controller can stay on.
 - **No certification claim.** ORION is not an ISO 26262 or ISO 21448 tool and
   produces no evidence package for either.
 
@@ -426,8 +443,40 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
 | 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |
+| 4.3-fix | Twelve scenarios had their lead-vehicle start positions moved further away | Composite rises and collision rate falls on those twelve for any braking model. They contained a parameter corner no braking behaviour could survive — see below. Scores on them are not comparable across this change. |
 | 4.3 | Importance sampling: aggregates are weighted, batches report `effective_n` | No effect on any uniform batch — `effective_n == num_runs` and the estimators are the ones they always were. A batch run with `importance=` reports the scenario's rates rather than its own draw's, and an interval built on the effective sample size. |
 | 1.5-fix | One lane-centre formula for the flat road and the road graph | Lane compliance rises from 0.0 to 1.0 on the 15 scenarios that start the ego at y=-1.75; composite rises by exactly +0.100 for each. INT-003 rises +0.050 from dropping a lateral `ego_x_jitter` wider than its lane. The 5 templated scenarios are unchanged. |
+
+### The 4.3 feasibility correction
+
+Twelve scenarios contained a corner of their declared parameter ranges where no
+braking behaviour avoided contact. The check is deliberately generous to the
+scenario — the ego brakes at its full declared `max_deceleration` from tick
+zero, with no reaction delay — so a scenario failing it cannot be passed by any
+braking model at all. It was scoring a model on the geometry it was handed
+rather than on how it responded.
+
+LON-002 was the worst of them and the one that surfaced it: at the corner the
+ego needed about 48 m to stop while the lead could start 35 m ahead. It failed
+`emergency_brake` on 10% of runs, which reads exactly like a demanding scenario
+rather than a broken one.
+
+The fix moves each lead's start position further away — both the nominal `x` and
+the `initial_x` range, shifted together so the spread that blocks
+pattern-learning is preserved — until the worst corner has at least 5 m of
+slack. The scenarios still demand hard braking; they no longer demand the
+impossible. Discrimination was re-measured on all twelve: `emergency_brake` now
+collides on none of them and `ConstantAction` still collides on 80–100%, so the
+scenarios separate a braking model from a non-braking one exactly as before.
+
+Affected: LON-002, LON-003, LON-004, LON-005, LON-008, LON-010, LAT-008,
+LAT-010, MLT-002, EMG-007, EMG-009, VRU-003.
+
+Not affected, deliberately: EMG-001, EMG-002, LAT-003 and LAT-007 are evasion
+scenarios where braking is *supposed* to be insufficient. `tests/test_scenario_feasibility.py`
+enforces the invariant for every scenario and carries an explicit allowlist for
+those, so adding to it is a claim about a scenario's purpose rather than a way
+to silence the check.
 
 ### The 1.5 lane-geometry correction
 
