@@ -21,6 +21,7 @@ from arep.config import SimulationConfig, get_config
 from arep.core.observation import Observation
 from arep.core.random_manager import RandomManager
 from arep.evaluation.collector import DataCollector
+from arep.scenario.importance import ImportanceRegion
 from arep.evaluation.composite import CompositeEvaluator, EvaluationResult
 from arep.models.interface import ModelInterface, ModelWrapper
 from arep.utils.exceptions import ModelSandboxError
@@ -84,6 +85,7 @@ class EvaluationRunner:
         scenario_path: str,
         model: ModelInterface,
         master_seed: int = 42,
+        region: "ImportanceRegion | None" = None,
     ) -> EvaluationResult:
         """
         Run a single simulation and evaluate.
@@ -92,18 +94,20 @@ class EvaluationRunner:
             scenario_path: Path to scenario YAML.
             model: Model to evaluate.
             master_seed: Random seed.
+            region: Optional parameter sub-region to oversample (Phase 4.3).
 
         Returns:
             EvaluationResult for this run.
         """
         scenario, _ = self.parser.parse_file(scenario_path)
-        return self.run_scenario_definition(scenario, model, master_seed)
+        return self.run_scenario_definition(scenario, model, master_seed, region)
 
     def run_scenario_definition(
         self,
         scenario,
         model: ModelInterface,
         master_seed: int = 42,
+        region: "ImportanceRegion | None" = None,
     ) -> EvaluationResult:
         """
         Run an already-parsed scenario.
@@ -116,7 +120,9 @@ class EvaluationRunner:
         """
         rng = RandomManager(master_seed)
 
-        initial_world = self.scenario_executor.create_initial_world(scenario, rng)
+        initial_world = self.scenario_executor.create_initial_world(
+            scenario, rng, region
+        )
 
         # Wrap model
         wrapper = ModelWrapper(
@@ -193,6 +199,7 @@ class EvaluationRunner:
 
         evaluated = self.evaluator.evaluate(record)
         evaluated.frame_hash = record.frame_hash
+        evaluated.importance_weight = initial_world.importance_weight
         if self.collect_frames:
             # One extra frame for the terminal world, for playback only -
             # deliberately NOT hashed.
@@ -240,6 +247,7 @@ class EvaluationRunner:
         model: ModelInterface,
         num_runs: int = 100,
         master_seed: int = 42,
+        importance: "ImportanceRegion | None" = None,
     ) -> BatchResult:
         """
         Run N simulations with different seeds and aggregate results.
@@ -251,6 +259,11 @@ class EvaluationRunner:
             model: Model to evaluate.
             num_runs: Number of runs.
             master_seed: Base seed (each run uses master_seed + i).
+            importance: Optional parameter sub-region to oversample (Phase 4.3),
+                so a large suite spends its runs where the failures live. The
+                aggregate is weighted back to the declared distribution, and
+                reports an effective sample size below `num_runs` because that
+                is what a concentrated draw buys.
 
         Returns:
             BatchResult with aggregated statistics.
@@ -268,7 +281,7 @@ class EvaluationRunner:
 
         for i in range(num_runs):
             seed = master_seed + i
-            result = self.run_single(scenario_path, model, seed)
+            result = self.run_single(scenario_path, model, seed, importance)
             aggregator.add_result(result)
             per_run.append(result)
 

@@ -294,6 +294,70 @@ A collision outranks a low composite when choosing the worst run. The run a
 reviewer needs is the one that crashed, even when a different run scored lower
 on the weighted average.
 
+### Importance sampling, and why `n` is not the run count
+
+`arep/scenario/importance.py`
+
+Uniform sampling spends runs evenly across a scenario's declared parameter
+ranges. At suite scale that is mostly waste: a scenario whose failures live in
+a narrow corner will spend 95 of 100 runs re-confirming the safe region. A
+batch may instead name a sub-region and oversample it, so the runs land where
+the failures are:
+
+```python
+region = ImportanceRegion(
+    bounds={"lead_vehicle.initial_x": (25.0, 32.0)},   # the failing corner
+    fraction=0.6,                                       # 60% of runs drawn there
+)
+runner.run_batch(path, model, num_runs=100, importance=region)
+```
+
+Two properties make this safe to publish a number from.
+
+**The bias is paid back.** Each run carries the likelihood ratio between the
+scenario's declared uniform distribution and the distribution it was actually
+drawn from, and every mean, interval and percentile is computed against those
+weights. A batch that draws half its runs from a failure region occupying 10%
+of the space sees collisions in over half its runs; the weighted estimator
+reports the scenario's rate, not the draw's. `tests/test_importance_sampling.py`
+pins this against a rate that is known by construction.
+
+The weight follows where a point *landed*, not which branch of the sampler
+produced it. The proposal is a mixture — with probability `fraction` it draws
+from the region, otherwise from the whole declared space — and that second
+branch lands inside the region too, at a rate equal to the region's volume.
+Weighting by the branch under-counts the region and biases every rate the batch
+reports. It is a silent error: the estimate stays plausible and is simply
+wrong.
+
+**The reported `n` falls.** A weighted batch publishes an `effective_n`
+(Kish: `(Σw)² / Σw²`) alongside its run count, and every interval is built on
+the effective figure for both the standard error and the degrees of freedom. A
+100-run batch that spent 60 runs in one corner is not 100 runs' worth of
+evidence about the scenario as a whole, and an interval that ignored that would
+be narrower than the evidence supports — the direction that gets a model signed
+off. For an ordinary uniform batch `effective_n == num_runs` exactly.
+
+Two limits worth stating:
+
+- **Region bounds narrow a declared range and never widen it.** A bound
+  reaching outside the scenario's own `parameterization` block is clipped to
+  it, and one that does not overlap at all is dropped. A suite may concentrate
+  runs inside what the scenario author sanctioned; it may not score a model on
+  parameters the author never wrote down.
+- **A region pinned to a single value (zero volume) cannot be weighted back.**
+  Those runs are reported at weight 0 and contribute nothing to the population
+  estimate — the proposal density there is infinite and no estimator exists. A
+  batch where *every* run is degenerate is refused rather than averaged. Such
+  runs still ran and their failures are still real failures; they just cannot
+  speak for the rest of the space.
+
+Importance sampling is available through `EvaluationRunner.run_batch` — the
+CLI, SDK and library paths. **`POST /api/runs/batch` does not accept a region**,
+because `RunRecord` has no column to persist a weight and a queued batch would
+lose it, leaving the API to report the biased draw as if it were the scenario.
+The API path is uniform-only until that column exists.
+
 ---
 
 ## 8.6 When ORION calls a change a regression
@@ -362,6 +426,7 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
 | 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |
+| 4.3 | Importance sampling: aggregates are weighted, batches report `effective_n` | No effect on any uniform batch — `effective_n == num_runs` and the estimators are the ones they always were. A batch run with `importance=` reports the scenario's rates rather than its own draw's, and an interval built on the effective sample size. |
 | 1.5-fix | One lane-centre formula for the flat road and the road graph | Lane compliance rises from 0.0 to 1.0 on the 15 scenarios that start the ego at y=-1.75; composite rises by exactly +0.100 for each. INT-003 rises +0.050 from dropping a lateral `ego_x_jitter` wider than its lane. The 5 templated scenarios are unchanged. |
 
 ### The 1.5 lane-geometry correction

@@ -505,6 +505,13 @@ class WorldState:
     # Populated by ScenarioExecutor; mutated each tick by WorldManager.
     npc_behaviors: Dict[str, dict] = field(default_factory=dict)
 
+    # Importance-sampling weight of the instance this world was built from
+    # (Phase 4.3). 1.0 for an ordinary uniform draw. Constant for the run and
+    # carried here only so the runner can read it back off the world it was
+    # handed; it is run metadata, not physics, and is deliberately absent from
+    # the canonical tick frame so it cannot move a determinism digest.
+    importance_weight: float = 1.0
+
     # ── Queries ──────────────────────────────────────────────────────
 
     def get_object_by_id(self, object_id: str) -> Optional[VehicleState]:

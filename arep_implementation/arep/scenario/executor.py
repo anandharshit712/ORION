@@ -23,6 +23,7 @@ from arep.core.state import (
 )
 from arep.core.random_manager import RandomManager
 from arep.scenario.schema import ScenarioDefinition
+from arep.scenario.importance import ImportanceRegion
 from arep.scenario.parameterizer import ScenarioParameterizer
 from arep.utils.exceptions import ScenarioParseError
 from arep.utils.logging_config import get_logger
@@ -67,6 +68,7 @@ class ScenarioExecutor:
         self,
         scenario: ScenarioDefinition,
         rng: RandomManager,
+        region: ImportanceRegion | None = None,
     ) -> WorldState:
         """
         Build the initial WorldState.
@@ -74,12 +76,14 @@ class ScenarioExecutor:
         Args:
             scenario: Parsed and validated scenario.
             rng: Random manager.
+            region: Optional parameter sub-region to oversample (Phase 4.3).
 
         Returns:
-            Ready-to-simulate WorldState.
+            Ready-to-simulate WorldState. Its `importance_weight` carries the
+            sampling weight of this instance; 1.0 for an ordinary uniform draw.
         """
         # L2: apply dynamic parameterization ranges before building world
-        self.parameterizer.apply(scenario, rng)
+        weight = self.parameterizer.apply(scenario, rng, region)
 
         ego = self._create_ego(scenario)
         objects = self._create_traffic_objects(scenario)
@@ -96,6 +100,7 @@ class ScenarioExecutor:
             weather_condition=scenario.weather.condition,
             visibility=scenario.weather.visibility,
         )
+        world.importance_weight = weight
         world.npc_behaviors = npc_behaviors
         # Carried alongside `lanes` rather than replacing it (Phase 1.5).
         # Everything downstream — observations, lane compliance, the tick frame —

@@ -72,6 +72,15 @@ class AggregatedMetrics:
     """Aggregated metrics across multiple runs."""
 
     num_runs: int = 0
+    # Effective sample size (Phase 4.3). Equal to num_runs for an ordinary
+    # uniform batch. An importance-sampled batch reports less, because
+    # concentrating draws in one region buys resolution there and pays for it
+    # in the population estimate -- a 100-run batch that spent 60 of them in a
+    # narrow failure corner is not 100 runs worth of evidence about the
+    # scenario as a whole, and reporting n=100 for it would be a false claim of
+    # precision. Every mean, interval and percentile below is weighted back to
+    # the scenario declared distribution.
+    effective_n: float = 0.0
 
     # Composite
     composite_mean: float = 0.0
@@ -110,6 +119,7 @@ class AggregatedMetrics:
     def to_dict(self) -> dict:
         return {
             "num_runs": self.num_runs,
+            "effective_n": round(self.effective_n, 2),
             "composite_mean": round(self.composite_mean, 4),
             "composite_std": round(self.composite_std, 4),
             "composite_95ci": [
@@ -153,11 +163,59 @@ class StatisticalAggregator:
     def add_result(self, result: EvaluationResult) -> None:
         self.results.append(result)
 
+    def _weights(self) -> "np.ndarray | None":
+        """Importance weights, or None when the batch was sampled uniformly.
+
+        Returning None for the uniform case is not an optimisation: it keeps
+        the ordinary path on exactly the estimators it has always used, so an
+        unweighted batch cannot drift by a floating-point hair because a
+        feature nobody switched on changed the arithmetic.
+        """
+        w = np.array(
+            [float(getattr(r, "importance_weight", 1.0)) for r in self.results],
+            dtype=float,
+        )
+        if np.allclose(w, 1.0):
+            return None
+        if w.sum() <= 0.0:
+            # Every draw came from a degenerate region and none of them can
+            # speak for the population. Refusing is the honest answer: there is
+            # no weighting that turns these runs into a scenario-level estimate.
+            raise ValueError(
+                "importance weights sum to zero: every run was drawn from a "
+                "degenerate region, so no population estimate exists. Widen the "
+                "region bounds, or aggregate these runs as a targeted sub-suite."
+            )
+        return w
+
+    @staticmethod
+    def _wpercentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
+        """Weighted percentile: the value where cumulative weight crosses q.
+
+        Each run is placed at the midpoint of its own weight block, which is
+        the convention that reduces to numpy at the interior when the weights
+        are equal, and which does not extrapolate past the observed extremes.
+        """
+        order = np.argsort(values)
+        v = values[order]
+        w = weights[order]
+        cum = np.cumsum(w) - 0.5 * w
+        cum /= w.sum()
+        return float(np.interp(q / 100.0, cum, v))
+
     def compute(self) -> AggregatedMetrics:
         """Compute aggregated metrics."""
         n = len(self.results)
         if n == 0:
             return AggregatedMetrics()
+
+        weights = self._weights()
+        # Kish effective sample size. Equal weights give back n exactly.
+        effective_n = (
+            float(n)
+            if weights is None
+            else float(weights.sum() ** 2 / np.square(weights).sum())
+        )
 
         composites = np.array([r.composite_score for r in self.results])
         safeties = np.array([r.safety.safety_score for r in self.results])
@@ -167,22 +225,32 @@ class StatisticalAggregator:
         min_ttcs = np.array([r.safety.min_ttc for r in self.results])
         durations = np.array([r.duration for r in self.results])
 
-        collisions = sum(1 for r in self.results if r.safety.collision_occurred)
+        collided = np.array(
+            [1.0 if r.safety.collision_occurred else 0.0 for r in self.results]
+        )
+        if weights is None:
+            collision_rate = float(collided.sum()) / n
+            successes: float = float(collided.sum())
+            trials: float = float(n)
+        else:
+            collision_rate = float(np.average(collided, weights=weights))
+            successes = collision_rate * effective_n
+            trials = effective_n
 
         # Confidence intervals
-        comp_ci = self._mean_ci(composites)
-        col_ci = self._wilson_ci(collisions, n)
+        comp_ci = self._mean_ci(composites, weights)
+        col_ci = self._wilson_ci(successes, trials)
 
         # Per-metric distributions (2.1). min_ttc is included because the tail
         # of the TTC distribution is where the near-misses are, and a mean TTC
         # hides them completely.
         distributions = {
-            "composite": self.distribution(composites),
-            "safety": self.distribution(safeties),
-            "compliance": self.distribution(compliances),
-            "stability": self.distribution(stabilities),
-            "reactivity": self.distribution(reactivities),
-            "min_ttc": self.distribution(min_ttcs),
+            "composite": self.distribution(composites, weights),
+            "safety": self.distribution(safeties, weights),
+            "compliance": self.distribution(compliances, weights),
+            "stability": self.distribution(stabilities, weights),
+            "reactivity": self.distribution(reactivities, weights),
+            "min_ttc": self.distribution(min_ttcs, weights),
         }
 
         # A collision beats any composite score when picking the worst run: the
@@ -197,28 +265,49 @@ class StatisticalAggregator:
             key=lambda r: (not r.safety.collision_occurred, r.composite_score),
         )
 
+        def mean(values: np.ndarray) -> float:
+            if weights is None:
+                return float(np.mean(values))
+            return float(np.average(values, weights=weights))
+
+        def std(values: np.ndarray) -> float:
+            if n <= 1:
+                return 0.0
+            if weights is None:
+                return float(np.std(values, ddof=1))
+            # Weighted sample variance, bias-corrected with the effective n so
+            # a concentrated draw cannot report a tighter spread than it has.
+            if effective_n <= 1.0:
+                return 0.0
+            m = float(np.average(values, weights=weights))
+            var = float(np.average(np.square(values - m), weights=weights))
+            return float(np.sqrt(var * effective_n / (effective_n - 1.0)))
+
         return AggregatedMetrics(
             num_runs=n,
-            composite_mean=float(np.mean(composites)),
-            composite_std=float(np.std(composites, ddof=1)) if n > 1 else 0.0,
+            effective_n=effective_n,
+            composite_mean=mean(composites),
+            composite_std=std(composites),
             composite_ci_lower=comp_ci[0],
             composite_ci_upper=comp_ci[1],
-            safety_mean=float(np.mean(safeties)),
-            compliance_mean=float(np.mean(compliances)),
-            stability_mean=float(np.mean(stabilities)),
-            reactivity_mean=float(np.mean(reactivities)),
-            collision_rate=collisions / n,
+            safety_mean=mean(safeties),
+            compliance_mean=mean(compliances),
+            stability_mean=mean(stabilities),
+            reactivity_mean=mean(reactivities),
+            collision_rate=collision_rate,
             collision_rate_ci_lower=col_ci[0],
             collision_rate_ci_upper=col_ci[1],
-            min_ttc_mean=float(np.mean(min_ttcs)),
-            min_ttc_std=float(np.std(min_ttcs, ddof=1)) if n > 1 else 0.0,
-            mean_duration=float(np.mean(durations)),
+            min_ttc_mean=mean(min_ttcs),
+            min_ttc_std=std(min_ttcs),
+            mean_duration=mean(durations),
             distributions=distributions,
             worst_run_seed=worst.master_seed,
             best_run_seed=best.master_seed,
         )
 
-    def distribution(self, values: np.ndarray) -> ScoreDistribution:
+    def distribution(
+        self, values: np.ndarray, weights: "np.ndarray | None" = None
+    ) -> ScoreDistribution:
         """Mean, spread, interval and percentiles for one metric.
 
         ``ddof=1`` is the sample standard deviation: these runs are a sample of
@@ -231,50 +320,102 @@ class StatisticalAggregator:
         if n == 0:
             return ScoreDistribution()
 
-        low, high = self._mean_ci(values)
+        low, high = self._mean_ci(values, weights)
+        if weights is None:
+            return ScoreDistribution(
+                mean=float(np.mean(values)),
+                std=float(np.std(values, ddof=1)) if n > 1 else 0.0,
+                ci_95_low=low,
+                ci_95_high=high,
+                percentile_5=float(np.percentile(values, 5)),
+                percentile_25=float(np.percentile(values, 25)),
+                percentile_75=float(np.percentile(values, 75)),
+                percentile_95=float(np.percentile(values, 95)),
+                minimum=float(np.min(values)),
+                maximum=float(np.max(values)),
+                n=n,
+            )
+
+        # Weighted: the percentiles matter more here than the mean does. An
+        # importance-sampled batch oversamples the failure region on purpose,
+        # so its raw 5th percentile is drawn from a tail that has been made
+        # artificially fat; reporting it unweighted would state a worst case
+        # the scenario does not have at the declared distribution.
+        eff = float(weights.sum() ** 2 / np.square(weights).sum())
+        m = float(np.average(values, weights=weights))
+        var = float(np.average(np.square(values - m), weights=weights))
         return ScoreDistribution(
-            mean=float(np.mean(values)),
-            std=float(np.std(values, ddof=1)) if n > 1 else 0.0,
+            mean=m,
+            std=(
+                float(np.sqrt(var * eff / (eff - 1.0))) if n > 1 and eff > 1.0 else 0.0
+            ),
             ci_95_low=low,
             ci_95_high=high,
-            percentile_5=float(np.percentile(values, 5)),
-            percentile_25=float(np.percentile(values, 25)),
-            percentile_75=float(np.percentile(values, 75)),
-            percentile_95=float(np.percentile(values, 95)),
+            percentile_5=self._wpercentile(values, weights, 5),
+            percentile_25=self._wpercentile(values, weights, 25),
+            percentile_75=self._wpercentile(values, weights, 75),
+            percentile_95=self._wpercentile(values, weights, 95),
             minimum=float(np.min(values)),
             maximum=float(np.max(values)),
             n=n,
         )
 
-    def _mean_ci(self, values: np.ndarray) -> tuple[float, float]:
-        """Compute confidence interval for mean using t-distribution."""
+    def _mean_ci(
+        self, values: np.ndarray, weights: "np.ndarray | None" = None
+    ) -> tuple[float, float]:
+        """Confidence interval for the mean, using the t-distribution.
+
+        With importance weights the interval is built on the effective sample
+        size rather than the run count, for both the standard error and the
+        degrees of freedom. A weighted batch has fewer independent runs worth
+        of information than it has runs, and an interval that ignored that
+        would be narrower than the evidence supports -- which is the direction
+        that gets a model signed off.
+        """
         n = len(values)
         if n < 2:
             m = float(np.mean(values))
             return m, m
 
-        mean = float(np.mean(values))
-        se = float(stats.sem(values))
+        if weights is None:
+            mean = float(np.mean(values))
+            se = float(stats.sem(values))
+            df = float(n - 1)
+        else:
+            eff = float(weights.sum() ** 2 / np.square(weights).sum())
+            if eff <= 1.0:
+                m = float(np.average(values, weights=weights))
+                return m, m
+            mean = float(np.average(values, weights=weights))
+            var = float(np.average(np.square(values - mean), weights=weights))
+            var *= eff / (eff - 1.0)
+            se = float(np.sqrt(var / eff))
+            df = eff - 1.0
 
         # If standard error is 0 (all values identical), CI = (mean, mean)
         if se < 1e-15:
             return mean, mean
 
-        ci = stats.t.interval(self.confidence_level, df=n - 1, loc=mean, scale=se)
+        ci = stats.t.interval(self.confidence_level, df=df, loc=mean, scale=se)
         return float(ci[0]), float(ci[1])
 
     def _wilson_ci(
         self,
-        successes: int,
-        total: int,
+        successes: float,
+        total: float,
     ) -> tuple[float, float]:
         """
         Wilson score confidence interval for a proportion.
 
         Better than normal approximation for small samples
         or proportions near 0/1.
+
+        Takes floats because an importance-sampled batch passes a weighted
+        success count against an effective sample size, neither of which is a
+        whole number. The formula is continuous in both, so this is the same
+        interval, evaluated where the evidence actually sits.
         """
-        if total == 0:
+        if total <= 0:
             return 0.0, 0.0
 
         z = stats.norm.ppf(1 - (1 - self.confidence_level) / 2)
