@@ -27,7 +27,7 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 
 Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. Current priority: **Phase 4.3, the scenario library 21 → 60**. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. Current priority: **Phase 4.1, the ROS2 connector** — 4.3 is complete (60 scenarios, importance sampling, named suites). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -303,6 +303,47 @@ environment:
 - Topology is declared, not inferred from `road_type`: "urban" describes a speed limit and a
   feel, not a shape — INT-001 is a four-way stop and LAT-001 is a straight road, and both are
   urban.
+
+### Suites (Phase 4.3)
+
+`SUITES` in `arep/cli/run_suite.py` names sets of categories:
+`core` (LON+LAT, 20) · `intersection` (10) · `vru` (10) · `emergency` (10) ·
+`multi-agent` (10) · `full` (60). Pass one to `--scenarios`.
+
+Membership only — **no plan gating lives there.** Which plan may run which suite is a pricing
+decision; putting an entitlement table in the CI runner would leave the CLI, the API and the
+billing code each holding a copy of the answer. It belongs beside `PLAN_CREDITS` in
+`api/billing.py` once the prices are decided. A test asserts the sellable suites partition the
+library exactly: a scenario in no suite cannot be sold, one in two is double-counted, and the
+runner is happy either way.
+
+### Importance sampling (Phase 4.3)
+
+`arep/scenario/importance.py`. A batch may oversample a named sub-region of a scenario's
+parameter space so large suites spend runs where failures live:
+
+```python
+from arep.scenario.importance import ImportanceRegion
+runner.run_batch(path, model, num_runs=100, importance=ImportanceRegion(
+    bounds={"lead_vehicle.initial_x": (25.0, 32.0)},   # names match failure_clustering
+    fraction=0.6,
+))
+```
+
+- **The bias is weighted back.** Every run carries a likelihood ratio; `StatisticalAggregator`
+  uses the weighted estimator and publishes `effective_n` (Kish) alongside `num_runs`. An
+  unweighted rate from a biased draw looks exactly like an honest one, which is why the weight
+  is not optional.
+- **`region=None` draws no coin and takes the RNG stream it always took.** Every stored score,
+  baseline and frame hash is keyed to that sequence. Never add an unconditional draw to
+  `ScenarioParameterizer.apply`.
+- **Bounds narrow a declared range, never widen it.** A bound outside the scenario's own
+  `parameterization` is clipped; a disjoint one is dropped.
+- **`POST /api/runs/batch` does not accept a region** — `RunRecord` has no column for a weight,
+  so a queued batch would lose it and the API would publish the biased draw as the scenario's
+  rate. Adding the column is what unblocks the API path.
+
+See `docs/METHODOLOGY.md` §8.5.
 
 ### The foundational taxonomy rule
 
@@ -671,6 +712,9 @@ pytest --cov=arep --cov-report=term-missing --cov-fail-under=70
 # CI suite runner (exit 0 pass / 1 model failed / 2 harness could not answer)
 PYTHONPATH=. python -m arep.cli.run_suite --scenarios all --model emergency_brake     --runs-per-scenario 10 --output-dir ./results --format json
 
+# One sellable suite rather than the whole library
+PYTHONPATH=. python -m arep.cli.run_suite --scenarios core --model emergency_brake
+
 # Same, failing the run on a regression against a previous report as well as on
 # the absolute collision bar. A missing baseline is the normal first run and is
 # skipped rather than failing.
@@ -858,11 +902,37 @@ on the production host is an operational step, not development work.
    `RoadSegment`, `Junction`) and `core/road_templates.py` (six factories) exist and are wired
    through `environment.road.template`. See Section 6.
 
-**20 of 21 scenarios execute; 17 pass** against `emergency_brake`
-(`arep.cli.run_suite --scenarios all`). The three that fail — EMG-002, LAT-003, MLT-007 —
-fail *correctly*: each needs evasive steering or gentle braking, and a brake-only model
-cannot pass them. Same category as `ConstantAction` failing the LON scenarios. Don't "fix"
-them by weakening the scenario.
+**60 scenarios; 59 execute; 51 pass** against `emergency_brake`
+(`arep.cli.run_suite --scenarios all --runs-per-scenario 10`, measured 2026-09-29). Ten per
+category. Seven of the eight failures are *correct*: each needs evasive steering, or leaves
+the ego somewhere braking cannot help, and a brake-only model cannot produce that. Don't
+"fix" them by weakening the scenario.
+
+| Failure | Collision rate | Why it is the right answer |
+| --- | --- | --- |
+| EMG-002 wrong-way driver | 1.00 | head-on; braking alone does not clear the path |
+| MLT-007 construction-zone tailgater | 1.00 | rear-ended while braking, by design |
+| MLT-005 tailgater + lead brake | 0.60 | the same, and the scenario says so in its description |
+| LAT-007 narrow road oncoming | 0.40 | needs evasive steering |
+| EMG-008 lead vehicle reverses | 0.30 | a stopped ego cannot brake its way out of being reversed into |
+| LAT-003 oncoming encroachment | 0.20 | needs evasive steering |
+| EMG-001 road debris avoidance | 0.10 | needs steering around the obstacle |
+| **LON-002 hard brake** | **0.10** | **not correct — see below** |
+
+**LON-002 is unsurvivable on about a tenth of its draws, and that is a defect in the
+scenario.** `emergency_brake` commands maximum deceleration from tick 0, so it is the upper
+bound on what any braking model can do; it still collides. The arithmetic: the ego draws up
+to 27.78 m/s against a `max_deceleration` of 8.0, needing ~48 m to stop, while
+`lead_vehicle.initial_x` draws as low as 35 m. No behaviour passes those draws, so the
+scenario scores a model on its geometry rather than on its response. It predates Phase 4.3 —
+measured identical at `1932caa` — and is deliberately **not** fixed here, because raising the
+gap floor moves an existing scenario's scores and belongs in a change of its own with a
+`docs/METHODOLOGY.md` change-log row. Tracked in `docs/PENDING.md`.
+
+The previously documented figure ("20 of 21 execute; 17 pass", three failures) was wrong when
+it was written: re-measuring the pre-4.3 library at `1932caa` gives **16 of 21**, with
+EMG-001 and LON-002 failing and undocumented. Figures in this file come from a run, not from
+the last figure plus a delta.
 
 **EMG-004 no longer loads, on purpose (DI-02).** It declares a `change_weather` event the
 engine cannot execute, and used to load, run and pass while testing a dry road. The old

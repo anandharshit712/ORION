@@ -1464,20 +1464,42 @@ environment:
 - [ ] A scenario using `source: xodr` runs to completion; Three.js renders the geometry —
       **not implemented**: scenarios select geometry with `template:`, not `source: xodr`
 
-## 4.3 — Scenario Library Expansion (18 → 60) — ⚠ PARTIAL (21 of 60)
+## 4.3 — Scenario Library Expansion (18 → 60) — ✅ DONE (60 of 60, 2026-09-29)
 
 Ten scenarios per category, following the existing taxonomy. Each new scenario needs a
 reactive BT, a full parameterization block, and a unique `master_seed`.
 
-| Category | Current | Target |
-| --- | --- | --- |
-| LON (Longitudinal) | 4 | 10 |
-| LAT (Lateral) | 3 | 10 |
-| INT (Intersection) | 3 | 10 |
-| VRU (Vulnerable Road User) | 3 | 10 |
-| EMG (Emergency / Anomaly) | 3 | 10 |
-| MLT (Multi-Agent) | 2 | 10 |
-| **Total** | **18** | **60** |
+| Category | Start | Target | Now |
+| --- | --- | --- | --- |
+| LON (Longitudinal) | 4 | 10 | ✅ 10 |
+| LAT (Lateral) | 3 | 10 | ✅ 10 |
+| INT (Intersection) | 3 | 10 | ✅ 10 |
+| VRU (Vulnerable Road User) | 3 | 10 | ✅ 10 |
+| EMG (Emergency / Anomaly) | 3 | 10 | ✅ 10 (9 load; EMG-004 refused, see below) |
+| MLT (Multi-Agent) | 2 | 10 | ✅ 10 |
+| **Total** | **18** | **60** | **✅ 60** |
+
+**Measured, not assumed.** `run_suite --scenarios all --runs-per-scenario 10` against
+`emergency_brake`: 59 of 60 execute, 51 pass. Every new scenario was checked to discriminate
+a braking model from a non-braking one before being committed — the per-category commit
+messages carry the tables. A scenario both models score the same on tests nothing, and that
+is how MLT-008 was caught.
+
+**Three reserved themes were substituted, and the substitutions are named in the files that
+replaced them**: "pedestrian at night" (VRU), "dust storm" and "flash-flood water" (EMG). All
+three need environmental physics — `weather.visibility` is a label `Observation` never reads
+and surface friction is one global config value — so writing them now would have produced
+scenarios differing from their dry-daylight equivalents only in the description. They return
+with DI-01.
+
+**EMG-004 is refused at load, on purpose.** It declares a `change_weather` event the engine
+cannot execute. It used to load, run and pass while silently testing a dry road.
+
+**LON-002 is unsurvivable on ~10% of its draws** — pre-existing, measured identical at
+`1932caa`, and deliberately not fixed inside 4.3. `emergency_brake` brakes maximally from
+tick 0 and still collides, so no model passes those draws. Tracked in `docs/PENDING.md`; the
+fix moves an existing scenario's scores and needs its own change plus a `METHODOLOGY.md`
+change-log row.
 
 Reserved IDs and themes:
 
@@ -1506,12 +1528,31 @@ correction probability), `red_light_runner` (waits at line, then runs at a rando
 `tire_blowout` (random yaw impulse plus rapid deceleration). Register each in
 `npc_bt._BT_REGISTRY`.
 
-**Sampling upgrade**: parameterization today is uniform sampling only. Add importance
-sampling / failure-region oversampling (seeded, deterministic) so that large suites spend
-runs where failures live. 2.3 finds the failure; this exploits it at suite scale.
+~~**Sampling upgrade**~~ — **DONE.** `arep/scenario/importance.py`: `ImportanceRegion`
+narrows the declared ranges toward a named sub-region, bound names matching what
+`failure_clustering` emits so a `FaultCondition` feeds straight back in. Seeded and
+deterministic — same (seed, region) gives the same instance, and `region=None` consumes the
+RNG stream it always did, so no stored score or frame hash moves.
 
-**SaaS packaging into suites**: Core (18, all paid plans) · Intersection (10, Starter+) ·
-VRU (10, Starter+) · Emergency (10, Pro+) · Full (60, Enterprise).
+The bias is weighted back rather than reported raw: each run carries a likelihood ratio,
+`StatisticalAggregator` uses the weighted estimator throughout, and `AggregatedMetrics`
+publishes `effective_n` (Kish) alongside `num_runs` with the intervals built on it. Bounds
+narrow and never widen a declared range. `POST /api/runs/batch` stays uniform-only until
+`RunRecord` has a column for the weight — a queued batch would otherwise lose it and the API
+would publish the biased draw as the scenario's rate.
+
+~~**SaaS packaging into suites**~~ — **DONE, minus the prices.** `SUITES` in
+`arep/cli/run_suite.py`: `core` (LON+LAT, 20) · `intersection` (10) · `vru` (10) ·
+`emergency` (10) · `multi-agent` (10) · `full` (60), selectable with `--scenarios core`. Core
+is LON+LAT because those are the control behaviours every other category assumes; the
+roadmap wrote Core as 18 when the library was 18, and at 60 the same intent is the 20
+longitudinal and lateral ones.
+
+**The plan → suite mapping is deliberately not in the code.** It is a pricing decision, and
+encoding it in the CI runner would leave the CLI, the API and the billing code each holding
+their own copy. It belongs beside `PLAN_CREDITS` in `api/billing.py` once the prices are
+decided. A test asserts the sellable suites partition the library exactly: a scenario in no
+suite cannot be sold, one in two is double-counted, and the runner is happy either way.
 
 ## 4.4 — OpenSCENARIO 2.0 Import / Export — ⚠ PARTIAL (round trip works for the modelled subset; not a conforming parser, parameterisation lost by design)
 
