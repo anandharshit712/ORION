@@ -1,0 +1,70 @@
+scenario:
+  name: "LON-005 Following-Distance Violation - High Closing Speed on a Slow Lead"
+  version: "2.0"
+  description: >
+    The lead vehicle is already travelling well below the ego speed and never brakes.
+    Nothing happens suddenly: the whole requirement is that the model establishes and
+    holds a safe gap instead of closing at delta-v until it has to brake hard.
+    Distinct from LON-001, where the lead decelerates and the model is reacting to an
+    event; here the hazard is present from the first frame and the model has to notice
+    it unprompted. Maps to NHTSA Pre-Crash Type 12.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: slow_lead
+    type: car
+    initial:
+      x: 70.0
+      y: -1.75
+      heading: 0.0
+      velocity: 13.89
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 1005
+
+parameterization:
+  ego_velocity:
+    min: 22.22
+    max: 31.94
+  ego_x_jitter:
+    min: -6.0
+    max: 6.0
+  npc_overrides:
+    slow_lead:
+      initial_velocity:
+        min: 8.33
+        max: 16.67
+      initial_x:
+        min: 45.0
+        max: 95.0

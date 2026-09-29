@@ -1,0 +1,63 @@
+scenario:
+  name: "LON-007 Sudden Obstacle in Lane - Stationary Hazard Appearing Mid-Run"
+  version: "2.0"
+  description: >
+    A stationary vehicle appears in the ego lane partway through the run, through a
+    spawn event rather than being present from the first frame. That is the point: a
+    model that plans once against the initial scene and then follows the plan has
+    nothing to react to until it is close. Stands in for a stopped vehicle revealed
+    when the car ahead changes lane. Maps to NHTSA Pre-Crash Type 13.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic: []
+
+events:
+  - type: spawn_vehicle
+    trigger_time: 3.0
+    parameters:
+      id: sudden_obstacle
+      x: 120.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+      length: 4.5
+      width: 2.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 1007
+
+parameterization:
+  ego_velocity:
+    min: 19.44
+    max: 30.56
+  ego_x_jitter:
+    min: -8.0
+    max: 8.0

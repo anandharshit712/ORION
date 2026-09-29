@@ -1,0 +1,91 @@
+scenario:
+  name: "LON-010 Lead Vehicle Blowout - Unplanned Hard Deceleration Ahead"
+  version: "2.0"
+  description: >
+    The lead vehicle suffers a tyre blowout: it decelerates hard and yaws at the same
+    time, in a direction that varies per run. The longitudinal hazard is the
+    requirement - an unplanned, unsignalled deceleration with no brake-light warning
+    and no lead-up. The yaw is secondary and deliberate: a model that only manages
+    following distance can still be struck by something arriving at an angle.
+    Substituted for the roadmap speed-bump theme, which needs road grade - not
+    modelled today.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: blowout_vehicle
+    type: car
+    initial:
+      x: 50.0
+      y: -1.75
+      heading: 0.0
+      velocity: 25.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: tire_blowout
+        trigger_type: time
+        trigger_value: 5.0
+        yaw_impulse:
+          min: 0.12
+          max: 0.45
+        decel:
+          min: -8.0
+          max: -4.0
+        yaw_duration:
+          min: 0.5
+          max: 1.5
+        min_velocity: 0.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 1010
+
+parameterization:
+  ego_velocity:
+    min: 19.44
+    max: 30.56
+  ego_x_jitter:
+    min: -6.0
+    max: 6.0
+  npc_overrides:
+    blowout_vehicle:
+      initial_velocity:
+        min: 20.83
+        max: 27.78
+      initial_x:
+        min: 35.0
+        max: 70.0
+      parameters:
+        trigger_value:
+          min: 3.0
+          max: 8.0
+        decel:
+          min: -9.0
+          max: -3.5

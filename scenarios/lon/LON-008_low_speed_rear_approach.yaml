@@ -1,0 +1,66 @@
+scenario:
+  name: "LON-008 Low-Speed Rear Approach - Stopped Vehicle in an Urban Queue"
+  version: "2.0"
+  description: >
+    Urban speeds, a stopped vehicle ahead, a short gap. Low-speed rear-end impacts
+    are the most common crash type there is, and they are their own requirement: the
+    time budget is short, the closing speed is small, and a model tuned to highway
+    TTC thresholds can reach the bumper having never crossed one. Nothing here is
+    sudden - the failure mode is under-reaction rather than late reaction.
+  duration: 18.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 8.33
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 2.5
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+  weather:
+    condition: clear
+    visibility: 800.0
+
+traffic:
+  - id: stopped_car
+    type: car
+    initial:
+      x: 22.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 18.0
+
+master_seed: 1008
+
+parameterization:
+  ego_velocity:
+    min: 5.56
+    max: 13.89
+  ego_x_jitter:
+    min: -3.0
+    max: 3.0
+  npc_overrides:
+    stopped_car:
+      initial_x:
+        min: 15.0
+        max: 35.0
