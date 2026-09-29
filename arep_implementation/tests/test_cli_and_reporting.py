@@ -33,6 +33,7 @@ from arep.cli.run_suite import (  # noqa: E402
     load_model,
     main,
     resolve_scenarios,
+    SUITES,
     write_report,
 )
 from arep.reporting.pdf_generator import PDFGenerator  # noqa: E402
@@ -85,6 +86,42 @@ def test_a_scenario_id_resolves_to_one_file():
     paths = resolve_scenarios("LON-003", REPO)
     assert len(paths) == 1
     assert "LON-003" in paths[0].name
+
+
+def test_every_suite_resolves_to_scenarios():
+    """A suite that silently matches nothing is a green build that tested nothing."""
+    for name in SUITES:
+        paths = resolve_scenarios(name, REPO)
+        assert paths, name
+
+
+def test_full_suite_is_the_whole_library():
+    assert sorted(resolve_scenarios("full", REPO)) == sorted(
+        resolve_scenarios("all", REPO)
+    )
+
+
+def test_core_is_the_longitudinal_and_lateral_scenarios():
+    names = [p.name for p in resolve_scenarios("core", REPO)]
+    assert names
+    assert all(n.startswith(("LON-", "LAT-")) for n in names)
+
+
+def test_suites_partition_the_library_without_overlap():
+    """Every scenario belongs to exactly one sellable suite.
+
+    A scenario in no suite cannot be sold; one in two is double-counted in
+    whatever the plan table ends up saying. Both are quiet: the runner is
+    perfectly happy either way.
+    """
+    sellable = [n for n in SUITES if n != "full"]
+    seen = [p for name in sellable for p in resolve_scenarios(name, REPO)]
+    assert len(seen) == len(set(seen)), "a scenario appears in two suites"
+    assert set(seen) == set(resolve_scenarios("all", REPO)), "a scenario is in none"
+
+
+def test_suite_matching_is_case_insensitive():
+    assert resolve_scenarios("CORE", REPO) == resolve_scenarios("core", REPO)
 
 
 def test_an_unknown_selector_raises_rather_than_running_nothing():

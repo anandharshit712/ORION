@@ -59,6 +59,26 @@ CATEGORY_PATTERNS = {
     "MLT": "scenarios/mlt/MLT-*.yaml",
 }
 
+# ── Named suites (Phase 4.3 packaging) ───────────────────────────────────
+# A suite is a named set of categories, nothing more. Which plan may run which
+# suite is a pricing decision and is deliberately not encoded here: putting an
+# entitlement table in the CI runner would mean the CLI, the API and the
+# billing code each carried their own copy of the answer.
+#
+# "core" is LON + LAT because those are the control behaviours every other
+# category assumes are already working — a model that cannot hold a lane or a
+# following distance has nothing to say about an intersection. The roadmap
+# wrote Core as 18 scenarios when the whole library was 18; at 60 the same
+# intent is the 20 longitudinal and lateral ones.
+SUITES = {
+    "core": ["LON", "LAT"],
+    "intersection": ["INT"],
+    "vru": ["VRU"],
+    "emergency": ["EMG"],
+    "multi-agent": ["MLT"],
+    "full": ["LON", "LAT", "INT", "VRU", "EMG", "MLT"],
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -68,7 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--scenarios",
         default="all",
-        help="Scenarios to run: 'all', a category (LON/LAT/INT/VRU/EMG/MLT), or a scenario ID",
+        help=(
+            "Scenarios to run: 'all', a suite "
+            "(core/intersection/vru/emergency/multi-agent/full), "
+            "a category (LON/LAT/INT/VRU/EMG/MLT), or a scenario ID"
+        ),
     )
     p.add_argument(
         "--runs-per-scenario",
@@ -143,6 +167,17 @@ def resolve_scenarios(selector: str, root: Path) -> List[Path]:
             raise FileNotFoundError(f"No scenarios found under {root / 'scenarios'}")
         return paths
 
+    suite = SUITES.get(selector.lower())
+    if suite is not None:
+        paths = [
+            path
+            for category in suite
+            for path in sorted(root.glob(CATEGORY_PATTERNS[category]))
+        ]
+        if not paths:
+            raise FileNotFoundError(f"Suite {selector!r} resolved to no scenarios")
+        return paths
+
     category = selector.upper()
     if category in CATEGORY_PATTERNS:
         paths = sorted(root.glob(CATEGORY_PATTERNS[category]))
@@ -159,7 +194,8 @@ def resolve_scenarios(selector: str, root: Path) -> List[Path]:
         return matches
 
     raise FileNotFoundError(
-        f"Unknown scenario selector {selector!r}. Use 'all', a category "
+        f"Unknown scenario selector {selector!r}. Use 'all', a suite "
+        f"({'/'.join(SUITES)}), a category "
         f"({'/'.join(CATEGORY_PATTERNS)}), a scenario id, or a path."
     )
 
