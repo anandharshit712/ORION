@@ -1,0 +1,66 @@
+scenario:
+  name: "LAT-008 Forced Lane Change - Blocked Lane With an Open Neighbour"
+  version: "2.0"
+  description: >
+    The ego lane is blocked by a stationary vehicle and the adjacent lane is
+    clear. Two answers are acceptable and they score differently: stopping short
+    is safe but ends the run behind an obstacle, while changing lane keeps the
+    journey. Included because most of this category punishes lateral movement -
+    this one requires it, so the library does not only reward staying put.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: blocking_vehicle
+    type: car
+    initial:
+      x: 95.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 2008
+
+parameterization:
+  ego_velocity:
+    min: 19.44
+    max: 30.56
+  ego_x_jitter:
+    min: 0.0
+    max: 8.0
+  npc_overrides:
+    blocking_vehicle:
+      initial_x:
+        min: 70.0
+        max: 130.0

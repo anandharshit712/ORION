@@ -1,0 +1,87 @@
+scenario:
+  name: "LAT-010 Lane-Change Gap Acceptance - Fast Vehicle Closing From Behind"
+  version: "2.0"
+  description: >
+    A slow lead ahead makes a lane change attractive, while a much faster
+    vehicle closes in the target lane from behind. The requirement is the
+    decision not to move: the hazard is in a place a forward-looking model does
+    not check, and the cost of getting it wrong is a side impact at high
+    relative speed. Substituted for the roadmap wet-road lane-departure theme,
+    which needs surface friction the physics does not yet read.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: slow_lead
+    type: car
+    initial:
+      x: 60.0
+      y: -1.75
+      heading: 0.0
+      velocity: 16.67
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: overtaking_vehicle
+    type: car
+    initial:
+      x: -45.0
+      y: 1.75
+      heading: 0.0
+      velocity: 33.33
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 2010
+
+parameterization:
+  ego_velocity:
+    min: 20.83
+    max: 29.17
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    slow_lead:
+      initial_velocity:
+        min: 12.50
+        max: 19.44
+      initial_x:
+        min: 45.0
+        max: 85.0
+    overtaking_vehicle:
+      initial_velocity:
+        min: 30.56
+        max: 36.11
+      initial_x:
+        min: -75.0
+        max: -20.0
