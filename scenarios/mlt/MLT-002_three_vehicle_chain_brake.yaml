@@ -1,0 +1,137 @@
+scenario:
+  name: "MLT-002 Three-Vehicle Chain Brake - Deceleration Propagating Backwards"
+  version: "2.0"
+  description: >
+    The front vehicle of three brakes, and each one behind reacts to the one in
+    front rather than to the original cause. The deceleration amplifies down the
+    chain, so the vehicle directly ahead of the ego brakes harder than the one
+    that started it - and it starts later, with less warning. The requirement is
+    a following distance that survives amplification, not one sized for the
+    lead's own braking.
+  duration: 28.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: chain_nearest
+    type: car
+    initial:
+      x: 32.0
+      y: -1.75
+      heading: 0.0
+      velocity: 25.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 6.2
+        initial_decel: -6.5
+        initial_brake_duration:
+          min: 0.2
+          max: 0.6
+        hesitation_prob: 0.15
+        final_decel: -9.2
+        min_velocity: 0.0
+        max_velocity: 30.0
+  - id: chain_middle
+    type: car
+    initial:
+      x: 62.0
+      y: -1.75
+      heading: 0.0
+      velocity: 25.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 5.4
+        initial_decel: -5.0
+        hesitation_prob: 0.2
+        final_decel: -7.5
+        min_velocity: 0.0
+        max_velocity: 30.0
+  - id: chain_front
+    type: car
+    initial:
+      x: 95.0
+      y: -1.75
+      heading: 0.0
+      velocity: 25.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 4.6
+        initial_decel: -3.5
+        hesitation_prob: 0.3
+        final_decel: -5.5
+        min_velocity: 0.0
+        max_velocity: 30.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 28.0
+
+master_seed: 6002
+
+parameterization:
+  ego_velocity:
+    min: 20.83
+    max: 29.17
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    chain_nearest:
+      initial_x:
+        min: 24.0
+        max: 44.0
+      parameters:
+        trigger_value:
+          min: 5.4
+          max: 7.0
+        final_decel:
+          min: -9.81
+          max: -8.0
+    chain_middle:
+      initial_x:
+        min: 55.0
+        max: 78.0
+      parameters:
+        trigger_value:
+          min: 4.6
+          max: 6.2
+    chain_front:
+      initial_x:
+        min: 88.0
+        max: 118.0
+      parameters:
+        trigger_value:
+          min: 3.5
+          max: 5.5

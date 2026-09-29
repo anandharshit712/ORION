@@ -1,0 +1,92 @@
+scenario:
+  name: "MLT-008 Two-Arm Junction Conflict - Clearing One Is Not Clearing the Junction"
+  version: "2.0"
+  description: >
+    Two vehicles reach the same unsignalled junction from opposite arms at
+    different times: the first crosses the ego path as the ego arrives, the
+    second some seconds later. The requirement is that the junction is not clear
+    when the nearest vehicle has gone - a model that treats the first crossing
+    as the whole problem and resumes behind it meets the second inside the box.
+    Distinct from INT-009, where one stream comes from one arm and the question
+    is which gap to take.
+  duration: 28.0
+
+ego:
+  initial:
+    x: -45.0
+    y: -1.75
+    heading: 0.0
+    velocity: 8.33
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+    template: four_way_intersection
+    template_params:
+      arm_length: 80.0
+      has_traffic_light: false
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: south_arm_vehicle
+    type: car
+    initial:
+      x: 0.0
+      y: -43.0
+      heading: 1.5708
+      velocity: 9.72
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: north_arm_vehicle
+    type: car
+    initial:
+      x: 0.0
+      y: 73.0
+      heading: -1.5708
+      velocity: 9.72
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 28.0
+
+master_seed: 6008
+
+parameterization:
+  ego_velocity:
+    min: 6.94
+    max: 11.11
+  ego_x_jitter:
+    min: 0.0
+    max: 10.0
+  npc_overrides:
+    south_arm_vehicle:
+      initial_velocity:
+        min: 8.33
+        max: 11.11
+      initial_y:
+        min: -54.0
+        max: -34.0
+    north_arm_vehicle:
+      initial_velocity:
+        min: 8.33
+        max: 11.11
+      initial_y:
+        min: 60.0
+        max: 88.0

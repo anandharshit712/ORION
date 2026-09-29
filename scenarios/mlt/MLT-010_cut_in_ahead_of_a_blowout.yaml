@@ -1,0 +1,112 @@
+scenario:
+  name: "MLT-010 Cut-In Ahead of a Blowout - A Second Hazard Behind the First"
+  version: "2.0"
+  description: >
+    A vehicle cuts in front of the ego, and moments later the vehicle ahead of
+    it suffers a blowout and decelerates hard. The cut-in is the visible
+    problem and the blowout is the one that matters: a model that solves the
+    intrusion by settling in behind the new lead has put itself directly behind
+    a vehicle about to lose control, with the gap it just accepted.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: cutting_vehicle
+    type: car
+    initial:
+      x: 26.0
+      y: 1.75
+      heading: 0.0
+      velocity: 26.39
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_cut_in
+        trigger_type: time
+        trigger_value: 2.5
+        signal_duration:
+          min: 0.2
+          max: 0.7
+        abort_prob: 0.2
+        lateral_target_y: -1.75
+        lateral_speed:
+          min: 1.5
+          max: 3.0
+  - id: failing_lead
+    type: car
+    initial:
+      x: 72.0
+      y: -1.75
+      heading: 0.0
+      velocity: 27.78
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: tire_blowout
+        trigger_type: time
+        trigger_value: 6.0
+        yaw_impulse:
+          min: 0.1
+          max: 0.4
+        decel:
+          min: -8.5
+          max: -5.0
+        yaw_duration:
+          min: 0.5
+          max: 1.4
+        min_velocity: 0.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 6010
+
+parameterization:
+  ego_velocity:
+    min: 22.22
+    max: 31.94
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    cutting_vehicle:
+      initial_x:
+        min: 18.0
+        max: 38.0
+      parameters:
+        trigger_value:
+          min: 1.5
+          max: 4.0
+    failing_lead:
+      initial_x:
+        min: 58.0
+        max: 95.0
+      parameters:
+        trigger_value:
+          min: 4.5
+          max: 8.0

@@ -1,0 +1,111 @@
+scenario:
+  name: "MLT-009 Dense Queue With a Pedestrian Between Vehicles"
+  version: "2.0"
+  description: >
+    Slow queueing traffic with a pedestrian crossing between two stopped
+    vehicles. The queue is the occlusion and the reason for it: people cross
+    between cars precisely because the cars are stopped. The requirement is that
+    slow-moving surroundings are not the same as a safe environment - a model
+    that relaxes its margins in a queue meets someone at two metres.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 8.33
+  constraints:
+    max_velocity: 13.89
+    max_acceleration: 2.5
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+  weather:
+    condition: clear
+    visibility: 800.0
+
+traffic:
+  - id: queue_ahead
+    type: car
+    initial:
+      x: 34.0
+      y: -1.75
+      heading: 0.0
+      velocity: 2.8
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: queue_adjacent
+    type: car
+    initial:
+      x: 26.0
+      y: 1.75
+      heading: 0.0
+      velocity: 2.2
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: weaving_pedestrian
+    type: pedestrian
+    initial:
+      x: 30.0
+      y: 5.0
+      heading: -1.5708
+      velocity: 1.2
+    behavior:
+      type: pedestrian
+      parameters:
+        bt_type: erratic_pedestrian
+        trigger_type: proximity
+        trigger_value: 24.0
+        walk_speed:
+          min: 0.9
+          max: 1.8
+        direction_change_prob: 0.15
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 6009
+
+parameterization:
+  ego_velocity:
+    min: 5.56
+    max: 11.11
+  ego_x_jitter:
+    min: 0.0
+    max: 5.0
+  npc_overrides:
+    queue_ahead:
+      initial_velocity:
+        min: 1.5
+        max: 4.5
+      initial_x:
+        min: 26.0
+        max: 44.0
+    queue_adjacent:
+      initial_velocity:
+        min: 1.0
+        max: 4.0
+      initial_x:
+        min: 18.0
+        max: 36.0
+    weaving_pedestrian:
+      initial_x:
+        min: 24.0
+        max: 42.0
+      parameters:
+        trigger_value:
+          min: 16.0
+          max: 30.0
