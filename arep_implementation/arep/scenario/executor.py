@@ -13,6 +13,7 @@ import numpy as np
 
 from arep.config import SimulationConfig
 from arep.core.state import (
+    TrafficLightState,
     WorldState,
     VehicleState,
     Vector2D,
@@ -84,7 +85,7 @@ class ScenarioExecutor:
         objects = self._create_traffic_objects(scenario)
         road_graph = self._create_road_graph(scenario)
         lanes = self._create_lanes(scenario, road_graph)
-        lights = self._create_traffic_lights(scenario, rng)
+        lights = self._create_traffic_lights(scenario, rng, road_graph)
         npc_behaviors = self._build_npc_behaviors(scenario)
 
         world = self.world_manager.create_initial_world(
@@ -275,6 +276,41 @@ class ScenarioExecutor:
         self,
         scenario: ScenarioDefinition,
         rng: RandomManager,
+        road_graph=None,
     ) -> List[TrafficLightInfo]:
-        """Placeholder — no traffic lights from scenario yet."""
-        return []
+        """One light per junction that declares it.
+
+        This returned `[]` unconditionally, so `world.traffic_lights` was always
+        empty. Every layer above it existed and worked on nothing:
+        `Junction.has_traffic_light` was set by the road templates and by the
+        OpenDRIVE parser and read by no one, `WorldManager.update_traffic_lights`
+        ran each tick over an empty list, `get_nearest_traffic_light()` always
+        returned None, and `Observation.traffic_light_state` was therefore always
+        OFF at 1000 m. INT-002 declared a four-way junction with
+        `has_traffic_light: true` and two `change_traffic_light` events, and
+        scored models on an intersection that had no signal in it.
+
+        The id is derived from the junction so a scenario can name it:
+        `tl_<junction_id>`.
+
+        Initial state is RED rather than GREEN. A light that starts green is
+        scenery until it changes; starting red means the scenario is testing
+        something from the first frame, and a scenario that wants otherwise
+        says so with an event at `trigger_time: 0.0`.
+        """
+        if road_graph is None:
+            return []
+
+        return [
+            TrafficLightInfo(
+                light_id=f"tl_{junction.junction_id}",
+                position=junction.position,
+                state=TrafficLightState.RED,
+                # No signal timing plan exists yet, so there is no next change
+                # to count down to. Reporting a countdown we cannot honour
+                # would have the model plan against a phase that never arrives.
+                time_remaining=0.0,
+            )
+            for junction in road_graph.junctions.values()
+            if junction.has_traffic_light
+        ]

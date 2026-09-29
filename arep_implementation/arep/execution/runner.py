@@ -177,7 +177,10 @@ class EvaluationRunner:
                     frames.append(frame)
 
                 previous_world = world
-                world = self.engine.step(world, action, rng)
+                # The scenario's timed events fire inside step(), before the
+                # world is read. They had never fired at all: EventExecutor was
+                # implemented and called from nowhere.
+                world = self.engine.step(world, action, rng, scenario.events)
 
                 if world.is_terminated:
                     break

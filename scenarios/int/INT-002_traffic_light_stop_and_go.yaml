@@ -39,12 +39,12 @@ events:
   - type: change_traffic_light
     trigger_time: 0.0
     parameters:
-      light_id: "tl_intersection"
+      light_id: "tl_jct_main"
       state: "red"
   - type: change_traffic_light
     trigger_time: 10.0    # green 10s into scenario (ego should be stopped by then)
     parameters:
-      light_id: "tl_intersection"
+      light_id: "tl_jct_main"
       state: "green"
 
 termination:

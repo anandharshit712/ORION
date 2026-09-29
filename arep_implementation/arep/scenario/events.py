@@ -46,6 +46,25 @@ IMPLEMENTED_EVENT_TYPES = frozenset(
 )
 
 
+def due_events(
+    events: List[ScenarioEvent], sim_time: float, dt: float
+) -> List[ScenarioEvent]:
+    """Events whose trigger time falls inside the tick ending at `sim_time`.
+
+    Stateless on purpose. `EventExecutor` remembers what it has fired, and a
+    `SimulationEngine` is built once and reused for every run in a batch — so
+    executor state held on the engine would leak from one run into the next and
+    an event would fire on run 1 and never again. Deciding from the tick
+    boundary needs no memory and is a pure function of the scenario and the
+    clock, which is also what keeps the frame digest reproducible.
+
+    The half-open interval `(sim_time - dt, sim_time]` fires each event exactly
+    once, and fires a `trigger_time: 0.0` event on the first tick.
+    """
+    lower = sim_time - dt
+    return [e for e in events if lower < e.trigger_time <= sim_time]
+
+
 class EventExecutor:
     """Execute scenario events at their trigger times."""
 

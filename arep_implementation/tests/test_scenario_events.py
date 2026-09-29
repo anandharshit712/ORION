@@ -189,3 +189,171 @@ def test_the_known_unloadable_scenario_is_still_unloadable():
             continue
         with pytest.raises(Exception):
             parser.parse_file(str(matches[0]))
+
+
+# ══ Events reaching a real run ═══════════════════════════════════════════════
+#
+# EventExecutor was written, unit-tested and called from nowhere. Every event in
+# the library was a no-op: LON-007's obstacle never spawned, INT-002's traffic
+# light never changed. The unit tests above all passed the whole time, because
+# they exercised the executor directly.
+#
+# So these go through the engine and the batch runner instead. A test that calls
+# _execute() cannot tell whether anything in the product calls _execute().
+
+
+def test_due_events_fire_once_on_the_tick_that_contains_them():
+    from arep.scenario.events import due_events
+
+    events = [
+        ScenarioEvent(type="spawn_vehicle", trigger_time=0.0, parameters={}),
+        ScenarioEvent(type="spawn_vehicle", trigger_time=3.0, parameters={}),
+    ]
+
+    # t=0 fires the zero-time event: the interval is (t-dt, t].
+    assert len(due_events(events, 0.0, 0.02)) == 1
+    # Nothing in between.
+    assert due_events(events, 1.5, 0.02) == []
+    # The 3.0 s event fires on the tick that ends at 3.0, and only then.
+    assert len(due_events(events, 3.0, 0.02)) == 1
+    assert due_events(events, 3.02, 0.02) == []
+
+
+def test_a_spawn_event_actually_spawns_during_a_run():
+    """The whole defect in one assertion. LON-007 declares a stationary vehicle
+    appearing at t=3; before this was wired the scenario ran to timeout with an
+    empty road and scored a non-braking model as safe."""
+    from arep.config import get_config
+    from arep.core.action import Action
+    from arep.core.random_manager import RandomManager
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+    from arep.simulation.engine import SimulationEngine
+
+    cfg = get_config().simulation
+    scenario, _ = ScenarioParser().parse_file(
+        str(LIBRARY / "lon" / "LON-007_sudden_obstacle_in_lane.yaml")
+    )
+    rng = RandomManager(42)
+    world = ScenarioExecutor(cfg).create_initial_world(scenario, rng)
+    engine = SimulationEngine(cfg)
+
+    assert world.dynamic_objects == [], "LON-007 should start with an empty road"
+
+    # Coast past the 3 s trigger.
+    for _ in range(int(4.0 / cfg.timestep)):
+        world = engine.step(world, Action.zero(), rng, scenario.events)
+        if world.is_terminated:
+            break
+
+    assert world.dynamic_objects, "the spawn event never fired during the run"
+
+
+def test_a_scenario_without_events_is_unaffected():
+    """The event stage runs on every tick of every scenario. It must cost
+    nothing and change nothing where there are no events."""
+    from arep.config import get_config
+    from arep.core.action import Action
+    from arep.core.random_manager import RandomManager
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+    from arep.simulation.engine import SimulationEngine
+
+    cfg = get_config().simulation
+    path = str(LIBRARY / "lon" / "LON-003_emergency_stop.yaml")
+
+    # Parsed twice, deliberately. `ScenarioParameterizer` mutates the
+    # definition it is given — `ego_x_jitter` is added to the existing x — so
+    # building two worlds from one parsed scenario applies the jitter twice and
+    # they diverge for a reason that has nothing to do with events. The batch
+    # runner re-parses per run, so this is a trap for callers rather than a
+    # live defect, but it is one worth not falling into here.
+    scenario_a, _ = ScenarioParser().parse_file(path)
+    scenario_b, _ = ScenarioParser().parse_file(path)
+    assert scenario_a.events == []
+
+    engine = SimulationEngine(cfg)
+    a = ScenarioExecutor(cfg).create_initial_world(scenario_a, RandomManager(9))
+    b = ScenarioExecutor(cfg).create_initial_world(scenario_b, RandomManager(9))
+
+    rng_a, rng_b = RandomManager(9), RandomManager(9)
+    for _ in range(50):
+        a = engine.step(a, Action.zero(), rng_a, scenario_a.events)
+        b = engine.step(b, Action.zero(), rng_b, None)
+
+    assert a.ego_vehicle.position.x == b.ego_vehicle.position.x
+
+
+def test_a_junction_that_declares_a_light_gets_one():
+    """`Junction.has_traffic_light` was set by the road templates and read by
+    nobody: world.traffic_lights was always empty, so
+    Observation.traffic_light_state was always OFF at 1000 m."""
+    from arep.config import get_config
+    from arep.core.random_manager import RandomManager
+    from arep.core.state import TrafficLightState
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+
+    cfg = get_config().simulation
+    scenario, _ = ScenarioParser().parse_file(
+        str(LIBRARY / "int" / "INT-002_traffic_light_stop_and_go.yaml")
+    )
+    world = ScenarioExecutor(cfg).create_initial_world(scenario, RandomManager(1))
+
+    assert world.traffic_lights, "the junction declares a light and got none"
+    assert world.get_nearest_traffic_light() is not None
+    assert world.traffic_lights[0].state is TrafficLightState.RED
+
+
+def test_the_model_can_see_the_light():
+    """A light in the world that the observation does not carry is still a
+    scenario testing nothing."""
+    from arep.config import get_config
+    from arep.core.observation import Observation
+    from arep.core.random_manager import RandomManager
+    from arep.core.state import TrafficLightState
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+
+    cfg = get_config().simulation
+    scenario, _ = ScenarioParser().parse_file(
+        str(LIBRARY / "int" / "INT-002_traffic_light_stop_and_go.yaml")
+    )
+    world = ScenarioExecutor(cfg).create_initial_world(scenario, RandomManager(1))
+
+    obs = Observation.from_world_state(world, None)
+    assert obs.traffic_light_state is not TrafficLightState.OFF
+    assert obs.traffic_light_distance < 1000.0
+
+
+def test_changing_a_light_mid_run_reaches_the_observation():
+    """INT-002's two events, end to end: the light starts red and is green
+    after the second event fires."""
+    from arep.config import get_config
+    from arep.core.action import Action
+    from arep.core.observation import Observation
+    from arep.core.random_manager import RandomManager
+    from arep.core.state import TrafficLightState
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+    from arep.simulation.engine import SimulationEngine
+
+    cfg = get_config().simulation
+    scenario, _ = ScenarioParser().parse_file(
+        str(LIBRARY / "int" / "INT-002_traffic_light_stop_and_go.yaml")
+    )
+    rng = RandomManager(5)
+    world = ScenarioExecutor(cfg).create_initial_world(scenario, rng)
+    engine = SimulationEngine(cfg)
+
+    seen = set()
+    for _ in range(int(12.0 / cfg.timestep)):
+        world = engine.step(world, Action.zero(), rng, scenario.events)
+        seen.add(Observation.from_world_state(world, None).traffic_light_state)
+        if world.is_terminated:
+            break
+
+    assert TrafficLightState.GREEN in seen, (
+        "the light never turned green — the 10 s change_traffic_light event "
+        "did not reach the run"
+    )

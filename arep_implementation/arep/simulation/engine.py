@@ -33,6 +33,7 @@ from arep.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
     from arep.models.interface import ModelInterface
+    from arep.scenario.schema import ScenarioEvent
 
 logger = get_logger("simulation.engine")
 
@@ -63,6 +64,7 @@ class SimulationEngine:
         world: WorldState,
         action: Action,
         rng: RandomManager,
+        events: Optional[List["ScenarioEvent"]] = None,
     ) -> WorldState:
         """
         Execute one simulation timestep.
@@ -74,6 +76,10 @@ class SimulationEngine:
             world: Current world state.
             action: Control action from model.
             rng: Random manager.
+            events: The scenario's timed events, if any. Fired here rather than
+                in each caller's loop: there are three such loops (the batch
+                runner, `run` and `run_async`) and wiring them separately is
+                how the batch and live frame digests diverged in Phase 2.5.
 
         Returns:
             New world state after dt seconds.
@@ -81,6 +87,19 @@ class SimulationEngine:
         # 0. Already terminated?
         if world.is_terminated:
             return world
+
+        # 0b. Scenario events, before anything reads the world this tick, so a
+        # spawned obstacle is present for collision detection and visible in
+        # the observation the model acts on rather than arriving a tick late.
+        #
+        # This stage did not exist. `EventExecutor` was written, tested and
+        # never called from anywhere — every event in the library was a no-op,
+        # so LON-007's obstacle never appeared and INT-002 scored models
+        # against a traffic light that never changed.
+        if events:
+            world = self._fire_events(world, events, rng)
+            if world.is_terminated:
+                return world
 
         # 1. Validate action
         if not self.physics.validate_action(action):
@@ -127,6 +146,7 @@ class SimulationEngine:
         model: ModelInterface,
         rng: RandomManager,
         max_steps: int = 3000,
+        events: Optional[List["ScenarioEvent"]] = None,
     ) -> WorldState:
         """
         Run a complete simulation until termination or max_steps.
@@ -166,7 +186,7 @@ class SimulationEngine:
 
             # Execute timestep
             previous_world = world
-            world = self.step(world, action, rng)
+            world = self.step(world, action, rng, events)
 
             # Check termination
             if world.is_terminated:
@@ -197,6 +217,7 @@ class SimulationEngine:
         max_steps: int = 3000,
         tick_interval: float = 0.02,
         on_canonical: Optional[Callable[[WorldState, Action], None]] = None,
+        events: Optional[List["ScenarioEvent"]] = None,
     ) -> WorldState:
         """
         Run a complete simulation in an async context, invoking ``on_tick``
@@ -251,7 +272,7 @@ class SimulationEngine:
                 on_canonical(world, action)
 
             previous_world = world
-            world = self.step(world, action, rng)
+            world = self.step(world, action, rng, events)
 
             await on_tick(world, action)
 
@@ -280,6 +301,24 @@ class SimulationEngine:
             world.sim_time,
             world.timestep_count,
         )
+        return world
+
+    def _fire_events(
+        self,
+        world: WorldState,
+        events: List["ScenarioEvent"],
+        rng: RandomManager,
+    ) -> WorldState:
+        """Apply every event due in this tick, in declaration order."""
+        from arep.scenario.events import EventExecutor, due_events
+
+        due = due_events(events, world.sim_time, self.dt)
+        if not due:
+            return world
+
+        executor = EventExecutor()
+        for event in due:
+            world = executor._execute(world, event, rng)
         return world
 
     def get_tick_frame(
