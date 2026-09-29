@@ -1,0 +1,83 @@
+scenario:
+  name: "VRU-009 Mid-Block Jaywalker - Crossing Against the Traffic Flow"
+  version: "2.0"
+  description: >
+    A pedestrian crosses mid-block at an angle, moving with the traffic as well
+    as across it, so the closing geometry is oblique rather than perpendicular.
+    The requirement is that the projection accounts for both components: a model
+    treating the crossing as purely lateral computes a clearance that the
+    forward component has already eaten.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 12.50
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 900.0
+
+traffic:
+  - id: jaywalker
+    type: pedestrian
+    initial:
+      x: 48.0
+      y: -7.0
+      heading: 1.0472
+      velocity: 1.6
+    behavior:
+      type: pedestrian
+      parameters:
+        bt_type: erratic_pedestrian
+        trigger_type: proximity
+        trigger_value: 26.0
+        walk_speed:
+          min: 1.2
+          max: 2.2
+        direction_change_prob: 0.1
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 4009
+
+parameterization:
+  ego_velocity:
+    min: 9.72
+    max: 15.28
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    jaywalker:
+      initial_x:
+        min: 34.0
+        max: 62.0
+      initial_y:
+        min: -9.0
+        max: -5.0
+      parameters:
+        trigger_value:
+          min: 18.0
+          max: 32.0
+        walk_speed:
+          min: 1.0
+          max: 2.5
