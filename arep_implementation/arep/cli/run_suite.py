@@ -47,6 +47,7 @@ BUILTIN_MODELS = {
     "constant": "arep.models.examples.example_models.ConstantActionModel",
     "lane_keep": "arep.models.examples.example_models.SimpleLaneKeepModel",
     "random": "arep.models.examples.example_models.RandomModel",
+    "reference": "arep.models.examples.example_models.ReferenceDriverModel",
 }
 
 # ── Scenario category → file pattern ─────────────────────────────────────

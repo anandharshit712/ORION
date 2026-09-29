@@ -57,6 +57,7 @@ from arep.models.examples.example_models import (
     EmergencyBrakeModel,
     SimpleLaneKeepModel,
     RandomModel,
+    ReferenceDriverModel,
 )
 from arep.models.interface import ModelInterface
 from arep.models.resolver import resolve_model, is_uuid
@@ -73,6 +74,11 @@ AVAILABLE_MODELS = {
     "EmergencyBrake": lambda: EmergencyBrakeModel(),
     "SimpleLaneKeep": lambda: SimpleLaneKeepModel(),
     "Random": lambda: RandomModel(seed=42),
+    # The competent baseline the scenario library is reviewed against —
+    # see ReferenceDriverModel. Every other entry here is degenerate on
+    # purpose, which is why "EmergencyBrake failed" never used to
+    # distinguish a demanding scenario from an impossible one.
+    "ReferenceDriver": lambda: ReferenceDriverModel(),
 }
 
 
