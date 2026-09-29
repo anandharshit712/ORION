@@ -24,6 +24,14 @@ import time
 import urllib.error
 import urllib.request
 
+# These scripts sign up through the real endpoint, and `arep/config/env.py`
+# auto-loads a .env from the workspace root — so a developer's SMTP credentials
+# would deliver a verification email every time the smoke test ran. Cleared
+# before anything imports the config. (`conftest.py` does the same for pytest;
+# these run outside it.)
+for _smtp_var in ("SMTP_HOST", "SMTP_FROM", "SMTP_USER", "SMTP_PASS"):
+    os.environ.pop(_smtp_var, None)
+
 # A throwaway database, and the limiter explicitly on — the suite disables it.
 _fd, _db = tempfile.mkstemp(suffix=".db")
 os.close(_fd)

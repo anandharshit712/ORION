@@ -700,6 +700,17 @@ start.bat         # Windows (cmd.exe)
 - **Never hardcode secrets or credential fallbacks** — no default JWT secrets, no default DB passwords. Fail fast if env var missing (Phase 0.1 pattern).
 - **Never deserialise untrusted pickle/cloudpickle outside the sandboxed model path** — customer artefacts are hostile input (D-01).
 
+**Never let a test or a script send real email.** `arep/config/env.py` auto-loads a `.env`
+from the workspace root, so a developer's SMTP credentials reach any process that imports the
+config — including pytest. The suite signs up through the real `/api/auth/signup` endpoint in
+twenty-one modules, so a single full run delivered about thirty verification emails to a live
+inbox before this was noticed. Three guards now, and they are independent on purpose:
+`tests/conftest.py` clears `SMTP_HOST`/`SMTP_FROM`/`SMTP_USER`/`SMTP_PASS` outright (not
+`setdefault` — no unit test has a reason to send mail), `email_sender._deliver` refuses when
+`PYTEST_CURRENT_TEST` is set, and `scripts/api_smoke.py` / `scripts/ws_smoke.py` clear the
+same variables because they run outside pytest. `tests/test_email_never_sent_from_tests.py`
+pins all of it. Any new script that signs up does the same.
+
 **Secret/config resolution (Phase 0.1 — DONE, D-02 closed)**: never read `ORION_SECRET_KEY` / `ORION_DATABASE_URL` directly with a fallback default. Go through `arep/config/validate.py`: `resolve_secret_key()`, `resolve_database_url()`, `validate_startup()`. Non-dev (`ORION_ENV` not in dev/test/local) refuses to boot on missing/weak/placeholder secret or SQLite URL; dev gets an ephemeral secret + `sqlite:///arep.db`. `validate_startup()` runs in `app.py` lifespan. docker-compose pulls all secrets from git-ignored `infrastructure/.env` (`env_file:` + `${VAR}`); see `infrastructure/.env.example`.
 
 **Known violations of these rules in existing code** (tracked in the `docs/ROADMAP.md` defect register, fixed in Phase 0): JWT in `localStorage` in `AuthContext.jsx` (D-04). ~~fallback secrets (D-02)~~ — closed in 0.1. ~~`time.time()` in the tick frame (D-06)~~ — closed in 0.5. ~~CORS `*` / no rate limiting (D-03)~~ and ~~unauthenticated catalogue routes (D-07)~~ — closed in 0.3. Don't copy these patterns; Phase 0.6 adds CI checks that mechanically enforce the simulation-purity rules.

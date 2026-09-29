@@ -7,6 +7,7 @@ When not configured: logs the reset link to the console so dev/beta mode still w
 
 from __future__ import annotations
 
+import os
 import smtplib
 import textwrap
 from email.mime.multipart import MIMEMultipart
@@ -136,6 +137,27 @@ def _deliver(
     is disabled) and only shows up in production.
     """
     settings = get_settings()
+
+    # Never send real mail from a test run. `arep/config/env.py` auto-loads a
+    # .env from the workspace root, so a developer's real SMTP credentials are
+    # picked up by anything that imports the config — including pytest. The
+    # suite signs up through the real endpoint in twenty-one places, so a full
+    # run delivered roughly thirty verification emails to a live inbox, and
+    # several runs in a day delivered over fifty. Nothing in the test code
+    # asked for that and nothing in it could see it happening.
+    #
+    # PYTEST_CURRENT_TEST is set by pytest for the duration of every test, so
+    # this is a reliable signal and needs no cooperation from the test author.
+    # conftest also clears the SMTP variables; this is the layer that survives
+    # a test module that builds the app without conftest.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        logger.warning(
+            "under pytest — refusing to send %s mail to %s (link: %s)",
+            kind,
+            to_email,
+            link,
+        )
+        return
 
     if not settings.email_enabled:
         logger.warning("SMTP not configured — %s link for %s: %s", kind, to_email, link)
