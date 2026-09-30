@@ -314,6 +314,37 @@ class LaneInfo:
         # cross_z > 0 means the position is to the left of the travel direction.
         return -distance if cross_z > 0 else distance
 
+    def get_heading_at(self, position: Vector2D) -> float:
+        """Direction of travel of the centreline nearest `position`, in radians.
+
+        Needed so a model can be told how far its heading differs from the
+        road's. Without it the derivative term of any lane-keeping controller
+        is fed a constant and does nothing, which leaves the proportional term
+        to correct a drift it can only ever respond to after the fact.
+        """
+        points = self.centerline_points
+        if len(points) < 2:
+            return 0.0
+
+        best_dist_sq = float("inf")
+        direction = None
+        for i in range(len(points) - 1):
+            p1, p2 = points[i], points[i + 1]
+            seg = p2 - p1
+            seg_len_sq = seg.norm_squared()
+            if seg_len_sq < 1e-12:
+                continue
+            t = max(0.0, min(1.0, (position - p1).dot(seg) / seg_len_sq))
+            candidate = p1 + seg * t
+            dist_sq = (position - candidate).norm_squared()
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                direction = seg
+
+        if direction is None:
+            return 0.0
+        return math.atan2(direction.y, direction.x)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "lane_id": self.lane_id,
