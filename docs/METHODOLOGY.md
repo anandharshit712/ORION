@@ -233,13 +233,17 @@ Stated so that nobody infers coverage that is not there:
   against `EmergencyBrake` is not the compliment it looks like. Adding a
   progress term is tracked in `docs/PENDING.md`; `tests/test_reference_model.py`
   pins the current behaviour so it cannot change unnoticed.
-- **Road topology is modelled, but geometry is not sensed.** Since Phase 1.5 a
-  scenario can declare a junction, an on-ramp or a roundabout, and all six
-  categories execute. What the model receives is still lane offset and object
-  positions — there is no map, no route and no lookahead along the road graph,
-  so a model cannot plan through a junction, only react inside one. The
-  roundabout template in particular has a single-lane circulating carriageway
-  that only a lane-following controller can stay on.
+- **Road topology is modelled, but there is no route and no lane assignment.**
+  Since Phase 1.5 a scenario can declare a junction, an on-ramp or a
+  roundabout, and all six categories execute. What the model receives is the
+  offset and heading error against the *nearest* lane, plus object positions.
+  There is no map, no route, no lookahead along the road graph, and — the
+  binding limitation — **nothing tells a model which lane it is supposed to be
+  in.** On a junction the nearest lane can be an arm crossing the vehicle's
+  path, so a lane-following controller can be steered into traffic by the
+  interface itself. A model can react inside a junction; it cannot plan through
+  one. The roundabout template compounds this with a single-lane circulating
+  carriageway that only a lane-follower can hold.
 - **No certification claim.** ORION is not an ISO 26262 or ISO 21448 tool and
   produces no evidence package for either.
 
@@ -443,10 +447,64 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
 | 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |
+| 4.3-fix | `Observation.lane_offset` is signed; `lane_heading_error` is computed rather than 0.0 | Scores move for **any model that steers**. Lane keeping was not achievable before this, so results for steering models are not comparable across it. A non-steering model (`EmergencyBrake`) is unaffected and its frame digests are unchanged. |
+| 4.3-fix | The flat road extends behind the origin | Aggregates change on any scenario with negative `ego_x_jitter`: runs that previously terminated after one tick, and were averaged in at that length, now run properly. |
 | 4.3-fix | Leaving the carriageway fails a scenario | Pass/fail only; no composite moves. Scenarios where a model ends up off the road now fail instead of passing — this is a change in the verdict, not in any score. |
 | 4.3-fix | Twelve scenarios had their lead-vehicle start positions moved further away | Composite rises and collision rate falls on those twelve for any braking model. They contained a parameter corner no braking behaviour could survive — see below. Scores on them are not comparable across this change. |
 | 4.3 | Importance sampling: aggregates are weighted, batches report `effective_n` | No effect on any uniform batch — `effective_n == num_runs` and the estimators are the ones they always were. A batch run with `importance=` reports the scenario's rates rather than its own draw's, and an interval built on the effective sample size. |
 | 1.5-fix | One lane-centre formula for the flat road and the road graph | Lane compliance rises from 0.0 to 1.0 on the 15 scenarios that start the ego at y=-1.75; composite rises by exactly +0.100 for each. INT-003 rises +0.050 from dropping a lateral `ego_x_jitter` wider than its lane. The 5 templated scenarios are unchanged. |
+
+### The lane offset a model was given had no sign
+
+The single most consequential defect found in the Phase 4.3 review, and the
+cause of most of the others.
+
+`Observation.lane_offset` was the unsigned distance to the lane centreline. A
+lane-keeping controller computes its steering correction from that number, so
+it corrected in the same direction whichever side it had drifted to: every
+perturbation was amplified rather than damped, and the vehicle left the road.
+
+Traced on LAT-001, the lane-keeping baseline, seed 46:
+
+| t | y | offset shown to the model | steering |
+| --- | --- | --- | --- |
+| 5.00 s | −1.750 | +0.000 | −0.000 |
+| 5.50 s | −1.752 | **+0.002** | −0.001 |
+| 6.00 s | −1.806 | **+0.056** | −0.019 |
+| 6.50 s | −3.082 | **+1.332** | −0.466 |
+
+The drift is toward negative y throughout and the reported offset is positive
+throughout, so the correction drives the car further out. Off-road at 6.56 s.
+
+The signed offset has existed since Phase 0.5, where it was added for defect
+D-05, and the compliance metric has used it ever since. Only the observation —
+the copy the model actually receives — was left unsigned. **ORION was scoring
+models on a lane discipline it never gave them the information to achieve.**
+
+`lane_heading_error` was hardcoded to `0.0`, commented "simplified for initial
+implementation". That silently disabled the derivative term of every
+lane-keeping controller written against this interface, leaving the
+proportional term to correct a drift it could only ever react to after the
+fact. It is now the signed, wrapped difference between the ego heading and the
+lane's direction of travel.
+
+Effect, off-road runs in ten seeds:
+
+| model | scenario | before | after |
+| --- | --- | --- | --- |
+| `ReferenceDriver` | LAT-001 | 5 | 0 |
+| `SimpleLaneKeep` | LAT-001 | 5 | 0 |
+| `ReferenceDriver` | LON-001 | 2 | 0 |
+| `SimpleLaneKeep` | LON-001 | 1 | 0 |
+
+Before the fix, all ten intersection scenarios were unpassable by any model
+that steered — `SimpleLaneKeep` left the road on 10 of 10 at rates of 1.000 —
+so the INT category was in effect testing whether a model stops, because
+stopping was the only way through it.
+
+It was findable only because leaving the road became a scenario failure in the
+same phase. Until then a model could drive into a field and pass, so nothing
+ever pointed at the reason.
 
 ### Leaving the road is a failure
 
