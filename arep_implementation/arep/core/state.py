@@ -314,6 +314,53 @@ class LaneInfo:
         # cross_z > 0 means the position is to the left of the travel direction.
         return -distance if cross_z > 0 else distance
 
+    def offset_and_heading(self, position: Vector2D) -> tuple:
+        """(unsigned distance, centreline heading) in a single pass.
+
+        Both numbers come from the same nearest segment, so computing them
+        together costs one walk instead of two. That matters: this walk is the
+        hottest code in the simulator -- see ``get_closest_point`` -- and
+        ``get_current_lane`` needs the distance and the heading on every call
+        for every lane. Doing them separately made an intersection scenario
+        several times slower before this was noticed.
+
+        Written with scalars rather than Vector2D arithmetic for the same
+        reason ``get_closest_point`` is: the allocations dominate otherwise.
+        """
+        points = self.centerline_points
+        if len(points) < 2:
+            if not points:
+                return 0.0, 0.0
+            dx = position.x - points[0].x
+            dy = position.y - points[0].y
+            return math.sqrt(dx * dx + dy * dy), 0.0
+
+        px, py = position.x, position.y
+        best_dist_sq = float("inf")
+        best_sx, best_sy = 1.0, 0.0
+
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            x1, y1 = p1.x, p1.y
+            p2 = points[i + 1]
+            sx, sy = p2.x - x1, p2.y - y1
+            seg_len_sq = sx * sx + sy * sy
+            if seg_len_sq < 1e-12:
+                continue
+            t = ((px - x1) * sx + (py - y1) * sy) / seg_len_sq
+            if t < 0.0:
+                t = 0.0
+            elif t > 1.0:
+                t = 1.0
+            ddx = px - (x1 + sx * t)
+            ddy = py - (y1 + sy * t)
+            dist_sq = ddx * ddx + ddy * ddy
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_sx, best_sy = sx, sy
+
+        return math.sqrt(best_dist_sq), math.atan2(best_sy, best_sx)
+
     def get_heading_at(self, position: Vector2D) -> float:
         """Direction of travel of the centreline nearest `position`, in radians.
 
@@ -322,28 +369,7 @@ class LaneInfo:
         is fed a constant and does nothing, which leaves the proportional term
         to correct a drift it can only ever respond to after the fact.
         """
-        points = self.centerline_points
-        if len(points) < 2:
-            return 0.0
-
-        best_dist_sq = float("inf")
-        direction = None
-        for i in range(len(points) - 1):
-            p1, p2 = points[i], points[i + 1]
-            seg = p2 - p1
-            seg_len_sq = seg.norm_squared()
-            if seg_len_sq < 1e-12:
-                continue
-            t = max(0.0, min(1.0, (position - p1).dot(seg) / seg_len_sq))
-            candidate = p1 + seg * t
-            dist_sq = (position - candidate).norm_squared()
-            if dist_sq < best_dist_sq:
-                best_dist_sq = dist_sq
-                direction = seg
-
-        if direction is None:
-            return 0.0
-        return math.atan2(direction.y, direction.x)
+        return self.offset_and_heading(position)[1]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -562,13 +588,56 @@ class WorldState:
         )
 
     def get_current_lane(self) -> Optional[LaneInfo]:
-        """Get the lane the ego vehicle is currently in."""
+        """The lane the ego is in: the nearest one that runs the way it is going.
+
+        Nearest-overall is wrong at a junction, and wrong in the direction that
+        matters. An intersection's lanes include the crossing arms, and a
+        vehicle entering the box is momentarily closer to an arm running across
+        its path than to the lane it is actually travelling in. The offset and
+        heading error handed to the model are measured against whatever this
+        returns, so a lane-keeping controller was being told to steer onto a
+        road at right angles to it -- the interface itself aimed the car at
+        conflicting traffic.
+
+        `get_speed_limit` already knew about this and worked around it by
+        preferring the road graph, with a comment saying the nearest lane may
+        belong to a different arm. The lane given to the model had no such
+        guard.
+
+        Alignment is the whole fix, and it needs no route: a vehicle is in a
+        lane that runs roughly the way it is heading. Lanes more than 90 degrees
+        off are not candidates. Where none qualifies -- reversing, spun, or off
+        the road entirely -- it falls back to nearest overall rather than
+        returning nothing, because a model that suddenly loses its lane
+        reference mid-run is worse off than one holding a stale answer.
+
+        This is not a lane *assignment*. Nothing here says which lane the
+        vehicle ought to be in, only which one it is plausibly in; see
+        `docs/PENDING.md`.
+        """
         if not self.lanes:
             return None
-        return min(
-            self.lanes,
-            key=lambda lane: lane.get_lateral_offset(self.ego_vehicle.position),
-        )
+
+        position = self.ego_vehicle.position
+        heading = self.ego_vehicle.heading
+        cos_h, sin_h = math.cos(heading), math.sin(heading)
+
+        best_aligned = None
+        best_aligned_dist = float("inf")
+        best_any = None
+        best_any_dist = float("inf")
+
+        for lane in self.lanes:
+            distance, lane_heading = lane.offset_and_heading(position)
+            if distance < best_any_dist:
+                best_any_dist, best_any = distance, lane
+            # Within 90 degrees iff the direction vectors have a
+            # non-negative dot product. No atan2, no wrapping.
+            if math.cos(lane_heading) * cos_h + math.sin(lane_heading) * sin_h >= 0.0:
+                if distance < best_aligned_dist:
+                    best_aligned_dist, best_aligned = distance, lane
+
+        return best_aligned if best_aligned is not None else best_any
 
     def get_speed_limit(self) -> float:
         """Speed limit where the ego is, or 0 if there is no road under it.
