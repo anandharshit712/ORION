@@ -204,3 +204,49 @@ def test_the_evasion_allowlist_has_no_stale_entries():
     assert (
         not stale
     ), f"EVASION_SCENARIOS names scenarios that do not exist: {sorted(stale)}"
+
+
+def test_the_road_exists_everywhere_a_scenario_puts_something_on_it():
+    """The flat road must span what the scenario places on it, in both directions.
+
+    It used to be exactly ``linspace(0, 1000)``, so the carriageway did not
+    exist behind the origin. ``LaneInfo.get_closest_point`` clamps to the
+    polyline, so a vehicle at x = -5 measured its distance to the centreline's
+    *start point* and reported 5 m of lateral offset from a purely longitudinal
+    displacement — which reads as off-road.
+
+    Scenarios put things there as a matter of course: ``ego_x_jitter`` reaches
+    -5 in the older ones, a tailgater starts at -22, an overtaking vehicle at
+    -75, an emergency vehicle at -90. The ego cases terminated on the first
+    tick, and because leaving the road was not a failure at the time, those
+    one-tick runs were scored and averaged in with the rest: 2 runs in 10 on
+    LON-003 were 0.02 s long and counted.
+    """
+    from arep.config import get_config
+    from arep.core.collision import CollisionDetector
+    from arep.core.random_manager import RandomManager
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+
+    config = get_config().simulation
+    detector = CollisionDetector(config)
+
+    from arep.utils.exceptions import ScenarioParseError, ScenarioValidationError
+
+    for path in SCENARIOS:
+        for seed in (42, 44, 50):
+            try:
+                scenario, _ = ScenarioParser().parse_file(str(path))
+            except (ScenarioParseError, ScenarioValidationError):
+                break  # refused at load on purpose (EMG-004, DI-02)
+            if scenario.road.template:
+                break  # graph-backed roads answer this their own way
+            world = ScenarioExecutor(config).create_initial_world(
+                scenario, RandomManager(seed)
+            )
+            assert not detector.check_off_road(world.ego_vehicle, world), (
+                f"{path.stem} seed {seed}: the ego starts off the road at "
+                f"x={world.ego_vehicle.position.x:.2f}. The scenario is not "
+                f"wrong — the road is too short for what the scenario places "
+                f"on it."
+            )
