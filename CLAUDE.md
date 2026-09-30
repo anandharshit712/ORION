@@ -389,11 +389,37 @@ Four metric modules in `arep/evaluation/`, each returns typed result dataclass:
 
 `CompositeEvaluator` (in `evaluation/composite.py`) combines all four into single `composite_score`.
 
-Test **passes** when: `collision_rate < 0.01` and `intervention_rate < 0.05` across N runs.
+Test **passes** when: `collision_rate < 0.01` **and** `off_road_rate < 0.01` across N runs
+(`COLLISION_RATE_LIMIT` / `OFF_ROAD_RATE_LIMIT` in `cli/run_suite.py`).
+
+**Off-road became a failure in Phase 4.3 and was not one before.** The criterion was the
+collision rate alone, so a model that drove off the carriageway passed: on INT-004 the
+reference driver left the road at 3.5 s and the lane-keeper at 2.6 s, and both were recorded
+as passes scoring 0.912 and 0.801. The scoring compounds it — an off-road run ends early, so
+there is little of it left to score badly. Adding a new limit of this kind means adding a
+report field, which is also a CI output: declare it in `action.yml` and publish it in
+`ci/orion-ci.sh`, or `test_ci_integration_files.py` fails.
 
 TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags critical step).
 
 **Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating specification document and all existing baselines.
+
+**Nothing in the composite rewards making progress.** Safety, compliance, stability and
+reactivity all measure *how* the vehicle behaves; none measures whether it went anywhere. A
+model that brakes to a standstill in the first second scores 0.962 stability and 0.988
+composite on LON-001, and the suite's pass criterion (a collision and intervention rate)
+inherits this, so refusing to move passes most of the library. Read every composite with that
+in mind, and never present a score against `EmergencyBrake` as a competitive result.
+`tests/test_reference_model.py` pins the behaviour so adding a progress term later fails
+loudly; `docs/PENDING.md` has what such a term would need.
+
+**A scenario must be passable.** `tests/test_scenario_feasibility.py` checks every scenario for
+a corner of its declared ranges where no braking behaviour avoids contact — the ego braking at
+its full declared `max_deceleration` from tick zero, with no reaction delay. Twelve scenarios
+failed it when it was first written, LON-002 by 14.7 m. Such a scenario still runs and still
+produces a score; it just scores the geometry it handed the model rather than the response.
+Where braking is *meant* to be insufficient, add the scenario to `EVASION_SCENARIOS` in that
+file — that is a claim about the scenario's purpose, not a way to quiet the check.
 
 **Scoring methodology is documented in `docs/METHODOLOGY.md`** — every weight, threshold
 and stated approximation, written for a customer's safety reviewer. Update it in the same
@@ -477,7 +503,18 @@ there is nothing to forge). The header wins when both are present. `get_current_
 **Path split — read before adding a frontend call.** Only the auth router (`/api/auth/*`) and the live-run router (`/api/runs/*`) are mounted under `/api`. `/scenarios/`, `/jobs/`, `/results/*`, `/evaluate/*`, `/models/` and `/health` are mounted at the **root**. `src/services/api.js` therefore spells out each full path rather than prefixing everything, and `vite.config.js` proxies every one of those root prefixes. Getting this wrong is quiet: the dev server answers with `index.html` and the call fails as a JSON parse error rather than a 404. Four methods shipped broken this way and went unnoticed because the sections that would call them are not wired up yet.
 
 Built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
-`"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`
+`"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`, `"ReferenceDriver"`
+
+**`ReferenceDriver` is the only non-degenerate one, and that is what it is for.** The other
+four hold one action, brake at maximum always, steer without any longitudinal sense, or emit
+noise — fine for testing the harness, useless for reviewing a scenario. When a degenerate
+model fails a scenario, nothing distinguishes "this scenario correctly demands a behaviour the
+model lacks" from "this scenario is impossible", and eight of the sixty were being called
+correct failures on exactly that basis. `ReferenceDriverModel` is IDM car-following plus PD
+lane keeping plus bounded evasion; run `run_suite --model reference` against any scenario a
+degenerate model fails and the answer stops being an argument. It is a *reference*, not a good
+driver — its IDM parameters are conventional literature values and are deliberately not tuned
+against this library.
 
 To add new model to API, add to `AVAILABLE_MODELS` dict in `api/routes.py`.
 Don't instantiate models outside that dict — dict is registry.

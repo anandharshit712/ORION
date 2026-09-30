@@ -443,9 +443,44 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
 | 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |
+| 4.3-fix | Leaving the carriageway fails a scenario | Pass/fail only; no composite moves. Scenarios where a model ends up off the road now fail instead of passing — this is a change in the verdict, not in any score. |
 | 4.3-fix | Twelve scenarios had their lead-vehicle start positions moved further away | Composite rises and collision rate falls on those twelve for any braking model. They contained a parameter corner no braking behaviour could survive — see below. Scores on them are not comparable across this change. |
 | 4.3 | Importance sampling: aggregates are weighted, batches report `effective_n` | No effect on any uniform batch — `effective_n == num_runs` and the estimators are the ones they always were. A batch run with `importance=` reports the scenario's rates rather than its own draw's, and an interval built on the effective sample size. |
 | 1.5-fix | One lane-centre formula for the flat road and the road graph | Lane compliance rises from 0.0 to 1.0 on the 15 scenarios that start the ego at y=-1.75; composite rises by exactly +0.100 for each. INT-003 rises +0.050 from dropping a lateral `ego_x_jitter` wider than its lane. The 5 templated scenarios are unchanged. |
+
+### Leaving the road is a failure
+
+The pass criterion used to be the collision rate alone. Nothing checked whether
+the vehicle was still on the road, so a model that drove off it passed.
+
+Measured on INT-004, the roundabout-entry scenario:
+
+| model | outcome | composite |
+| --- | --- | --- |
+| `ReferenceDriver` | off-road at 3.5 s | 0.912 |
+| `SimpleLaneKeep` | off-road at 2.6 s | 0.801 |
+| `EmergencyBrake` | stopped, ran to timeout | 0.992 |
+
+All three were recorded as passes. The scoring compounds the problem rather
+than catching it: an off-road run terminates early, so there is very little of
+it left to score badly, and departing the carriageway promptly can outscore
+driving the scenario properly.
+
+`run_suite` now fails a scenario when more than 1% of runs end `off_road`, the
+same bar the collision rate uses, and `off_road_rate` is reported per scenario
+and suite-wide. This changes verdicts only — no composite, mean or interval
+moves, so scores remain comparable across the change.
+
+Two consequences worth stating, because both were previously invisible:
+
+- **A PD lane-keeper is marginally stable and occasionally diverges.** On an
+  untouched scenario (LON-001) `SimpleLaneKeep` ends off the road on 1 seed in
+  20. That was always true; it simply never failed anything.
+- **The roundabout template cannot be driven by anything in the repo.** Its
+  circulating carriageway is a single lane on a curve, so a straight path
+  across the circle is off-road at every point between the two crossings. Both
+  steering models leave it within four seconds. INT-004's former "pass" was
+  entirely an artefact of this criterion.
 
 ### The 4.3 feasibility correction
 

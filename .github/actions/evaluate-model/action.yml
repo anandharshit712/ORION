@@ -50,6 +50,8 @@ outputs:
     description: Mean safety score across scenarios (0.0-1.0)
   collision_rate:
     description: Mean collision rate across scenarios
+  off_road_rate:
+    description: Mean rate of runs that ended off the carriageway
   pass_rate:
     description: Fraction of scenarios that passed
   scenarios_passed:

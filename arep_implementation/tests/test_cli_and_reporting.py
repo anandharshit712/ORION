@@ -522,19 +522,25 @@ def test_the_report_carries_suite_wide_means(tmp_path):
 
 def test_a_regression_fails_the_run_that_would_otherwise_pass(tmp_path):
     """End to end through main(), with two real models rather than a doctored
-    report: the scenario still passes on collision rate, and the build still
-    goes red.
+    report: the scenario still passes on its own, and the build still goes red.
 
-    emergency_brake and lane_keep both clear LON-003 without a collision and
-    score ~0.97 and ~0.86 — a swap the collision-limit check cannot see, which
-    is the entire reason the baseline comparison exists.
+    emergency_brake and reference both clear LON-001 without a collision and
+    without leaving the road, scoring ~0.992 and ~0.930 — a swap the absolute
+    limits cannot see, which is the entire reason the baseline comparison
+    exists.
+
+    This used to pair emergency_brake with lane_keep on LON-003. That stopped
+    working when leaving the carriageway became a failure rather than a pass:
+    lane_keep diverges and ends up off the road on one of the two seeds, so it
+    no longer passes on its own merits and the premise of the test collapsed.
+    That is the criterion working, not the test being wrong.
     """
 
     def run(model, output, extra=()):
         return main(
             [
                 "--scenarios",
-                "LON-003",
+                "LON-001",
                 "--model",
                 model,
                 "--runs-per-scenario",
@@ -550,12 +556,57 @@ def test_a_regression_fails_the_run_that_would_otherwise_pass(tmp_path):
     baseline = good / "orion_suite_report.json"
 
     worse = tmp_path / "worse"
-    assert run("lane_keep", worse) == EXIT_PASS, "must pass on its own merits"
+    assert run("reference", worse) == EXIT_PASS, "must pass on its own merits"
 
-    assert run("lane_keep", worse, ["--baseline", str(baseline)]) == EXIT_FAIL
+    assert run("reference", worse, ["--baseline", str(baseline)]) == EXIT_FAIL
     assert (
         run(
-            "lane_keep", worse, ["--baseline", str(baseline), "--no-fail-on-regression"]
+            "reference", worse, ["--baseline", str(baseline), "--no-fail-on-regression"]
         )
         == EXIT_PASS
     )
+
+
+# -- Leaving the road is a failure -----------------------------------------
+
+
+def test_off_road_is_a_failure_not_merely_a_low_score():
+    """A model that drives off the carriageway must not pass the scenario.
+
+    Until this criterion existed the verdict was the collision rate alone, so
+    departing the road was a pass: on INT-004 the reference driver terminated
+    `off_road` at 3.5 s and the lane-keeper at 2.6 s, and both were scored as
+    passes with composites of 0.912 and 0.801. The scoring compounds it -- an
+    off-road run ends early, so there is little of it left to score badly, and
+    leaving the road promptly can outscore driving the scenario properly.
+    """
+    from arep.cli.run_suite import OFF_ROAD_RATE_LIMIT, run_suite
+    from arep.models.examples.example_models import SimpleLaneKeepModel
+
+    report = run_suite(
+        scenario_paths=resolve_scenarios("INT-004", REPO),
+        model=SimpleLaneKeepModel(),
+        runs_per_scenario=2,
+        seed=42,
+    )
+    scenario = report["scenarios"][0]
+    assert scenario["off_road_rate"] >= OFF_ROAD_RATE_LIMIT, (
+        "the lane-keeper is expected to leave the roundabout; if it no longer "
+        "does, this test needs a different scenario rather than deleting"
+    )
+    assert not scenario["passed"], "off-road runs must fail the scenario"
+    assert scenario["collision_rate"] < 0.01, (
+        "this scenario fails on off-road alone -- if it now also collides the "
+        "test is no longer demonstrating what it claims"
+    )
+
+
+def test_the_off_road_rate_reaches_the_report_and_the_ci_outputs():
+    """A new report field is a new CI output; the two are paired by contract."""
+    import yaml
+
+    action = yaml.safe_load(
+        (REPO / ".github/actions/evaluate-model/action.yml").read_text(encoding="utf-8")
+    )
+    assert "off_road_rate" in action["outputs"]
+    assert "off_road_rate" in (REPO / "ci/orion-ci.sh").read_text(encoding="utf-8")

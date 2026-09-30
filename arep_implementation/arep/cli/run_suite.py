@@ -41,6 +41,15 @@ EXIT_ERROR = 2
 # platform-wide criterion in CLAUDE.md section 7.
 COLLISION_RATE_LIMIT = 0.01
 
+# Leaving the carriageway is a failure too, and used not to be. Until this was
+# added the criterion was the collision rate alone, so a model that drove off
+# the road passed: INT-004 terminated `off_road` at 3.5 s for the reference
+# driver and at 2.6 s for the lane-keeper, and both were scored as passes with
+# composites of 0.912 and 0.801. The scoring compounds it — an off-road run
+# ends early, so there is little of it left to score badly, and departing the
+# road promptly can outscore driving the scenario properly.
+OFF_ROAD_RATE_LIMIT = 0.01
+
 # ── Built-in model name → class mapping ──────────────────────────────────
 BUILTIN_MODELS = {
     "emergency_brake": "arep.models.examples.example_models.EmergencyBrakeModel",
@@ -258,8 +267,16 @@ def run_suite(
         aggregated = batch.aggregated
 
         # A scenario passes on collision rate, not on composite score. A model
-        # can be uncomfortable and safe; it cannot be comfortable and crash.
+        # can be uncomfortable and safe; it cannot be comfortable and crash --
+        # nor comfortable and in a field.
         collision_rate = float(getattr(aggregated, "collision_rate", 0.0))
+        runs = batch.per_run_results or []
+        off_road_rate = (
+            sum(1 for r in runs if getattr(r, "termination_reason", "") == "off_road")
+            / len(runs)
+            if runs
+            else 0.0
+        )
         scenarios.append(
             {
                 "scenario": path.stem,
@@ -271,7 +288,11 @@ def run_suite(
                 "stability_mean": round(float(aggregated.stability_mean), 4),
                 "reactivity_mean": round(float(aggregated.reactivity_mean), 4),
                 "collision_rate": round(collision_rate, 4),
-                "passed": collision_rate < COLLISION_RATE_LIMIT,
+                "off_road_rate": round(off_road_rate, 4),
+                "passed": (
+                    collision_rate < COLLISION_RATE_LIMIT
+                    and off_road_rate < OFF_ROAD_RATE_LIMIT
+                ),
             }
         )
 
@@ -296,6 +317,8 @@ def run_suite(
         "safety_mean": _mean("safety_mean"),
         "collision_rate": _mean("collision_rate"),
         "collision_rate_limit": COLLISION_RATE_LIMIT,
+        "off_road_rate": _mean("off_road_rate"),
+        "off_road_rate_limit": OFF_ROAD_RATE_LIMIT,
         "scenarios": scenarios,
         # Named, not omitted: a suite that quietly ran fewer scenarios than the
         # selector asked for is reporting a pass rate over a set nobody chose.
@@ -471,7 +494,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not scenario["passed"]:
             print(
                 f"  FAIL {scenario['scenario']}: "
-                f"collision rate {scenario['collision_rate']:.3f} "
+                f"collision rate {scenario['collision_rate']:.3f}, "
+                f"off-road rate {scenario['off_road_rate']:.3f} "
                 f">= {COLLISION_RATE_LIMIT}",
             )
 
