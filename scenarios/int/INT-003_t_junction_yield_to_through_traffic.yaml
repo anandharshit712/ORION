@@ -30,7 +30,7 @@ environment:
     speed_limit: 13.89
     template: t_junction
     template_params:
-      approach_length: 80.0
+      approach_length: 90.0
       cross_length: 120.0
       has_traffic_light: false    # give-way markings, not signals
 

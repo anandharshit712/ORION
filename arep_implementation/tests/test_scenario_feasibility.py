@@ -70,6 +70,31 @@ EVASION_SCENARIOS = {
     "EMG-001_road_debris_avoidance",
 }
 
+# Scenarios whose road deliberately does not continue straight, so "could the
+# ego drive forwards for the whole duration" is the wrong question to ask of
+# them. INT-003 is a T-junction: north of the junction there is no carriageway
+# at all and the ego is required to turn.
+#
+# This is not a free pass. It records that these scenarios cannot be passed by
+# anything in the repo, and not because they are hard: choosing a turn needs a
+# route, and `Observation` carries none — see `docs/PENDING.md`, "No lane
+# assignment reaches the model". They still run and still produce a score,
+# which is the dangerous shape, so the exemption is written down rather than
+# left as a quietly passing test.
+NO_STRAIGHT_PATH = {
+    # A T-junction: north of the junction there is no carriageway at all and
+    # the ego is required to turn. Unpassable by anything in the repo, and not
+    # because it is hard — choosing a turn needs a route and `Observation`
+    # carries none.
+    "INT-003_t_junction_yield_to_through_traffic",
+    # The ego starts on an angled on-ramp, so its initial heading is not its
+    # path: it has to follow the ramp round and merge. A lane-follower can do
+    # that now the offset is signed, so this one is a limit of the check rather
+    # than of the scenario — projecting a straight line from the start heading
+    # says nothing useful about a curved road.
+    "MLT-003_onramp_merge_into_traffic",
+}
+
 
 def _worst_case_margin(doc: dict) -> tuple[float, str] | None:
     """Metres of slack at the worst corner, and which object produced it.
@@ -250,3 +275,60 @@ def test_the_road_exists_everywhere_a_scenario_puts_something_on_it():
                 f"wrong — the road is too short for what the scenario places "
                 f"on it."
             )
+
+
+def test_the_road_is_longer_than_the_scenario_can_drive():
+    """A scenario must not be able to reach the end of its own map.
+
+    Every templated scenario in the library did. INT-001 starts the ego at
+    x=-60 and runs for 25 s at up to 11.11 m/s — 218 m of travel along an arm
+    that stops at 80. The ego held its lane perfectly the whole way and was
+    scored off-road for arriving at the edge of the world, which read as a
+    lane-keeping failure and was nothing of the kind. Ten of the ten
+    intersection scenarios failed this way.
+
+    The check is the furthest point the ego could occupy travelling straight at
+    its maximum declared speed for the whole duration. That is generous to the
+    scenario — a model that brakes never gets there — which is the right
+    direction for a check whose job is to rule out an artefact.
+    """
+    from arep.config import get_config
+    from arep.core.random_manager import RandomManager
+    from arep.core.state import Vector2D
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+    from arep.utils.exceptions import ScenarioParseError, ScenarioValidationError
+
+    config = get_config().simulation
+
+    for path in SCENARIOS:
+        try:
+            scenario, _ = ScenarioParser().parse_file(str(path))
+        except (ScenarioParseError, ScenarioValidationError):
+            continue  # refused at load on purpose (EMG-004, DI-02)
+        if not scenario.road.template:
+            continue  # the flat road is extended to fit; see the test above
+        if path.stem in NO_STRAIGHT_PATH:
+            continue
+
+        spec = (scenario.parameterization or {}).get("ego_velocity")
+        v_max = (
+            float(spec["max"])
+            if isinstance(spec, dict)
+            else float(scenario.ego_initial.velocity)
+        )
+        world = ScenarioExecutor(config).create_initial_world(
+            scenario, RandomManager(42)
+        )
+        ego = world.ego_vehicle
+        reach = Vector2D(
+            ego.position.x + v_max * scenario.duration * math.cos(ego.heading),
+            ego.position.y + v_max * scenario.duration * math.sin(ego.heading),
+        )
+        assert world.road_graph is not None
+        assert not world.road_graph.is_off_road(reach), (
+            f"{path.stem}: driving straight for its full {scenario.duration:.0f} s "
+            f"at {v_max:.2f} m/s reaches ({reach.x:.0f}, {reach.y:.0f}), which is "
+            f"past the end of the road. Lengthen the template "
+            f"(arm_length / approach_length / main_length) or shorten the scenario."
+        )

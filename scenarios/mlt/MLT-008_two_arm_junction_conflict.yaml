@@ -31,7 +31,7 @@ environment:
     speed_limit: 11.11
     template: four_way_intersection
     template_params:
-      arm_length: 80.0
+      arm_length: 310.0
       has_traffic_light: false
   weather:
     condition: clear

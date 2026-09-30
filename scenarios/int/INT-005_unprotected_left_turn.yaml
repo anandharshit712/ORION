@@ -27,7 +27,8 @@ environment:
     speed_limit: 13.89
     template: four_way_intersection
     template_params:
-      arm_length: 140.0          # long enough to hold oncoming_v2 at x=120
+      arm_length: 230.0          # long enough to hold oncoming_v2 at x=120,
+                                 # and for the ego's full 30 s of travel
       has_traffic_light: true
   weather:
     condition: clear
