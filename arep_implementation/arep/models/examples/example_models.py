@@ -122,6 +122,16 @@ class ReferenceDriverModel(ModelInterface):
       travel, because `Observation` carries the ego's offset within its lane but
       not how many lanes exist or which are free. It steers away from an
       obstacle it cannot stop for, and it will not steer off a two-lane road.
+    - Yielding to crossing traffic is a separate rule, because IDM has nothing
+      to say about a perpendicular path. It gives way whenever a conflict exists
+      rather than working out who has priority: `Observation` carries no sign,
+      no stop line and no right-of-way, so the conservative reading is the only
+      honest one. A real model should do better, and a scenario that rewards
+      correctly *taking* priority will score this one as timid.
+
+    What it does not do, so that nobody reads a passing score as more than it is:
+    no route, no lane-change planning, no signal semantics beyond stopping for
+    red and amber, and no notion of which lane it ought to be in.
 
     Deterministic: a pure function of the observation and `_prev_steering`.
     """
@@ -145,6 +155,15 @@ class ReferenceDriverModel(ModelInterface):
     IN_PATH_HALF_WIDTH = 2.2  # m, lateral band counted as "in my lane"
     APPROACHING_HALF_WIDTH = 3.6  # m, wider band for something moving inward
     MAX_EVASION_OFFSET = 3.5  # m, roughly one lane; see the class docstring
+
+    # Crossing traffic. IDM has nothing to say about a vehicle on a
+    # perpendicular path: it is not a lead, it is never in the lane until it is
+    # in the lane, and by then the decision has been made. Measured cost of not
+    # handling it: the first version of this model collided on 40% of runs at a
+    # four-way stop and failed every intersection scenario it met.
+    CONFLICT_HORIZON = 5.0  # s, how far ahead a crossing path is considered
+    CONFLICT_BAND = 9.0  # m, longitudinal half-width of the conflict zone
+    CROSSING_SPEED = 0.5  # m/s, lateral speed below which it is not crossing
 
     def __init__(
         self,
@@ -181,6 +200,34 @@ class ReferenceDriverModel(ModelInterface):
             ):
                 out.append(obj)
         return out
+
+    def _crossing_conflict(self, obs: Observation):
+        """The nearest object whose path crosses the ego's inside the horizon.
+
+        Yielding is a longitudinal decision made on a lateral cue, which is why
+        it cannot come out of IDM. The test is where each body will be, not
+        where it is: an object is a conflict when it reaches the ego's line of
+        travel at a moment when the ego is close enough to that point to matter.
+
+        Returns the object, or None. The caller treats it as a stationary
+        obstacle, which is the conservative reading -- this is a reference for
+        judging whether a scenario is passable, so when in doubt it gives way.
+        """
+        nearest = None
+        for obj in obs.objects:
+            if abs(obj.relative_vy) < self.CROSSING_SPEED:
+                continue
+            # Opposite signs mean it is closing on the line y = 0; same signs
+            # mean it is leaving, and a negative time is behind us.
+            time_to_line = -obj.relative_y / obj.relative_vy
+            if not 0.0 < time_to_line < self.CONFLICT_HORIZON:
+                continue
+            longitudinal_at_crossing = obj.relative_x + obj.relative_vx * time_to_line
+            if abs(longitudinal_at_crossing) > self.CONFLICT_BAND:
+                continue
+            if nearest is None or time_to_line < nearest[0]:
+                nearest = (time_to_line, obj)
+        return nearest[1] if nearest else None
 
     @staticmethod
     def _gap(obj) -> float:
@@ -225,6 +272,23 @@ class ReferenceDriverModel(ModelInterface):
 
         # ── Longitudinal ──────────────────────────────────────────────
         accel = self._idm_acceleration(observation, lead)
+
+        # Crossing traffic is a stopping problem, not a following problem, and
+        # it must not go through IDM. IDM keys its whole response off the
+        # longitudinal closing speed, which for a perpendicular vehicle is
+        # approximately zero -- so handing it one as a lead produces a gentle
+        # response to something about to drive across the bonnet, and displaces
+        # the real lead while doing it. Measured: routing crossings through IDM
+        # cleared four intersection scenarios and made three others worse,
+        # INT-010 going from 0.30 to 0.70 collisions.
+        #
+        # The requirement is to be stopped by the conflict point, so command the
+        # deceleration that achieves exactly that and take whichever of the two
+        # demands is harder.
+        crossing = self._crossing_conflict(observation)
+        if crossing is not None:
+            distance = max(1.0, self._gap(crossing))
+            accel = min(accel, -(observation.ego_velocity**2) / (2.0 * distance))
 
         emergency = False
         if lead is not None:
