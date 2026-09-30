@@ -939,37 +939,49 @@ on the production host is an operational step, not development work.
    `RoadSegment`, `Junction`) and `core/road_templates.py` (six factories) exist and are wired
    through `environment.road.template`. See Section 6.
 
-**60 scenarios; 59 execute; 51 pass** against `emergency_brake`
-(`arep.cli.run_suite --scenarios all --runs-per-scenario 10`, measured 2026-09-29). Ten per
-category. Seven of the eight failures are *correct*: each needs evasive steering, or leaves
-the ego somewhere braking cannot help, and a brake-only model cannot produce that. Don't
-"fix" them by weakening the scenario.
+**60 scenarios; 59 execute.** Ten per category; EMG-004 is refused at load (DI-02).
+Measured 2026-10-01 at 10 runs per scenario:
 
-| Failure | Collision rate | Why it is the right answer |
+| model | passes | what it is |
 | --- | --- | --- |
-| EMG-002 wrong-way driver | 1.00 | head-on; braking alone does not clear the path |
-| MLT-007 construction-zone tailgater | 1.00 | rear-ended while braking, by design |
-| MLT-005 tailgater + lead brake | 0.60 | the same, and the scenario says so in its description |
-| LAT-007 narrow road oncoming | 0.40 | needs evasive steering |
-| EMG-008 lead vehicle reverses | 0.30 | a stopped ego cannot brake its way out of being reversed into |
-| LAT-003 oncoming encroachment | 0.20 | needs evasive steering |
-| EMG-001 road debris avoidance | 0.10 | needs steering around the obstacle |
-| **LON-002 hard brake** | **0.10** | **not correct — see below** |
+| `emergency_brake` | **52 / 59** | brakes at maximum always — passes by not moving |
+| `ReferenceDriver` | **32 / 59** | IDM + lane keeping + evasion + crossing yield |
+| `SimpleLaneKeep` | 12 / 59 | steering PD, no longitudinal sense |
 
-**LON-002 is unsurvivable on about a tenth of its draws, and that is a defect in the
-scenario.** `emergency_brake` commands maximum deceleration from tick 0, so it is the upper
-bound on what any braking model can do; it still collides. The arithmetic: the ego draws up
-to 27.78 m/s against a `max_deceleration` of 8.0, needing ~48 m to stop, while
-`lead_vehicle.initial_x` draws as low as 35 m. No behaviour passes those draws, so the
-scenario scores a model on its geometry rather than on its response. It predates Phase 4.3 —
-measured identical at `1932caa` — and is deliberately **not** fixed here, because raising the
-gap floor moves an existing scenario's scores and belongs in a change of its own with a
-`docs/METHODOLOGY.md` change-log row. Tracked in `docs/PENDING.md`.
+**Read the first row with care.** `emergency_brake` scores highest because nothing in the
+composite rewards making progress and the pass criterion is a collision and off-road rate, so
+stopping dead passes most of the library. It is a floor, not a benchmark — never present a
+score against it as a competitive result.
 
-The previously documented figure ("20 of 21 execute; 17 pass", three failures) was wrong when
-it was written: re-measuring the pre-4.3 library at `1932caa` gives **16 of 21**, with
-EMG-001 and LON-002 failing and undocumented. Figures in this file come from a run, not from
-the last figure plus a delta.
+`ReferenceDriver` passes scenarios `emergency_brake` fails (EMG-001 road debris, which needs
+evasion) and fails scenarios `emergency_brake` passes (junctions, and lateral scenarios where
+its bounded evasion heuristic costs it the road). That divergence is the useful part: the two
+fail *different* scenarios, so the library discriminates behaviour rather than just "did you
+brake".
+
+Six scenarios are failed by **both** — EMG-002, EMG-008, LAT-003, LAT-007, MLT-005, MLT-007.
+Those remain unproven: no model in the repo passes them, and nobody has demonstrated one that
+can. Don't describe them as "correct failures" without that caveat.
+
+**The Phase 4.3 review found seven platform defects, each hidden by the one before it.** In
+the order they were found, because that order is the point:
+
+1. Twelve scenarios had a corner no braking behaviour could survive (LON-002 by 14.7 m).
+2. There was no reference model, so "fails correctly" was an argument and not a measurement.
+3. **Leaving the road did not fail a scenario.** A model could drive into a field at 3.5 s
+   and score 0.912.
+4. The flat road did not exist behind x=0, so any scenario with negative `ego_x_jitter`
+   terminated some runs after one tick — and scored them at that length.
+5. **`Observation.lane_offset` had no sign**, so a lane-keeping controller steered the same
+   way whichever side it had drifted to and every perturbation ran away. Lane keeping was not
+   achievable. The signed value had existed since Phase 0.5 and only the metrics used it.
+6. The lane handed to a model could be one *crossing its path* at a junction.
+7. **Every templated scenario ran off the end of its own road** — INT-001 drives 218 m along
+   an arm that stops at 80.
+
+Each is closed, each has a test, and `docs/METHODOLOGY.md` carries the evidence and the
+change-log rows. Three of them moved scores; results are not comparable across this phase for
+any model that steers.
 
 **EMG-004 no longer loads, on purpose (DI-02).** It declares a `change_weather` event the
 engine cannot execute, and used to load, run and pass while testing a dry road. The old

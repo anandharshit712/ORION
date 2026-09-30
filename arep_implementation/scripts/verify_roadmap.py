@@ -573,7 +573,14 @@ def _ci_files_agree():
 
 def _ci_regression_fails_a_passing_run():
     """The absolute collision bar cannot see a model getting steadily worse.
-    Two real models, both collision-free on LON-003, one clearly worse."""
+    Two real models, both clearing LON-001 outright, one clearly worse.
+
+    This paired emergency_brake with lane_keep on LON-003 until leaving the
+    carriageway became a scenario failure. lane_keep ends up off the road on
+    some seeds, so it no longer passes on its own merits and the premise
+    collapsed -- the criterion working, not the check being wrong. The
+    equivalent pytest case in tests/test_cli_and_reporting.py was repaired the
+    same way and the two must stay in step."""
     import json
     import tempfile
 
@@ -586,7 +593,7 @@ def _ci_regression_fails_a_passing_run():
             return suite_main(
                 [
                     "--scenarios",
-                    "LON-003",
+                    "LON-001",
                     "--model",
                     model,
                     "--runs-per-scenario",
@@ -598,10 +605,10 @@ def _ci_regression_fails_a_passing_run():
             )
 
         assert run("emergency_brake", good) == EXIT_PASS
-        assert run("lane_keep", worse) == EXIT_PASS, "must pass on its own merits"
+        assert run("reference", worse) == EXIT_PASS, "must pass on its own merits"
 
         baseline = good / "orion_suite_report.json"
-        assert run("lane_keep", worse, ["--baseline", str(baseline)]) == EXIT_FAIL
+        assert run("reference", worse, ["--baseline", str(baseline)]) == EXIT_FAIL
 
         before = json.loads(baseline.read_text(encoding="utf-8"))["composite_mean"]
         after = json.loads(
