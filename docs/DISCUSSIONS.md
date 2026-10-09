@@ -254,3 +254,246 @@ better than scoring a run on a hazard that never happened.
 - Audit for the same bug elsewhere: YAML keys the parser accepts and ignores (for example
   `ego.constraints` fields, `behavior.parameters` keys an NPC type does not read). Should
   unknown keys be refused as well, or only unknown event types?
+
+---
+
+## DI-03 — One run in five on LON-003 and LAT-001 ends at tick 1 and is still scored
+
+**Status**: Open — nothing built, **post-build (decided 2026-09-29)**. It corrupts current
+scores, as DI-02 did, but the user chose to keep it with the rest of the list rather than
+make a second exception. Until it ships, LON-003 and LAT-001 batch means include roughly one
+void run in five, and a batch's "worst run" on those two may be a one-tick non-event. Don't
+quote either scenario's scores as clean. Also in `docs/PENDING.md`.
+
+### Raised
+
+2026-09-29. Question: *"How does rewatching a run work, and what does it cost the
+database?"* While measuring stored-frame sizes, the "worst run" from the 100-run demo
+(LON-003, `EmergencyBrake`, seed 139) came back with **2 frames**. A 20-second scenario.
+
+### Finding
+
+Verified by running seeds 42–141 of LON-003 against `EmergencyBrake` through
+`EvaluationRunner.run_single`:
+
+- **20 of 100 runs terminate `off_road` at t=0.02 s**, before the model has done anything.
+- They are **scored anyway**, at 0.82–0.90 composite, and counted in the batch mean. The
+  demo's "composite 0.949, collision rate 0%" includes 20 runs that never happened. The
+  `ConstantAction` figure of "80% collision" is very likely 100% of the runs that actually
+  ran, with the other 20% being these void starts.
+- The batch's reported **worst run (seed 139) is one of them.** The "Replay →" link a
+  customer follows to see the model's worst behaviour opens a one-tick non-event.
+- **Cause.** `parameterization.ego_x_jitter: {min: -5, max: 5}` around `ego.initial.x: 0.0`
+  on a flat road (no `template`). The flat lanes start at x=0. A car placed at x<0 has, as
+  its nearest centreline point, the start of the lane, so its "lateral offset" is really its
+  distance behind the road. Past half a lane width (1.75 m), `check_off_road` says off-road.
+  The data fits: seeds that land at x=−2.43 and x=−4.88 terminate, while seeds at x=−1.3,
+  −0.62 and −0.1 don't.
+- **Affected**: LON-003 and LAT-001 (both flat, ego at x=0, jitter min −5). INT-004 also
+  jitters, but it starts at x=−50 on a template road.
+- **Why the suite missed it.** `test_every_scenario_starts_the_ego_inside_a_lane` checks
+  **seed 42 only**, which jitters the car forward (+3.69 m). The invariant holds for the
+  nominal draw and fails for a fifth of the real ones.
+- **Knock-on**: `frame_store.should_store()` keeps frames for `off_road` runs, so these void
+  runs are also the ones the database stores for playback.
+
+### Direction agreed
+
+None yet — raised, not discussed. First view:
+
+1. **A run that terminates before the model's first action is void, not scored**, the same
+   rule as `ModelSandboxError`: fail it, refund it, name it. A run the model never drove
+   cannot count for or against it.
+2. **Fix the scenarios** so every draw starts on the road (jitter forward only, or start the
+   ego further in), and **make the invariant test sample the range**, not seed 42 alone.
+   Checking the min and max of every positional range is cheap and exhaustive for a uniform
+   box.
+3. **Flat lanes should not end at x=0 behind the ego**, or off-road should mean "off the
+   road", not "far from the nearest lane point". Which of these is right is a question below.
+
+### To discuss before building
+
+- Void or re-draw? Voiding is honest but costs the customer a run; re-drawing with the next
+  seed breaks `seed = master_seed + run_index`, which is a stated invariant. Current view: void.
+- Where does the boundary sit: "terminated on step 0", or "terminated before the model's
+  action had any physical effect"? The second is more correct and harder to state.
+- Fix the geometry (flat lanes extend behind the start) or the scenarios (no negative
+  jitter), or both? Fixing the geometry changes `check_off_road` for every flat scenario.
+- Scores change: LON-003 and LAT-001 baselines move, which needs a `METHODOLOGY.md`
+  change-log entry and a scoring-version note. Every earlier batch on those two carries the
+  artefact. Is that disclosed, or are stored batches re-summarised?
+- Audit the whole library for the general case: any positional range whose endpoints are not
+  all on the road. The fixed invariant test answers this mechanically.
+
+---
+
+## DI-04 — Replay and live streaming: storage and scaling gaps
+
+**Status**: Open — nothing built, post-build. Also in `docs/PENDING.md`.
+
+### Raised
+
+2026-09-29, same question as DI-03: *"Will saving simulations for rewatch load the database,
+and how is that managed?"*
+
+### Finding
+
+What works, verified in code:
+
+- **Two rewatch paths.** Seed replay (`POST /api/runs/{id}/replay`) re-simulates from the
+  scenario YAML stored with the run, not the file on disk, and streams it live. It stores
+  nothing and reports both frame digests so the client can prove it matches. Stored-frame
+  playback (`GET /api/runs/{id}/frames`) serves gzipped frames, **only for runs that collided
+  or left the road** (`frame_store.should_store`).
+- **Measured cost**: a LON-003 collision run is 152 frames, **118 KB of JSON → 4 KB gzipped
+  (27×)**, at about 790 B per raw frame. `MAX_FRAMES = 20_000` and an 8 MB compressed cap
+  refuse pathological runs outright rather than truncating them.
+- **Frontend**: `/dashboard/runs/:runId` (`RunPage.jsx`) plays stored frames through the
+  same `Scene` component the live viewer uses, with play/pause, step, a real range-input
+  scrub, speed control and server-computed jump-to-event markers. When nothing is stored, it
+  falls back to seed replay.
+
+Gaps:
+
+| Gap | Where | Consequence |
+| --- | --- | --- |
+| No retention policy for `run_frames` | `database/models.py`, no TTL or cleanup job | Grows forever with every failing run. Small per row, unbounded in total. |
+| Frames live in the relational DB as `LargeBinary` | `RunFrameRecord.frames_gzip` | Fine at KB scale; object storage is the usual home once volume grows. |
+| `reason = "pinned"` exists, no endpoint sets it | `RunFrameRecord.reason` | A customer cannot keep frames for a passing run they want to show someone. |
+| Live-run registry is **in process memory** | `api/sim_registry.py`, `SimulationRegistry._runs` | Completed runs are never evicted (only `DELETE` removes one). Lost on restart. With more than one API process, a WebSocket landing on a different process from the one running the sim finds nothing. |
+| `useReplayStream.js` is a dead stub | `orion-frontend/src/hooks/` | `RunPage` does its own playback. The stub still says `TODO [P5]`, and PENDING still lists the replay viewer as not built. |
+| DI-03 void runs get stored | `should_store()` keeps `off_road` | The stored-frame budget is spent on non-events. |
+
+### Direction agreed
+
+None yet. First view: retention plus a pin endpoint are small and clearly worth doing.
+Moving the registry out of process memory is only needed once there is more than one API
+process. Object storage for frames is only needed once measured volume says so.
+
+### To discuss before building
+
+- Retention length: fixed (for example 90 days), per plan tier, or tied to the batch's own
+  lifetime? Deleting frames loses nothing that seed replay can't rebuild, as long as the
+  scenario YAML and the model artefact are still stored. Is the model artefact retained as
+  long as the run is?
+- Pinning: who can pin, how many per org, does it cost credits?
+- Live-run registry: evict completed runs after N minutes, or move it to Redis (already a
+  dependency for Celery) with pub/sub for frames so any API process can serve any socket?
+- Do batch runs ever stream live? Today only single runs from `POST /api/runs/` do. Is
+  "watch run 37 of a batch while it runs" a feature anyone needs?
+- Delete `useReplayStream.js` and correct the PENDING entry, or keep the hook and move
+  `RunPage`'s logic into it?
+
+---
+
+## DI-05 — The viewer draws 50 Hz data on a 60 Hz (or faster) screen with no interpolation
+
+**Status**: Open — nothing built, post-build. Cosmetic: no score is affected. Also in
+`docs/PENDING.md`.
+
+### Raised
+
+2026-09-29. Question: *"What refresh rate are frames shown at, and why that number?"*
+
+### Finding
+
+- The server sends one frame per simulation tick: **50 per second** (`tick_interval=0.02`),
+  paced by a deadline in `SimulationEngine.run_async`. If it falls behind, it resets the
+  deadline rather than bursting to catch up.
+- Replay (`RunPage.jsx`) plays stored frames at `DT_MS = 20` divided by the speed
+  multiplier: also 50 per second at 1×.
+- The browser draws at the **display's refresh rate** (R3F render loop, commonly 60 Hz,
+  often 120–144). `Vehicle` in `SimulationViewer.jsx` jumps to the latest frame's position.
+  No interpolation between frames. On a 60 Hz screen, one frame in five is drawn twice,
+  which shows as a slight, regular judder at speed. Network jitter on the live path makes it
+  irregular.
+- Every frame also triggers a React re-render of the HUD (`setFrame` per message). That's
+  fine at 50 Hz, but it sets the ceiling if the rate ever rises.
+
+### Direction agreed
+
+None yet. First view: keep 50 Hz on the wire (it is the simulation's true rate, and sending
+more would be invented data). Smooth on the client by drawing slightly in the past and
+interpolating position and heading between the two frames either side of the draw time.
+This is the standard fix and costs one frame (20 ms) of extra latency.
+
+### To discuss before building
+
+- Interpolate, or extrapolate from the last velocity? Interpolation never shows a position
+  that didn't happen, which matters in a safety tool (a collision must never be drawn before
+  it occurs). Current view: interpolate.
+- How much buffer on the live path: one frame, or a small jitter buffer (2–3 frames) at the
+  cost of 40–60 ms delay?
+- Does the HUD stay on raw frames (numbers must match the frame exactly) while only the 3D
+  scene is interpolated? Current view: yes.
+- In slow-motion replay (0.1×), interpolation matters most. At 0.1× the screen gets a new
+  frame only every 200 ms.
+
+---
+
+## DI-06 — Expanding beyond driving: other model types and other domains
+
+**Status**: Open — direction only, post-build. **Which domain comes second is deliberately
+undecided**; it is settled when this list is discussed, not before. Also in `docs/PENDING.md`.
+
+### Raised
+
+2026-09-29. Question: *"Could ORION evaluate other kinds of models — language models, image
+networks, sequence models?"*
+
+### Finding
+
+Two different questions hide in that one.
+
+**Other model architectures for driving: already supported.** The only contract is
+`ModelInterface.predict(Observation) -> Action`. Rules, image networks, recurrent or
+sequence models, reinforcement-learning policies and language-model planners all fit behind
+it. The limit is the input, not the architecture: `Observation` is ground-truth state, so a
+model that consumes camera pixels needs Phase 6 (sensor simulation).
+
+**Other domains: about half the code is domain-neutral.**
+
+| Domain-neutral (reusable) | Driving-specific |
+| --- | --- |
+| `RandomManager` seeding, `FrameHasher`, seed replay | `core/physics.py`, bicycle/Pacejka models |
+| Parameterization ranges (`scenario/parameterizer.py`) | `core/road.py`, road templates, lanes |
+| `StatisticalAggregator`, CIs, Wilson, worst/best by seed | `Observation` / `Action` fields |
+| `analysis/regression_detector.py`, failure clustering, `search/` | Metrics: TTC, lane compliance, speed limit |
+| Sandbox, container runner, `ModelWrapper` | The seven-step order of `SimulationEngine.step()` |
+| Orgs, credits, Celery queue, CI runner, SDK | Scenario schema, the six-category taxonomy |
+
+The test for whether a domain fits is **a closed loop**: the model acts, the world reacts,
+the model acts again.
+
+| Candidate | Fit | Why |
+| --- | --- | --- |
+| Other machines that move (delivery/warehouse robots, drones, boats) | **Strong** | Same loop, physics, safety questions. Swap world and metrics, keep the rest. |
+| Agents acting in a software world (e.g. a language-model agent using tools) | **Possible, with caveats** | Loop exists and scenarios with varied settings make sense, but determinism and objective scoring both weaken. |
+| Single-shot models (classifiers, forecasters) | **Poor** | No loop; dataset-with-perturbations evaluation is a crowded space and discards closed-loop simulation, the thing that differentiates ORION. |
+
+### Direction agreed
+
+- **No generic abstraction ahead of a second real domain.** An interface designed from one
+  example is the driving interface with "car" deleted. Build the second domain for real, then
+  extract the common core from two working examples.
+- **The likely shape**, once extracted: a domain-neutral core plus a *domain pack* supplying
+  (1) a deterministic world, `reset(seed)` / `step(action)`; (2) observation and action
+  formats; (3) documented metrics; (4) a scenario format and its parameterization ranges.
+- **Initial positioning view** (to be confirmed): the boundary is "autonomous systems that act
+  in the physical world", where general-purpose evaluation tools are weakest.
+
+### To discuss before building
+
+- **Which second domain**, and is there a real user for it? Decided when the list is discussed.
+- **Non-deterministic models.** Language models can answer identical input differently. Is
+  replay then from a recording of every response rather than from the seed? How does the
+  frame fingerprint work when regeneration is not bit-exact?
+- **Softer scores.** Rubric or model-as-judge grading is not physics. How is it labelled so
+  it is never read with the same confidence as a collision count? Does it get its own
+  `METHODOLOGY.md` section and scoring version?
+- **What moves into the core.** Is the step order a core rule with domain hooks, or entirely
+  domain-owned? Do the four metric weights become per-domain config?
+- **Product surface.** One product with domain packs, or separate products on a shared
+  engine? Pricing per run may not mean the same thing across domains.
+- **Phase 6 overlap.** Camera-based driving models (image networks on pixels) are the
+  in-domain version of this question and are already on the roadmap. Should they come first?
