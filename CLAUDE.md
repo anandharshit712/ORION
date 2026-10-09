@@ -27,7 +27,7 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 
 Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. Current priority: **Phase 4.1, the ROS2 connector** — 4.3 is complete (60 scenarios, importance sampling, named suites). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. Remaining in Phase 4: **4.5 standards alignment**, plus the partial 4.2 (OpenDRIVE scenario wiring) and 4.4 (OSC2) — the roadmap sets the order. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -68,6 +68,7 @@ ORION/
 │   │   ├── simulation/           # SimulationEngine, WorldManager, NPC behavior trees
 │   │   ├── scenario/             # YAML parser, schema, parameterizer, validator
 │   │   ├── models/               # ModelInterface ABC + example models
+│   │   ├── bridges/              # ROS2 bridge, ORION side (ZeroMQ transport) — Phase 4.1
 │   │   ├── evaluation/           # Safety, compliance, stability, reactivity metrics
 │   │   ├── execution/            # EvaluationRunner (batch pipeline)
 │   │   ├── statistics/           # StatisticalAggregator
@@ -183,7 +184,26 @@ hard wall-clock kill per call and per run.
   (22.47s -> 25.01s on one scenario) for an **identical composite score** — the runtime moves
   the isolation boundary, not the result.
 - `Observation.to_dict()`/`from_dict()` is the wire format for out-of-process models. Extend
-  both sides together, or the sandbox and HTTP adapters silently drop fields.
+  both sides together, or the sandbox and HTTP adapters silently drop fields. The ROS2 bridge
+  publishes the same dict, so `ros2_bridge_node.py` reads it too.
+
+### Evaluating a ROS2 stack (Phase 4.1)
+
+`Ros2BridgeModel` (`arep/bridges/ros2_bridge.py`) is a `ModelInterface`. It publishes each
+tick's `Observation` over ZeroMQ PUB and returns the stack's latest command from a PULL socket
+(`arep/bridges/zmq_transport.py`). `ros2_bridge_node.py` (in `arep_implementation/`, imports
+nothing from `arep`) translates the ticks to `/orion/ego/odom` and `/orion/objects`, and
+`/orion/cmd` (`AckermannDriveStamped`) back into commands.
+
+- **Real time, and not seed-reproducible.** The model paces to the 20 ms timestep and the
+  newest command wins, so the trajectory and frame hash depend on the stack's timing. Never
+  present a ROS2 run as a deterministic result, and never compare its frame hash.
+- **Silence coasts.** No command for `stale_after` (0.5 s) gives `Action.zero()`, and the
+  report counts `coasted_ticks`. Tick 0 waits for the node's 1 Hz heartbeat.
+- **Sign convention**: ROS `steering_angle` is positive counter-clockwise, and so is ORION's
+  heading (positive steering increases it). The angle maps across with no sign flip.
+- The ORION-side sockets bind to loopback. The control socket drives the car, so keep it off
+  `0.0.0.0`.
 
 ### Action values
 
@@ -756,6 +776,12 @@ PYTHONPATH=. python -m arep.cli.run_suite --scenarios core --model emergency_bra
 # the absolute collision bar. A missing baseline is the normal first run and is
 # skipped rather than failing.
 PYTHONPATH=. python -m arep.cli.run_suite --scenarios all --model emergency_brake     --baseline ./results/orion_suite_report.json
+
+# ROS2 bridge (Phase 4.1). Needs ROS2 Humble + ros-humble-ackermann-msgs, or the image:
+docker build -f infrastructure/docker/Dockerfile.ros2 -t orion-ros2 .   # from repo root
+docker run --rm --network host --ipc host orion-ros2 --scenario-id LON-003 --seed 42   # both flags: DDS uses shared memory
+# ROS2 acceptance tests run inside that image (skip elsewhere); the fake-bridge tests run anywhere
+pytest tests/test_ros2_bridge.py
 
 # Start everything (from project root)
 ./start.sh        # Linux/Mac (bash)

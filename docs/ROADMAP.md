@@ -1378,7 +1378,7 @@ GET /api/models/{name}/history
 **Duration**: ~2.5 months
 **Goal**: remove reasons not to use ORION.
 
-## 4.1 — HTTP Model Bridge & ROS2 Connector (Non-Python Models) — ⚠ PARTIAL (HTTP bridge and hardened container path done; no ROS2 connector)
+## 4.1 — HTTP Model Bridge & ROS2 Connector (Non-Python Models) — ✅ DONE (2026-10-09; C++/MATLAB example adapters unspecified, see PENDING)
 
 The ORION side (`HttpModelAdapter`) is already built. This work package is documentation,
 example repositories and client adapters for **C++**, **MATLAB/Simulink**, and **ROS2**.
@@ -1397,11 +1397,29 @@ The bridge runs as a separate process alongside the API server: it subscribes to
 `PUB` socket the engine publishes to each tick, converts ticks to ROS2 messages, and reads
 the ego action back from a ROS2 control topic via a ZeroMQ `PUSH` socket.
 
-- **`arep/bridges/ros2_bridge.py`** — `publish_tick(world, outputs)` / `get_latest_control()`
-- **`arep/bridges/zmq_transport.py`** — `SimPublisher` (PUB, serialised `WorldState` per
-  tick), `ControlSubscriber` (PULL, receives `Action`)
-- **`ros2_bridge_node.py`** (top level, outside the `arep` package) — entry point:
-  `python ros2_bridge_node.py --scenario-id LON-003 --seed 42`
+- **`arep/bridges/ros2_bridge.py`** — `Ros2BridgeModel`, a `ModelInterface`, with
+  `publish_tick(observation)` / `get_latest_control()`. A ROS2 stack is scored through
+  `EvaluationRunner` like any other model. CLI: `python -m arep.bridges.ros2_bridge`.
+- **`arep/bridges/zmq_transport.py`** — `SimPublisher` (PUB, the `Observation` wire format per
+  tick — not `WorldState`, so a ROS2 stack sees exactly what every other model sees),
+  `ControlSubscriber` (PULL, AckermannDrive fields)
+- **`ros2_bridge_node.py`** (`arep_implementation/`, outside the `arep` package; imports
+  nothing from it) — entry point: `python ros2_bridge_node.py --scenario-id LON-003 --seed 42`
+- **`infrastructure/docker/Dockerfile.ros2`** — ROS2 Humble + ackermann_msgs + ORION.
+
+**As built** (2026-10-09):
+
+- **Real time, latest command wins.** The ORION side paces itself to the 20 ms timestep and
+  applies the newest `/orion/cmd` it has. A run through the bridge is therefore **not
+  reproducible from its seed** — the scenario draw is, the trajectory and frame hash are not.
+  A lock-step mode (`/clock` + `use_sim_time`) is in `docs/PENDING.md`.
+- **Control mapping**: `steering_angle` is positive counter-clockwise in ROS and in ORION's
+  heading, so it maps straight across (÷ `max_steering_angle`). `speed` is a target tracked
+  proportionally; `acceleration` caps the response, 0 meaning the vehicle limit.
+- **"Pauses" is read as**: tick 0 waits for the bridge's 1 Hz heartbeat. Mid-run, no fresh
+  command for 0.5 s means the ego **coasts** (`Action.zero()`), whether the stack or the
+  bridge node itself went away; a restarted node resumes the topics. The report counts
+  `coasted_ticks`.
 
 | ORION output | ROS2 topic | Message type |
 | --- | --- | --- |
@@ -1418,11 +1436,17 @@ the ROS2 environment, not pip).
 
 ### Acceptance Criteria
 
-- [ ] `python ros2_bridge_node.py --scenario-id LON-003 --seed 42` starts in a ROS2 Humble
+- [x] `python ros2_bridge_node.py --scenario-id LON-003 --seed 42` starts in a ROS2 Humble
       environment
-- [ ] `ros2 topic echo /orion/ego/odom` shows messages at ~50 Hz
-- [ ] Publishing a constant `AckermannDriveStamped` to `/orion/cmd` drives the ego
-- [ ] Disconnecting the ROS2 node pauses the simulation (no action = coast, not crash)
+- [x] `ros2 topic echo /orion/ego/odom` shows messages at ~50 Hz — `ros2 topic hz`: 49.96
+- [x] Publishing a constant `AckermannDriveStamped` to `/orion/cmd` drives the ego —
+      `speed: 0` took LON-003's ego from 19.2 to 3.2 m/s in 3 s
+- [x] Disconnecting the ROS2 node pauses the simulation (no action = coast, not crash) —
+      `kill -9` on the node mid-run: ORION finished, 1135 ticks coasted, exit 0
+
+Verified in `orion-ros2` (ros:humble-ros-base) **and** the native Humble install in WSL by
+`tests/test_ros2_integration.py` (3 tests, real time, ~1 min; skip without `rclpy`). `tests/test_ros2_bridge.py` (10) checks
+ORION's half against a fake bridge on every platform, and runs in CI.
 
 ## 4.2 — OpenDRIVE Map Support — ⚠ PARTIAL (parser works on line + arc; no `source: xodr` scenario wiring, spirals/poly3 skipped)
 

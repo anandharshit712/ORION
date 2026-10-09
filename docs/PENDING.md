@@ -454,12 +454,30 @@ The open question is what happens to in-flight work on a downgrade. Suggested st
 point: count running tasks only, a batch counts as one, return 429 at the cap, and let
 in-flight work finish.
 
+### ROS2 bridge: what 4.1 did not build
+The bridge works (`docs/ROADMAP.md` §4.1, verified under ROS2 Humble). Open around it:
+
+- **No lock-step mode.** The bridge runs in real time and applies the newest command, so a
+  ROS2 run is not reproducible from its seed. Lock-step needs ORION to publish `/clock`, the
+  stack to run with `use_sim_time`, and the bridge to wait for a command stamped with the
+  current tick. Worth doing once a customer needs a ROS2 result to be re-runnable.
+- **Not reachable over the API or dashboard.** It is a CLI run on a host with ROS2 next to
+  it: `ros2_bridge_node.py` or `python -m arep.bridges.ros2_bridge`. Hosting it means a
+  per-run DDS domain and a network story for the customer's stack. Nobody has asked for it.
+- **No TF.** Objects arrive in `base_link` and odom in `map`, but no `map -> base_link`
+  transform is published, so RViz needs a static transform to show both.
+- **`Dockerfile.ros2` is not built in CI.** `docker-build.yml` builds the API, worker and CLI
+  images only. Add it there if the image starts being published.
+- **C++ and MATLAB/Simulink example adapters.** The roadmap names them in one sentence with
+  no spec and no criteria. Both are HTTP clients of the existing `POST /predict` and
+  `POST /reset` contract (`models/http_adapter.py`). Build them when a customer on those
+  stacks asks, against what they actually run.
+
 ---
 
 ## Not started, by design
 
 Tracked in `docs/ROADMAP.md`; listed here so the file reads as a complete picture.
 
-- **ROS2 connector (4.1)** — the HTTP model bridge exists; no `rclpy` transport.
 - **Standards alignment (4.5)** — no ISO 26262/21448 traceability matrix or ODD declarations. Certification is never claimed.
 - **Sensor simulation (Phase 6)** — observation is ground-truth state. No LiDAR, camera, GPS/IMU. Until it ships, ORION is planning/control evaluation: do not promise perception testing anywhere.
