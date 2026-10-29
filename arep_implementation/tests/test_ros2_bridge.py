@@ -56,13 +56,22 @@ class FakeBridge(threading.Thread):
         sub.setsockopt(zmq.SUBSCRIBE, b"")
         sub.connect(self.tick_ep)
         last_beat = 0.0
+
+        def send(message):
+            # NOBLOCK like the real node: a blocking PUSH stalls this loop once
+            # ORION stops reading, and then the final "end" is never read.
+            try:
+                push.send_json(message, flags=zmq.NOBLOCK)
+            except zmq.Again:
+                pass
+
         while not self.stop.is_set():
             now = time.monotonic()
             if self.heartbeat and now - last_beat > 0.05:
-                push.send_json({"type": "hello"})
+                send({"type": "hello"})
                 last_beat = now
             if self.command is not None:
-                push.send_json({"type": "control", **self.command})
+                send({"type": "control", **self.command})
             if sub.poll(2):
                 msg = sub.recv_json()
                 if msg["type"] == "tick":
@@ -146,7 +155,8 @@ def test_a_silent_stack_coasts_rather_than_crashing():
     # Connected (heartbeats) but never commands: every tick is a coast.
     result, model, bridge = _run(command=None)
     speeds = [t["obs"]["ego"]["velocity"] for t in bridge.ticks]
-    assert model.coasted_ticks == len(bridge.ticks)
+    # Against ticks published, not received: a full-speed run may drop some.
+    assert model.coasted_ticks == model._seq
     assert all(b <= a + 1e-9 for a, b in zip(speeds, speeds[1:]))  # never speeds up
     assert result.termination_reason != "model_error"
 
