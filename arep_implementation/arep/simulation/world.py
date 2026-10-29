@@ -103,7 +103,10 @@ class WorldManager:
 
             btype = behavior["type"]
 
-            if btype in ("reactive_vehicle", "reactive_pedestrian"):
+            # A declared bt_type runs its tree whatever the behaviour type says.
+            # Keying this on type left eleven `type: pedestrian` NPCs walking
+            # straight lines past the trees their scenarios named.
+            if behavior.get("bt_type"):
                 bt = npc_bt.get_bt(behavior["bt_type"])
                 new_obj = bt.tick(obj, behavior, world, rng, dt)
             elif btype == "scripted":

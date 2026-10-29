@@ -9,10 +9,6 @@ scenario:
     Triggering condition: the lead vehicle in the ego lane begins a sustained moderate
     deceleration 3 s into the run. Hazardous event: rear-end collision with the lead
     vehicle.
-  verification_gap: >-
-    The parameterised initial_decel range is never read: the lead uses the scripted
-    behaviour, which reads post_acceleration, so it decelerates at 2 m/s2 on every run
-    and the deceleration does not vary as the parameterisation block implies.
   duration: 30.0
 
 ego:
@@ -77,7 +73,7 @@ parameterization:
         min: 19.44
         max: 27.78
       parameters:
-        initial_decel:
+        post_acceleration:
           min: -2.5
           max: -1.0
 

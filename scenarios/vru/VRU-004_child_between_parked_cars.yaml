@@ -45,17 +45,15 @@ traffic:
       x: 38.0
       y: -7.0
       heading: 1.5708
-      velocity: 2.8
+      velocity: 0.0
     behavior:
-      type: pedestrian
+      # Scripted, not a tree: the requirement is a child who runs without
+      # hesitating, and both pedestrian trees pause, reverse or retreat.
+      type: scripted
       parameters:
-        bt_type: erratic_pedestrian
         trigger_type: proximity
         trigger_value: 30.0
-        walk_speed:
-          min: 2.2
-          max: 3.8
-        direction_change_prob: 0.15
+        start_velocity: 3.0
 
 termination:
   conditions:
@@ -85,6 +83,6 @@ parameterization:
         trigger_value:
           min: 20.0
           max: 38.0
-        walk_speed:
+        start_velocity:
           min: 2.0
           max: 4.2

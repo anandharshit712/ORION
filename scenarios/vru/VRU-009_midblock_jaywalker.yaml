@@ -45,14 +45,14 @@ traffic:
       x: 48.0
       y: -7.0
       heading: 1.0472
-      velocity: 1.6
+      velocity: 0.0
     behavior:
       type: pedestrian
       parameters:
         bt_type: erratic_pedestrian
         trigger_type: proximity
         trigger_value: 26.0
-        walk_speed:
+        walk_speed_range:
           min: 1.2
           max: 2.2
         direction_change_prob: 0.1
@@ -85,6 +85,6 @@ parameterization:
         trigger_value:
           min: 18.0
           max: 32.0
-        walk_speed:
+        walk_speed_range:
           min: 1.0
           max: 2.5

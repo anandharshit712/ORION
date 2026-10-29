@@ -324,7 +324,8 @@ class ScenarioExecutor:
         registry = {}
         for obj_def in scenario.traffic_objects:
             btype = obj_def.behavior.type
-            if btype == "constant_velocity":
+            bt_type = obj_def.behavior.parameters.get("bt_type", "")
+            if btype == "constant_velocity" and not bt_type:
                 continue
             entry: dict = {
                 "type": btype,
@@ -332,9 +333,9 @@ class ScenarioExecutor:
                 "_triggered": False,
                 "_trigger_time": None,
             }
-            # Carry bt_type for reactive_vehicle / reactive_pedestrian dispatch
-            if btype in ("reactive_vehicle", "reactive_pedestrian"):
-                entry["bt_type"] = obj_def.behavior.parameters.get("bt_type", "")
+            # Any declared tree is dispatched on, whatever the behaviour type.
+            if bt_type:
+                entry["bt_type"] = bt_type
             registry[obj_def.id] = entry
         return registry
 

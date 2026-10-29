@@ -37,8 +37,31 @@ class ScenarioValidator:
         errors.extend(self._check_road(scenario))
         errors.extend(self._check_traffic_ids(scenario))
         errors.extend(self._check_events(scenario))
+        errors.extend(self._check_behavior_trees(scenario))
         errors.extend(self._check_constraints(scenario))
 
+        return errors
+
+    @staticmethod
+    def _check_behavior_trees(s: ScenarioDefinition) -> List[str]:
+        """A named tree must exist, and must not compete with a script."""
+        from arep.simulation.npc_bt import _BT_REGISTRY
+
+        errors = []
+        for obj in s.traffic_objects:
+            bt_type = obj.behavior.parameters.get("bt_type")
+            if not bt_type:
+                continue
+            if bt_type not in _BT_REGISTRY:
+                errors.append(
+                    f"Traffic object {obj.id!r} names unknown bt_type {bt_type!r}; "
+                    f"registered trees are {sorted(_BT_REGISTRY)}"
+                )
+            if obj.behavior.type == "scripted":
+                errors.append(
+                    f"Traffic object {obj.id!r} is scripted and also names "
+                    f"bt_type {bt_type!r}; only one of them can drive it"
+                )
         return errors
 
     @staticmethod
