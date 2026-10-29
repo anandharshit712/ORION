@@ -245,7 +245,9 @@ Stated so that nobody infers coverage that is not there:
   one. The roundabout template compounds this with a single-lane circulating
   carriageway that only a lane-follower can hold.
 - **No certification claim.** ORION is not an ISO 26262 or ISO 21448 tool and
-  produces no evidence package for either.
+  produces no evidence package for either. `docs/STANDARDS.md` sets out where it
+  can sit in such a process, the tool-confidence argument and its limits, and how
+  to generate the traceability matrix and ODD statement.
 
 ---
 
