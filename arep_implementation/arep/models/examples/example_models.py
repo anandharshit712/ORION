@@ -59,24 +59,35 @@ class SimpleLaneKeepModel(ModelInterface):
     """
     Basic lane-keeping model using a PD controller.
 
-    Steering = -(Kp × lane_offset + Kd × heading_error)
+    Steering = Kp × lane_offset − Kd × heading_error
     Throttle is set to maintain target velocity.
+
+    Signs: steering is positive-left, lane_offset is negative-left and the
+    heading error is positive when pointing left of the lane. Drifted left, the
+    offset term steers right; pointing left, the heading term steers right.
+
+    Gains come from the kinematic bicycle model, not from any scenario. With
+    steering scaled to max_steering_angle (0.5 rad) and wheelbase L, the lateral
+    error obeys y'' + (0.5·v·kd/L)·y' + (0.5·v²·kp/L)·y = 0, whose damping ratio
+    ζ = kd / (4·√(0.5·kp·L)) does not depend on speed. kp=0.1, kd=1.0 gives
+    ζ ≈ 0.68 at L = 2.7 m. The previous 0.3/0.1 gave ζ ≈ 0.04 -- an oscillator --
+    which the wrong offset sign had been hiding.
     """
 
     def __init__(
         self,
         target_velocity: float = 20.0,
-        kp: float = 0.3,
-        kd: float = 0.1,
+        kp: float = 0.1,
+        kd: float = 1.0,
     ):
         self.target_velocity = target_velocity
         self.kp = kp
         self.kd = kd
 
     def predict(self, observation: Observation) -> Action:
-        # Steering: PD control on lane offset
-        steering = -(
-            self.kp * observation.lane_offset + self.kd * observation.lane_heading_error
+        # Steering: PD control on lane offset (signs in the class docstring)
+        steering = (
+            self.kp * observation.lane_offset - self.kd * observation.lane_heading_error
         )
         steering = clamp(steering, -1.0, 1.0)
 
@@ -168,8 +179,9 @@ class ReferenceDriverModel(ModelInterface):
     def __init__(
         self,
         desired_headway: float | None = None,
-        kp: float = 0.35,
-        kd: float = 0.15,
+        # Lateral gains: see SimpleLaneKeepModel for the derivation (ζ ≈ 0.68).
+        kp: float = 0.1,
+        kd: float = 1.0,
     ):
         self.desired_headway = (
             self.DESIRED_HEADWAY if desired_headway is None else desired_headway
@@ -315,8 +327,9 @@ class ReferenceDriverModel(ModelInterface):
             brake = clamp(-accel / self.NOMINAL_DECEL, 0.0, 1.0)
 
         # ── Lateral ───────────────────────────────────────────────────
-        steering = -(
-            self.kp * observation.lane_offset + self.kd * observation.lane_heading_error
+        # Same PD law and signs as SimpleLaneKeepModel.
+        steering = (
+            self.kp * observation.lane_offset - self.kd * observation.lane_heading_error
         )
 
         # Evasion, only when braking alone cannot solve it. Bounded so the car
