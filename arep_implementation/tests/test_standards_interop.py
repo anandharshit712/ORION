@@ -50,7 +50,7 @@ XODR = """<?xml version="1.0"?>
     <lanes><laneSection s="0"><right>
       <lane id="-1" type="driving"><width a="3.5"/></lane>
     </right></laneSection></lanes>
-    <signals><signal id="9" name="light"/></signals>
+    <signals><signal id="9" name="light" dynamic="yes"/></signals>
   </road>
   <junction id="10" name="jct">
     <connection id="0" incomingRoad="1" connectingRoad="2"/>
@@ -101,8 +101,14 @@ def test_arc_geometry_actually_curves(xodr_file):
 
 
 def test_an_arc_with_no_curvature_is_a_straight_line():
-    points = OpenDRIVEParser._discretise_arc(0.0, 0.0, 0.0, 10.0, 0.0)
-    assert all(abs(p.y) < 1e-9 for p in points)
+    import xml.etree.ElementTree as ET
+
+    from arep.maps.xodr_parser import _dense_geometry
+
+    _, _, y, _ = _dense_geometry(
+        ET.fromstring('<geometry length="10"><arc curvature="0"/></geometry>')
+    )
+    assert all(abs(v) < 1e-9 for v in y)
 
 
 def test_junction_right_of_way_defaults_to_yield(xodr_file):
@@ -119,11 +125,9 @@ def test_a_signal_marks_the_junction_as_signalised(xodr_file):
 
 
 def test_unsupported_geometry_is_skipped_and_reported(caplog):
-    """A vendor map will contain spirals this subset does not model. Refusing
+    """A vendor map will contain geometry this subset does not model. Refusing
     the whole file would make the importer useless for its real inputs."""
-    xodr = XODR.replace(
-        '<arc curvature="0.02"/>', "<spiral curvStart='0' curvEnd='0.1'/>"
-    )
+    xodr = XODR.replace('<arc curvature="0.02"/>', "<clothoidSpline/>")
     with tempfile.NamedTemporaryFile(
         "w", suffix=".xodr", delete=False, encoding="utf-8"
     ) as handle:

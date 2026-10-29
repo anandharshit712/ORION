@@ -272,8 +272,9 @@ class LaneInfo:
         """
         Signed lateral offset from the centerline (Phase 0.5, defect D-05).
 
-        Negative is left of the direction of travel, positive is right, matching
-        the sign convention on ``Action.steering``. The sign is what makes the
+        Negative is left of the direction of travel, positive is right -- the
+        opposite of ``Action.steering``, where positive turns left, so a
+        correcting steer has the same sign as this offset. The sign is what makes the
         number diagnostic: "drifted 0.4 m" says nothing about which way, so a
         model that oscillates and one that holds a constant offset look
         identical in the aggregate.

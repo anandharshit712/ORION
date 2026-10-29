@@ -1448,7 +1448,7 @@ Verified in `orion-ros2` (ros:humble-ros-base) **and** the native Humble install
 `tests/test_ros2_integration.py` (3 tests, real time, ~1 min; skip without `rclpy`). `tests/test_ros2_bridge.py` (10) checks
 ORION's half against a fake bridge on every platform, and runs in CI.
 
-## 4.2 — OpenDRIVE Map Support — ⚠ PARTIAL (parser works on line + arc; no `source: xodr` scenario wiring, spirals/poly3 skipped)
+## 4.2 — OpenDRIVE Map Support — ✅ DONE except `POST /api/maps/upload` (2026-10-29; browser rendering unverified)
 
 Load a standard `.xodr` file and convert it to an ORION `RoadGraph`, unlocking real-world
 road geometry exported from HD map tools, CARLA, or public datasets. A subset is enough —
@@ -1481,12 +1481,20 @@ environment:
 
 ### Acceptance Criteria
 
-- [~] OpenDRIVE parses to a `RoadGraph` — verified on line + arc geometry.
-      **The named fixture `tests/fixtures/TownSimple.xodr` does not exist**; the parser is
-      tested against generated XML instead. Spirals and poly3 are skipped and logged.
+- [x] OpenDRIVE parses to a `RoadGraph` — line, arc, spiral, poly3 and paramPoly3 (both
+      pRange modes), a junction with connecting roads and a signal, on the hand-authored
+      `tests/fixtures/xodr/orion_junction.xodr`. Arc and spiral end points match closed forms to
+      ~4 µm. `TownSimple.xodr` was never committed and no permissively licensed third-party map
+      is used. Unmodelled content (`<object>`, laneOffset, tapers, later laneSections) is
+      reported in `XodrMap.warnings`.
 - [x] `is_off_road()` is correct for known on/off-road positions
-- [ ] A scenario using `source: xodr` runs to completion; Three.js renders the geometry —
-      **not implemented**: scenarios select geometry with `template:`, not `source: xodr`
+- [~] A scenario using `source: xodr` runs to completion; Three.js renders the geometry —
+      XODR-001 (test fixture, in no suite) runs 30 s and `emergency_brake` passes (0.9924).
+      `ReferenceDriver` leaves the road 10/10 on the first clothoid because of a pre-existing
+      sign error in its lane-keeping term (PENDING), not the map. Geometry reaches the viewer
+      via `GET /api/runs/{id}/road`, outside the hashed frames; rendering in a browser is not
+      verified.
+- [ ] `POST /api/maps/upload` — not built: nothing can reference an uploaded map yet (PENDING).
 
 ## 4.3 — Scenario Library Expansion (18 → 60) — ✅ DONE (60 of 60, 2026-09-29)
 

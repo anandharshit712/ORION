@@ -27,7 +27,7 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 
 Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), **`docs/STANDARDS.md`** (the ISO 26262 Clause 11 tool-confidence argument, the SOTIF mapping, how to generate the traceability matrix and ODD statement, and every limit a safety engineer must argue around — it never claims certification, and is updated in the same change as any limit it lists), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. **4.4 (OSC2 round trip)** is complete bar a third-party sample file, and **4.5 (standards alignment)** is complete (both 2026-10-29). Remaining in Phase 4: the partial 4.2 (OpenDRIVE scenario wiring). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. **4.4 (OSC2 round trip)** is complete bar a third-party sample file, and **4.5 (standards alignment)** is complete (both 2026-10-29). **4.2 (OpenDRIVE scenarios)** is complete except `POST /api/maps/upload`. **Phase 4's build items are done**; what remains (upload, third-party fixture files) is blocked on a design decision or a licence, not code. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -209,7 +209,7 @@ nothing from `arep`) translates the ticks to `/orion/ego/odom` and `/orion/objec
 
 `Action` has three normalized fields, all in `[-1.0, 1.0]`:
 
-- `steering`: negative = left, positive = right (maps to ±`max_steering_angle = 0.5 rad`)
+- `steering`: **positive = left, negative = right** (maps to ±`max_steering_angle = 0.5 rad`). Positive steering increases the heading, which is counter-clockwise — the physics (`θ' = v/L·tan(δ)`) and the ROS2 bridge agree. This line used to say the opposite; `lane_offset` is negative to the left, so a correct lane-keeper steers `+kp·lane_offset`. The bundled `SimpleLaneKeep` and `ReferenceDriver` still have it backwards (`docs/PENDING.md`).
 - `throttle`: `[0.0, 1.0]` — maps to `max_acceleration = 3.0 m/s²`
 - `brake`: `[0.0, 1.0]` — maps to `max_deceleration = 8.0 m/s²`
 
@@ -323,6 +323,31 @@ environment:
 - Topology is declared, not inferred from `road_type`: "urban" describes a speed limit and a
   feel, not a shape — INT-001 is a four-way stop and LAT-001 is a straight road, and both are
   urban.
+
+### OpenDRIVE roads (Phase 4.2)
+
+```yaml
+environment:
+  road:
+    source: xodr
+    file: ../maps/my_map.xodr   # relative to the scenario; may not leave the library root
+    ego_start_road_id: "1"
+    ego_start_s: 10.0
+    ego_start_lane_id: "-1"
+```
+
+- The map supplies lanes, lane width, speed limit and the ego's x/y/heading. Stating any of
+  them as well, or parameterising `ego_x`/`ego_y`/`ego_x_jitter`, is a `ScenarioParseError`,
+  as is every bad reference (road, lane, s, file, a path outside the library root). There is
+  no fallback to the flat road.
+- The segment centreline is the reference line offset to the middle of the driving lanes (the
+  OpenDRIVE reference line is often an edge), so the shared lane-centre formula still holds.
+  Oncoming lanes are in `RoadSegment.reversed_lanes` and get reversed centrelines. Lane 0 is
+  the rightmost driving lane.
+- The map's SHA-256 is folded into the scenario content hash, and a map changed after parsing
+  is refused at run time. Only `dynamic="yes"` signals make a traffic light.
+- Unmodelled content goes to `XodrMap.warnings`. OSC2 export and replay refuse xodr
+  scenarios (see PENDING). Fixtures: `tests/fixtures/xodr/` (hand-authored).
 
 ### Requirement metadata (Phase 4.5)
 
@@ -510,6 +535,7 @@ GET    /results/batch/{batch_job_id}
 POST   /api/runs/                body: {scenario_path, model_name, master_seed, tick_interval}
 GET    /api/runs/                list live runs (returns score fields after completion)
 GET    /api/runs/{run_id}        live-run status + scores
+GET    /api/runs/{run_id}/road   lane centrelines + widths for the viewer — static per run, deliberately outside the hashed tick frames
 DELETE /api/runs/{run_id}        cancel a live run
 POST   /api/runs/{run_id}/ws-ticket  mint a single-use 60s WebSocket ticket (auth required, run must be yours)
 WS     /ws/simulation/{run_id}   live tick frames (auth: ?ticket=<single-use ticket>; 4401 close if refused)
@@ -667,6 +693,7 @@ Backend streams at `WS /ws/simulation/{run_id}?token=<jwt>`; consumer wired end-
 - `src/hooks/useSimulationStream.js` — owns WebSocket. Returns `{ frame, isConnected, status, error, latencyRef }`. Handles exponential-backoff reconnect (max 3 attempts), cleans up on unmount. Don't open sockets from components directly.
 - `src/components/simulation/SimulationViewer.jsx` — R3F scene (road, ego, NPCs) + HTML HUD overlay (sim time, speed, g-force, metric bars, verdict badge). Mounted at `/simulation/:runId`. Has `← Dashboard` back button (`.btn-ghost`, top). Scene + overlay restyled to Mission Control palette; HUD = glassless instrument panels.
 - Frame shape frozen in `SimulationEngine.get_tick_frame()`. To extend protocol: add fields there, consume in hook/viewer.
+- The viewer draws lanes from `api.getRunRoad` (`GET /api/runs/{id}/road`). **Never put road geometry in `get_tick_frame()`** — it is static per run, and adding it to the per-tick frame would change every stored frame hash.
 - **Auth is a ticket, never the JWT (Phase 0.4, D-04).** The hook calls `api.createWsTicket()` per
   connection attempt, then connects with `?ticket=`. Tickets are single-use and expire in 60 s
   (`arep/api/ws_tickets.py`, in-memory alongside `sim_registry`). A refused credential closes
@@ -1058,7 +1085,7 @@ the module docstring before assuming coverage.
 | `reporting/pdf_generator.py` | Jinja2 → HTML → PDF | `render_html()` works anywhere; PDF needs WeasyPrint's GTK libraries, absent on Windows |
 | `cli/run_suite.py` | CI entrypoint | Exit **0** pass / **1** model failed / **2** ORION could not answer — keep 1 and 2 distinct |
 | `ci/orion-ci.sh` | The CI entrypoint both integrations run | Configured only by `ORION_*` env vars; must stay LF and must not use `set -e` |
-| `maps/xodr_parser.py` | OpenDRIVE → `RoadGraph` | Line and arc geometry only; spirals and poly3 are skipped **and logged** |
+| `maps/xodr_parser.py` | OpenDRIVE → `RoadGraph`, wired through `environment.road.source: xodr` | Line, arc, spiral, poly3, paramPoly3; first laneSection only; `<object>`, laneOffset and tapers reported in `XodrMap.warnings`, not modelled. DOCTYPE/ENTITY refused |
 | `scenario/osc_importer.py`, `osc_exporter.py`, `api/osc_routes.py` | OpenSCENARIO 2.0 ↔ `ScenarioDefinition`; export and parse-only import over HTTP | A line reader for the modelled subset, not a conforming parser. Fields with no OSC2 construct travel as `#@orion` annotation lines (comments to other tools). All 59 loadable scenarios round-trip with the whole `ScenarioDefinition` equal, parameterisation included as `keep()` ranges. Third-party paths, lanes, relative positions and lane changes are skipped and returned in `skipped`. **Extend exporter and importer together** — each field is encoded exactly once, as OSC2 or as an annotation, never both; `tests/test_osc_round_trip.py` compares the full dataclass for every library scenario |
 
 **The rule these share**: unsupported input is skipped *and reported*, never silently dropped.

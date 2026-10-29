@@ -60,6 +60,10 @@ class LiveRun:
     # Two runs of the same (model, scenario, seed) must end with the same digest.
     frame_hasher: "FrameHasher" = field(default_factory=lambda: FrameHasher())
     frame_hash: Optional[str] = None
+    # Lane geometry for the viewer (Phase 4.2), served by GET /api/runs/{id}/road.
+    # Sent once, outside the per-tick frames, so it can never reach FrameHasher:
+    # adding it to get_tick_frame() would have moved every stored digest.
+    road: Optional[Dict[str, Any]] = None
 
     # Pub/sub ────────────────────────────────────────────────────────
 
@@ -231,6 +235,18 @@ async def start_run(
         org_id=org_id,
         user_id=user_id,
         replay_of=replay_of,
+        road={
+            "lanes": [
+                {
+                    "id": lane.lane_id,
+                    "width": lane.width,
+                    "points": [
+                        [round(p.x, 2), round(p.y, 2)] for p in lane.centerline_points
+                    ],
+                }
+                for lane in initial_world.lanes
+            ]
+        },
     )
 
     def on_canonical(world, action) -> None:

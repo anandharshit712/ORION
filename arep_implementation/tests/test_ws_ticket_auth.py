@@ -247,3 +247,59 @@ def test_ws_url_from_the_endpoint_carries_no_jwt(client, token):
     assert "token=" not in body["ws_url"]
     assert token not in body["ws_url"]
     assert body["expires_in"] == 60
+
+
+# -- Road geometry for the viewer (4.2) -----------------------------------
+
+
+def test_road_endpoint_serves_the_runs_lane_geometry(client, token):
+    """Sent once, outside the hashed tick frames, so the viewer can draw the
+    real road without moving any frame digest."""
+    from pathlib import Path
+
+    scenario = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "xodr"
+        / "XODR-001_curved_signal_approach.yaml"
+    )
+    r = client.post(
+        "/api/runs/",
+        json={
+            "scenario_path": str(scenario),
+            "model_name": "EmergencyBrake",
+            "master_seed": 1,
+            "tick_interval": 0.0,
+        },
+        headers=_auth(token),
+    )
+    assert r.status_code == 201, r.text
+    road = client.get(f"/api/runs/{r.json()['run_id']}/road", headers=_auth(token))
+    assert road.status_code == 200
+    lanes = road.json()["lanes"]
+    # the curved right-turn connector reaches the viewer
+    assert "road_11_lane_0" in {lane["id"] for lane in lanes}
+    assert all(len(lane["points"]) >= 2 and lane["width"] > 0 for lane in lanes)
+
+
+def test_road_endpoint_404s_for_another_orgs_run(client, token):
+    import asyncio
+
+    from arep.api.sim_registry import LiveRun, get_registry
+
+    foreign = LiveRun(
+        run_id="foreign-road-run",
+        scenario_path="x",
+        scenario_name="x",
+        model_name="EmergencyBrake",
+        master_seed=1,
+        status="running",
+        started_at="2026-09-20T00:00:00Z",
+        org_id="some-other-org",
+        road={"lanes": []},
+    )
+    asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
+        get_registry().register(foreign)
+    )
+    r = client.get("/api/runs/foreign-road-run/road", headers=_auth(token))
+    assert r.status_code == 404

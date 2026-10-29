@@ -19,7 +19,7 @@ Design rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 
 from arep.core.state import Vector2D
 from arep.core.physics import SurfaceType
@@ -46,6 +46,10 @@ class RoadSegment:
     surface: SurfaceType = SurfaceType.DRY_ASPHALT
     heading_start: float = 0.0  # radians at start of segment
     heading_end: float = 0.0  # radians at end of segment
+    # Lane indices whose traffic runs against the centreline direction (the
+    # oncoming side of an OpenDRIVE road). Templates leave it empty: every lane
+    # they build runs along its centreline.
+    reversed_lanes: Tuple[int, ...] = ()
 
     @property
     def length(self) -> float:
@@ -74,7 +78,8 @@ class RoadSegment:
                 f"lane_index {lane_index} out of range for segment "
                 f"{self.segment_id!r} ({self.lane_count} lanes)"
             )
-        # Offset from road center: negative = left of travel direction
+        # Offset from road center along the CCW (left) normal: negative = right of travel
+        # direction, so lane 0 is the rightmost lane
         lane_offset = (lane_index - (self.lane_count - 1) / 2.0) * self.lane_width
         result = []
         for i, pt in enumerate(self.centerline):

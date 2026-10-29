@@ -659,6 +659,22 @@ async def get_live_run(run_id: str, request: Request):
     return RunStatusResponse(**run.to_dict())
 
 
+@runs_router.get("/{run_id}/road")
+async def get_live_run_road(run_id: str, request: Request):
+    """The run's lane centrelines and widths, for the viewer to draw (4.2).
+
+    Static for the run, so it is fetched once here rather than repeated in
+    every tick frame -- where it would also have changed every frame hash.
+    """
+    org_id, _, _ = get_request_principal(request)
+    from arep.api.sim_registry import get_registry
+
+    run = await get_registry().get(run_id)
+    if run is None or run.org_id != org_id:
+        raise HTTPException(404, "Run not found")
+    return run.road or {"lanes": []}
+
+
 @runs_router.delete("/{run_id}", status_code=204)
 async def cancel_live_run(run_id: str, request: Request):
     org_id, _, _ = get_request_principal(request)

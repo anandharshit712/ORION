@@ -15,7 +15,6 @@ committed. Those stay unticked.
 
 from __future__ import annotations
 
-import os
 import sys
 import traceback
 from pathlib import Path
@@ -539,42 +538,84 @@ def _suites_partition_the_library():
     return f"{len(sellable)} sellable suites partition {len(everything)} scenarios"
 
 
-def _xodr_named_fixture():
-    raise NotImplementedError(
-        "tests/fixtures/TownSimple.xodr does not exist; the parser is tested "
-        "against generated XML instead"
-    )
+XODR_DIR = REPO / "arep_implementation" / "tests" / "fixtures" / "xodr"
+XODR_SCENARIO = XODR_DIR / "XODR-001_curved_signal_approach.yaml"
 
 
-def _xodr_parses_at_all():
-    xml = """<?xml version="1.0"?>
-<OpenDRIVE>
-  <road name="a" length="100.0" id="1" junction="-1">
-    <planView>
-      <geometry s="0" x="0" y="0" hdg="0" length="50"><line/></geometry>
-      <geometry s="50" x="50" y="0" hdg="0" length="50">
-        <arc curvature="0.01"/>
-      </geometry>
-    </planView>
-    <lanes><laneSection s="0">
-      <right><lane id="-1" type="driving"><width sOffset="0" a="3.5"/></lane></right>
-    </laneSection></lanes>
-  </road>
-</OpenDRIVE>"""
-    import tempfile
+def _xodr_fixture_parses():
+    """Every geometry the spec requires, a junction and a signal, in one map.
+
+    The fixture is hand-authored (the roadmap's TownSimple.xodr was never
+    committed and no permissively licensed one was found)."""
+    import xml.etree.ElementTree as ET
 
     from arep.maps.xodr_parser import OpenDRIVEParser
 
-    with tempfile.NamedTemporaryFile("w", suffix=".xodr", delete=False) as fh:
-        fh.write(xml)
-        path = fh.name
-    try:
-        graph = OpenDRIVEParser().parse(path)
-    finally:
-        os.unlink(path)
+    path = XODR_DIR / "orion_junction.xodr"
+    required = {"line", "arc", "spiral", "poly3", "paramPoly3"}
+    tags = {g[0].tag for g in ET.parse(path).getroot().iter("geometry")}
+    assert required <= tags, f"fixture lacks {sorted(required - tags)}"
+    xmap = OpenDRIVEParser().read(path.read_bytes(), path.name)
+    assert len(xmap.graph.segments) == 5, f"roads skipped: {xmap.warnings}"
+    assert xmap.graph.junctions["junction_100"].has_traffic_light, "signal lost"
+    return (
+        f"5 roads from {', '.join(sorted(required))}; signalised junction; "
+        f"{len(xmap.warnings)} unmodelled item(s) reported"
+    )
 
-    assert graph.segments, "no segments parsed"
-    return f"{len(graph.segments)} segment(s) from line + arc geometry"
+
+def _xodr_scenario_runs():
+    from arep.core.observation import Observation
+    from arep.core.random_manager import RandomManager
+    from arep.config import get_config
+    from arep.execution.runner import EvaluationRunner
+    from arep.models.examples.example_models import EmergencyBrakeModel
+    from arep.scenario.executor import ScenarioExecutor
+    from arep.scenario.parser import ScenarioParser
+
+    scenario, _ = ScenarioParser().parse_file(XODR_SCENARIO)
+    world = ScenarioExecutor(get_config().simulation).create_initial_world(
+        scenario, RandomManager(1)
+    )
+    offset = Observation.from_world_state(world).lane_offset
+    assert abs(offset) < 0.05, f"ego starts {offset:.3f} m off its lane centre"
+
+    result = EvaluationRunner().run_single(
+        str(XODR_SCENARIO), EmergencyBrakeModel(), 4201
+    )
+    assert result.termination_reason not in (
+        "off_road",
+        "collision",
+    ), result.termination_reason
+    return (
+        f"XODR-001 ran {result.duration:.1f} s (EmergencyBrake), ego starts "
+        f"{abs(offset):.3f} m from its lane centre"
+    )
+
+
+def _xodr_geometry_served_to_viewer():
+    import asyncio
+
+    from arep.api.sim_registry import start_run
+
+    async def lanes():
+        run = await start_run(str(XODR_SCENARIO), "EmergencyBrake", 1, 0.0)
+        if run.producer_task is not None:
+            run.producer_task.cancel()
+        return run.road["lanes"]
+
+    served = asyncio.run(lanes())
+    assert "road_11_lane_0" in {lane["id"] for lane in served}, "curve not served"
+    return (
+        f"{len(served)} lanes via GET /api/runs/{{id}}/road, outside the hashed frames"
+    )
+
+
+def _xodr_rendered_in_browser():
+    raise NotImplementedError(
+        "SimulationViewer draws the served lanes (Lane ribbons); seeing them "
+        "needs a browser and a running stack"
+    )
 
 
 def _osc_named_fixture():
@@ -842,8 +883,23 @@ CRITERIA = [
         "ROS2: starts, odom ~50 Hz, /orion/cmd drives, node loss coasts",
         _ros2_acceptance,
     ),
-    ("4.2", "Parsing TownSimple.xodr", _xodr_named_fixture),
-    ("4.2", "XODR line+arc geometry parses to a RoadGraph", _xodr_parses_at_all),
+    (
+        "4.2",
+        "OpenDRIVE fixture (line/arc/spiral/poly3/paramPoly3, junction, signal) "
+        "parses to a RoadGraph",
+        _xodr_fixture_parses,
+    ),
+    (
+        "4.2",
+        "A source: xodr scenario runs to completion, ego in its lane",
+        _xodr_scenario_runs,
+    ),
+    (
+        "4.2",
+        "xodr geometry reaches the viewer without entering frame hashes",
+        _xodr_geometry_served_to_viewer,
+    ),
+    ("4.2", "Three.js renders the xodr geometry", _xodr_rendered_in_browser),
     ("4.4", "Importing the ASAM CutIn.osc sample", _osc_named_fixture),
     ("4.4", "LON-003 exports to OSC2 and re-imports", _osc_export_roundtrip),
     (
