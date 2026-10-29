@@ -37,10 +37,30 @@ class SimPublisher:
         # A slow bridge must not grow ORION's memory: drop ticks it cannot keep
         # up with rather than queue them. A stale tick is worthless anyway.
         self._sock.setsockopt(zmq.SNDHWM, 10)
+        # PUB drops at the HWM silently, and would drop the final "end" with
+        # the ticks. NODROP makes a full queue an EAGAIN instead, so each send
+        # chooses: ticks are dropped, "end" waits. It must be set before bind;
+        # set later, libzmq ignores it.
+        self._sock.setsockopt(zmq.XPUB_NODROP, 1)
         self._sock.bind(endpoint)
 
     def send(self, message: Dict[str, Any]) -> None:
-        self._sock.send_json(message)
+        try:
+            self._sock.send_json(message, flags=zmq.NOBLOCK)
+        except zmq.Again:
+            pass  # bridge behind: drop the tick
+
+    def send_last(self, message: Dict[str, Any], timeout_ms: int = 500) -> None:
+        """Send a message that must not be dropped, waiting up to `timeout_ms`.
+
+        A bridge that is stuck rather than slow still gets nothing; it sees
+        the ticks stop.
+        """
+        self._sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
+        try:
+            self._sock.send_json(message)
+        except zmq.Again:
+            pass
 
     def close(self) -> None:
         # Brief linger so a final "end" message still leaves the socket.

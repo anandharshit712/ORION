@@ -180,6 +180,39 @@ def test_no_bridge_is_a_clear_error_not_a_hang():
     assert time.monotonic() - t0 < 5.0
 
 
+def test_the_end_message_survives_a_bridge_that_has_fallen_behind():
+    # Both queues full when the run ends: plain PUB drops "end" with the ticks.
+    # This is what failed on CI, where the fake bridge lagged a full-speed run.
+    from arep.bridges.zmq_transport import SimPublisher
+
+    tick_ep = f"tcp://127.0.0.1:{_free_port()}"
+    ctx = zmq.Context()
+    pub = SimPublisher(tick_ep, context=ctx)
+    sub = ctx.socket(zmq.SUB)
+    sub.setsockopt(zmq.RCVHWM, 10)
+    sub.setsockopt(zmq.SUBSCRIBE, b"")
+    sub.connect(tick_ep)
+    time.sleep(0.2)  # let the subscription reach the publisher
+    for i in range(5000):
+        pub.send({"type": "tick", "seq": i})
+
+    got: list = []
+
+    def lagging_reader():
+        time.sleep(0.1)
+        while sub.poll(300):
+            got.append(sub.recv_json())
+
+    reader = threading.Thread(target=lagging_reader)
+    reader.start()
+    pub.send_last({"type": "end"})
+    pub.close()
+    reader.join()
+    sub.close()
+    ctx.term()
+    assert got[-1]["type"] == "end"
+
+
 def test_cli_refuses_an_ambiguous_or_unknown_scenario(capsys):
     from arep.bridges.ros2_bridge import main
 

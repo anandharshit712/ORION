@@ -165,7 +165,7 @@ class Ros2BridgeModel(ModelInterface):
         """Tell the bridge the run is over and release the sockets."""
         if self._pub is not None:
             try:
-                self._pub.send({"type": "end", "seq": self._seq})
+                self._pub.send_last({"type": "end", "seq": self._seq})
             finally:
                 self._pub.close()
                 self._sub.close()  # type: ignore[union-attr]
