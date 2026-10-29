@@ -444,6 +444,7 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 
 | Phase | Change | Effect |
 | --- | --- | --- |
+| 4-fix | Every NPC behaviour a scenario declares runs, with the parameters it reads | Scenario change, not a scoring change: NPCs in eleven scenarios now behave as written. `ReferenceDriver` 39 → 38 (EMG-006 now fails), `SimpleLaneKeep` 12 → 14, `emergency_brake` 52 → 52. See "The NPC behaviour correction". |
 | 4-fix | Bundled lane-keepers steer toward the lane, with damping | Scores move only for `SimpleLaneKeep` and `ReferenceDriver`; the scoring is unchanged. `ReferenceDriver` 32 → 39 of 59, off-road rate 0.141 → 0.107; `SimpleLaneKeep` stays at 12; `emergency_brake` is unaffected. See "The lane-keeper sign correction". |
 | 0.5 | Lane compliance computed for real (was hardcoded 1.0) | Compliance scores fall for any model that drifts |
 | 0.5 | Lane 0 centred on the travel line | Previously every vehicle straddled a lane boundary |
@@ -544,6 +545,41 @@ Two consequences worth stating, because both were previously invisible:
   steering models leave it on every run, before and after the lane-keeper sign
   correction. INT-004's former "pass" was
   entirely an artefact of this criterion.
+
+### The NPC behaviour correction
+
+A scenario that named a behaviour tree under `type: pedestrian` never ran it.
+Only `reactive_*` types dispatched to a tree, so eleven pedestrians in nine
+scenarios walked a straight line at their initial velocity, past the
+hesitation, retreat or erratic movement their scenario was written to test.
+Under that, several parameter names did not match what the trees read
+(`hesitate_prob` for `mid_hesitation_prob`, `walk_speed` for
+`walk_speed_range`), MLT-005's tailgater sampled a `target_gap` its tree
+ignored, and LON-001 sampled an `initial_decel` its scripted lead never read.
+Every one of those scenarios still ran and scored.
+
+Dispatch now keys on a declared `bt_type`, the validator refuses an unknown
+tree or a tree on a scripted NPC, and a test scans each tree's source for the
+keys it reads and fails on any declared parameter nothing reads. Waiting
+pedestrians start at velocity 0. VRU-004's child, whose requirement is that it
+runs without hesitating, is now scripted, because both pedestrian trees pause
+or reverse.
+
+Measured at 10 runs per scenario, after the lane-keeper correction:
+
+| model | passes | composite | collision rate |
+| --- | --- | --- | --- |
+| `ReferenceDriver` | 39 → 38 | 0.811 → 0.812 | 0.103 → 0.103 |
+| `SimpleLaneKeep` | 12 → **14** | 0.629 → 0.645 | 0.527 → 0.490 |
+| `emergency_brake` | 52 → 52 | 0.944 → 0.943 | 0.061 → 0.064 |
+
+`ReferenceDriver` now fails EMG-006 (collision on 1 run in 10) because its
+pedestrian moves erratically instead of walking a straight line.
+`SimpleLaneKeep` newly passes VRU-006 and VRU-007: their pedestrians now wait
+at the kerb rather than walking into its path. MLT-005 got harder for every
+model now that the tailgater's gap is sampled (`emergency_brake` collision rate
+0.6 → 0.8). Results on those eleven scenarios are not comparable across
+this correction.
 
 ### The lane-keeper sign correction
 

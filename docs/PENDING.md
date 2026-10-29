@@ -255,28 +255,11 @@ DI-01. Even then, it is not ready to build until the parameter list, the NPC-fai
 question and the mode policy are settled there. Until it ships, EMG-004 is refused at load
 (DI-02, built), so the suite runs 59 of 60 scenarios. It changes scoring, so it needs a `METHODOLOGY.md` change-log entry.
 
-### Pedestrian behaviour trees never run in nine scenarios
-EMG-006, INT-008, MLT-004, MLT-009, VRU-004, VRU-006, VRU-007, VRU-009 and VRU-010 declare
-`behavior.type: pedestrian` with a `bt_type` (`cautious_pedestrian` / `erratic_pedestrian`).
-Only `reactive_vehicle` and `reactive_pedestrian` dispatch to a tree
-(`simulation/world.py` `update_dynamic_objects`, `scenario/executor.py`
-`_build_npc_behaviors`), so those eleven pedestrians walk at constant velocity: the tree, its
-trigger and the sampled `walk_speed` overrides never run. Found by the 4.4 review. Fixing it
-moves those scenarios' scores, so it needs a METHODOLOGY change-log row and a re-measured
-library table — and a validator rule so a `bt_type` on a type that ignores it is refused
-rather than dropped.
-
 ### Two scenarios' requirements are not verified by the pass gate
 INT-002 has no cross traffic and red-light running is not detected; INT-005 never tells the
 model to turn. Both pass any model that does not collide. Needs traffic-rule scoring and, for
 INT-005, a route in `Observation`. Their `verification_gap` fields say so; 31 other scenarios
 carry narrower gaps — see `python -m arep.cli.standards odd`.
-
-### LON-001's `initial_decel` range is never read
-The scripted lead reads `post_acceleration` (fixed −2.0), so the parameterised deceleration
-has no effect and adversarial search gets a dimension that does nothing. One instance of the
-open DI-02 "keys parsed and ignored" audit. Fixing it moves LON-001 scores, so it needs a
-METHODOLOGY change-log row.
 
 ### Near-duplicate scenarios as executed
 VRU-001/VRU-006 differ by crossing markings that are not modelled and share a tree;
