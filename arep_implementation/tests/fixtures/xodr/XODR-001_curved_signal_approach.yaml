@@ -1,0 +1,65 @@
+# Test fixture, not a library scenario (Phase 4.2): it proves `source: xodr`
+# end to end on the hand-authored map beside it. It is not in scenarios/ and
+# belongs to no suite.
+scenario:
+  name: "XODR-001 Curved Approach to a Signalised Junction"
+  version: "1.0"
+  description: >
+    Ego follows a road made of a line, a clothoid, an arc, a clothoid and a
+    cubic, all read from an OpenDRIVE map, to a signalised junction. The light
+    is red on approach and turns green 18 s in; the ego continues straight
+    through the junction onto a cubic departure road.
+  behavioral_requirement: >-
+    The ego must stay in its lane through curved geometry, stop for the red
+    signal, and proceed straight through the junction once it is green.
+  hazard: >-
+    Triggering condition: a red signal at the end of a curved approach.
+    Hazardous event: lane departure on the curve or a red-light violation; no
+    conflicting traffic is present.
+  verification_gap: >-
+    Red-light running is not detected, so a model that drives through the red
+    passes; only lane keeping and off-road are checked on this geometry.
+  duration: 30.0
+
+ego:
+  initial:
+    velocity: 11.11   # x, y and heading come from the map
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    source: xodr
+    file: orion_junction.xodr
+    ego_start_road_id: "1"
+    ego_start_s: 15.0
+    ego_start_lane_id: "-1"
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic: []
+
+events:
+  - type: change_traffic_light
+    trigger_time: 18.0
+    parameters:
+      light_id: "tl_junction_100"
+      state: "green"
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+master_seed: 4201
+parameterization:
+  ego_velocity:
+    min: 8.33      # 30 km/h
+    max: 13.89     # 50 km/h

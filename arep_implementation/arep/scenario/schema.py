@@ -83,6 +83,19 @@ class RoadConfiguration:
     # Anything omitted falls back to the factory's own default.
     template_params: Dict[str, Any] = field(default_factory=dict)
 
+    # Phase 4.2. `source: xodr` takes the road from an OpenDRIVE map instead of
+    # a template. `file` is resolved by the parser to an absolute path inside
+    # the scenario library, and `file_sha256` pins the map's content: it is
+    # folded into the scenario's content hash and re-checked when the map is
+    # loaded for a run. The ego is placed from (road id, s, lane id), so the
+    # scenario never states world coordinates the map could contradict.
+    source: Optional[str] = None
+    file: Optional[str] = None
+    file_sha256: Optional[str] = None
+    ego_start_road_id: Optional[str] = None
+    ego_start_s: Optional[float] = None
+    ego_start_lane_id: Optional[str] = None
+
 
 @dataclass
 class WeatherConfiguration:

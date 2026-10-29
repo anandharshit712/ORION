@@ -161,6 +161,18 @@ class ScenarioExecutor:
         """
         from arep.core import road_templates
 
+        if scenario.road.source == "xodr":
+            from arep.maps.xodr_parser import load_map
+
+            # The parser resolved and hashed the file; load_map refuses a map
+            # whose bytes no longer match that hash.
+            try:
+                return load_map(
+                    str(scenario.road.file), str(scenario.road.file_sha256)
+                ).graph
+            except (OSError, ValueError) as exc:
+                raise ScenarioParseError(str(exc)) from exc
+
         template_name = scenario.road.template
         if not template_name:
             return None
@@ -212,10 +224,17 @@ class ScenarioExecutor:
             lanes: List[LaneInfo] = []
             for segment in road_graph.segments.values():
                 for lane_idx in range(segment.lane_count):
+                    points = segment.get_lane_centerline(lane_idx)
+                    # An oncoming lane (OpenDRIVE maps) runs against its
+                    # centreline. Its LaneInfo must run the way its traffic
+                    # does, or the ego's own lane loses the alignment test in
+                    # get_current_lane and the offset's sign flips.
+                    if lane_idx in segment.reversed_lanes:
+                        points = points[::-1]
                     lanes.append(
                         LaneInfo(
                             lane_id=f"{segment.segment_id}_lane_{lane_idx}",
-                            centerline_points=segment.get_lane_centerline(lane_idx),
+                            centerline_points=points,
                             width=segment.lane_width,
                             speed_limit=segment.speed_limit,
                         )
