@@ -30,6 +30,7 @@ GATED_PREFIXES = (
     "/jobs",
     "/results",
     "/api/runs",
+    "/api/scenarios",
 )
 
 # Deliberately public: probes and the login surface cannot present a token.
