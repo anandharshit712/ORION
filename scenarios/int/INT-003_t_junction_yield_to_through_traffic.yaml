@@ -8,6 +8,17 @@ scenario:
     join and sometimes not, so a model cannot pass by always waiting or always
     going. Right of way comes from the road graph — the south arm is marked
     "yield", the east and west arms "priority".
+  behavioral_requirement: >-
+    The ego, on the minor arm of a T-junction, must give way to two through vehicles
+    on the priority road and join only through an acceptable gap.
+  hazard: >-
+    Triggering condition: two through vehicles approach the junction on the priority
+    road with a randomised gap between them as the ego arrives. Hazardous event: side
+    impact with through traffic when pulling out.
+  verification_gap: >-
+    Joining requires a turn and the Observation carries no route, so no model in the
+    repository can join: driving straight on leaves the road, and a model that stops
+    short passes. Give-way order is checked only through contact.
   duration: 30.0
 
 ego:

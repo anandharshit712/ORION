@@ -7,6 +7,13 @@ scenario:
     traffic and right of way, and the pedestrian appears inside the space it has
     already cleared. Distinct from VRU-001, where the crossing is mid-block and
     the only thing to watch.
+  behavioral_requirement: >-
+    The ego must yield to a pedestrian who steps onto the far-side crossing of a
+    junction as the ego arrives, inside space it has already judged clear.
+  hazard: >-
+    Triggering condition: a pedestrian enters the crossing on the far side of the
+    four-way junction as the ego approaches. Hazardous event: collision with a
+    pedestrian inside the junction.
   duration: 25.0
 
 ego:

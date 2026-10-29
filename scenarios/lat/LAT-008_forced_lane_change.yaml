@@ -7,6 +7,15 @@ scenario:
     is safe but ends the run behind an obstacle, while changing lane keeps the
     journey. Included because most of this category punishes lateral movement -
     this one requires it, so the library does not only reward staying put.
+  behavioral_requirement: >-
+    The ego must deal with a stationary vehicle blocking its lane while the adjacent
+    lane is clear, either by stopping short or by changing lane without contact.
+  hazard: >-
+    Triggering condition: a stationary vehicle blocks the ego lane ahead and the
+    adjacent lane is free. Hazardous event: collision with the stationary vehicle.
+  verification_gap: >-
+    Stopping and changing lane both pass; nothing in the composite rewards the lane
+    change that keeps the journey going.
   duration: 22.0
 
 ego:

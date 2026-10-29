@@ -8,6 +8,17 @@ scenario:
     is part of the problem: a model that brakes at maximum every time is not
     obviously right here, and one that ignores what is behind is obviously
     wrong.
+  behavioral_requirement: >-
+    The ego must brake for a hard-braking lead while a vehicle tailgates it closely,
+    leaving room ahead without inviting a rear impact.
+  hazard: >-
+    Triggering condition: the lead brakes hard while a vehicle follows the ego at a
+    short, adaptive gap. Hazardous event: rear-end collision into the lead, or by the
+    tailgater into the ego.
+  verification_gap: >-
+    Unproven as of 2026-10-01: no model in the repository passes it (emergency_brake
+    and ReferenceDriver both fail at 10 runs per scenario), so it is not yet shown
+    that the scenario is passable.
   duration: 25.0
 
 ego:

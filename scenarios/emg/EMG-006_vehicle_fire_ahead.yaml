@@ -7,6 +7,16 @@ scenario:
     obstacle is static and visible, the people are moving and are not where a
     model expects people to be. The requirement is that clearing the vehicle is
     not the end of the problem.
+  behavioral_requirement: >-
+    The ego must avoid both a vehicle stopped in its lane and its occupants moving on
+    foot on the carriageway beside it, not treating the vehicle as the only hazard.
+  hazard: >-
+    Triggering condition: a stopped vehicle blocks the ego lane while a pedestrian
+    moves erratically on the carriageway beside it. Hazardous event: collision with
+    the stopped vehicle or with an occupant on foot.
+  verification_gap: >-
+    The fire is not modelled (no smoke, heat or visibility effect); the scenario is a
+    stopped vehicle plus a pedestrian.
   duration: 22.0
 
 ego:

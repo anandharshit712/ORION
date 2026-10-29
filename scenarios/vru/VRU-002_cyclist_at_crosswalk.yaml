@@ -7,6 +7,12 @@ scenario:
     speed: a model tuned to pedestrian crossing times has roughly a third of the
     reaction budget it expects, and the cyclist is already in the lane by the
     time a pedestrian would still be at the kerb.
+  behavioral_requirement: >-
+    The ego must stop or slow for a cyclist riding across a crossing at about three
+    times walking pace, within the shorter reaction budget that speed leaves.
+  hazard: >-
+    Triggering condition: a cyclist rides off the kerb and across the ego lane at
+    cycling speed. Hazardous event: collision with a crossing cyclist.
   duration: 20.0
 
 ego:

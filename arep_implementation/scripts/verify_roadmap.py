@@ -720,6 +720,67 @@ def _gitlab_component_matches_the_action():
     return f"component pinned to {expected}; not published (no gitlab.com/orioneval)"
 
 
+# ── 4.5 Standards alignment ───────────────────────────────────────────────
+
+
+def _traceability_for_every_suite():
+    """Every suite exports, every row carries its requirement, no result is invented."""
+    import csv
+    import tempfile
+
+    from arep.cli import standards
+    from arep.cli.run_suite import SUITES, resolve_scenarios
+    from arep.reporting.pdf_generator import PDFGenerator
+
+    with tempfile.TemporaryDirectory() as out:
+        for suite in SUITES:
+            code = standards.main(
+                ["traceability", "--suite", suite, "--output-dir", out]
+            )
+            assert code == 0, f"{suite}: exit {code}"
+            with open(Path(out) / f"traceability_{suite}.csv", encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
+            assert len(rows) == len(resolve_scenarios(suite, REPO)), suite
+            for row in rows:
+                assert row["behavioral_requirement"] and row["hazard"], row["scenario"]
+                assert row["result"] == standards.NOT_RUN, "a result with no report"
+    try:
+        PDFGenerator(require_pdf=True)
+        pdf = "PDF too"
+    except ImportError:
+        pdf = "PDF step needs WeasyPrint's GTK libraries, absent here"
+    return f"CSV + HTML for all {len(SUITES)} suites; {pdf}"
+
+
+def _odd_generated_from_metadata():
+    """The ranges are recomputed independently from the YAML, not trusted."""
+    import yaml
+
+    from arep.cli import standards
+
+    scenarios = standards.load_scenarios("full", REPO)
+    odd = standards.odd_statement(scenarios, "full")
+    limits = [
+        float(
+            yaml.safe_load(p.read_text(encoding="utf-8"))["environment"]["road"][
+                "speed_limit"
+            ]
+        )
+        for p in sorted((REPO / "scenarios").glob("*/*.yaml"))
+        if p.stem.split("_")[0] not in {r["scenario"] for r in odd["refused_at_load"]}
+    ]
+    assert odd["speeds"]["speed_limit"]["max_ms"] == round(max(limits), 2)
+    assert odd["speeds"]["speed_limit"]["min_ms"] == round(min(limits), 2)
+    assert odd["not_covered"], "no not-covered list"
+    refused = [r["scenario"] for r in odd["refused_at_load"]]
+    return (
+        f"{odd['executable']}/{odd['scenarios']} executable, speed limits "
+        f"{odd['speeds']['speed_limit']['min_kmh']}-"
+        f"{odd['speeds']['speed_limit']['max_kmh']} km/h, "
+        f"{len(odd['not_covered'])} engine limits + refused {refused}"
+    )
+
+
 CRITERIA = [
     ("1.5", "four_way_intersection() returns a valid RoadGraph", _four_way_graph),
     ("1.5", "is_off_road() true outside all segments", _off_road),
@@ -785,6 +846,16 @@ CRITERIA = [
     ("4.2", "XODR line+arc geometry parses to a RoadGraph", _xodr_parses_at_all),
     ("4.4", "Importing the ASAM CutIn.osc sample", _osc_named_fixture),
     ("4.4", "LON-003 exports to OSC2 and re-imports", _osc_export_roundtrip),
+    (
+        "4.5",
+        "Traceability matrix exportable (CSV/PDF) for any suite",
+        _traceability_for_every_suite,
+    ),
+    (
+        "4.5",
+        "ODD coverage statement auto-generated from scenario metadata",
+        _odd_generated_from_metadata,
+    ),
 ]
 
 

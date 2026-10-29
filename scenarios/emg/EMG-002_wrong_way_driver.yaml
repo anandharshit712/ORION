@@ -5,6 +5,17 @@ scenario:
     Vehicle driving the wrong way in ego's lane at 80 km/h closing speed.
     Ego must execute emergency evasive action (steer right to shoulder or brake)
     within 2 seconds of detection. Combined closing speed ~160 km/h.
+  behavioral_requirement: >-
+    The ego must avoid a vehicle driving the wrong way in its own lane, closing
+    head-on at a combined 130-190 km/h, by braking and steering out of its path.
+  hazard: >-
+    Triggering condition: a vehicle travelling the wrong way approaches head-on in the
+    ego lane. Hazardous event: head-on collision at high closing speed.
+  verification_gap: >-
+    Unproven as of 2026-10-01: no model in the repository passes it (emergency_brake
+    and ReferenceDriver both fail at 10 runs per scenario), so it is not yet shown
+    that the scenario is passable. The wrong-way vehicle drives at constant velocity;
+    the registered wrong_way_driver tree is not used here.
   duration: 12.0
 
 ego:

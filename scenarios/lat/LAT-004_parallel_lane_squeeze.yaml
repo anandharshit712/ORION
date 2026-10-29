@@ -9,6 +9,13 @@ scenario:
     rather than steering into a gap that is no longer there. Drift rates and
     correction probabilities are independent per side, so some runs give one way
     out and some give none.
+  behavioral_requirement: >-
+    The ego, in the middle of three lanes, must manage its speed when vehicles on both
+    sides drift inward at once, rather than steering into a gap that is closing.
+  hazard: >-
+    Triggering condition: both neighbouring vehicles drift toward the ego lane
+    together, each with an independent chance of correcting. Hazardous event:
+    sideswipe from one or both sides with no lateral escape.
   duration: 25.0
 
 ego:

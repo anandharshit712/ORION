@@ -1509,9 +1509,10 @@ a braking model from a non-braking one before being committed — the per-catego
 messages carry the tables. A scenario both models score the same on tests nothing, and that
 is how MLT-008 was caught.
 
-**Three reserved themes were substituted, and the substitutions are named in the files that
-replaced them**: "pedestrian at night" (VRU), "dust storm" and "flash-flood water" (EMG). All
-three need environmental physics — `weather.visibility` is a label `Observation` never reads
+**Five reserved themes were substituted, and the substitutions are named in the files that
+replaced them**: "pedestrian at night" (VRU), "dust storm" and "flash-flood water" (EMG), plus
+"speed bump" (LON-010, needs road grade) and "wet-road lane departure" (LAT-010, needs surface
+friction) — the last two found during 4.5. The first three need environmental physics — `weather.visibility` is a label `Observation` never reads
 and surface friction is one global config value — so writing them now would have produced
 scenarios differing from their dry-daylight equivalents only in the description. They return
 with DI-01.
@@ -1614,7 +1615,7 @@ GET  /api/scenarios/{id}/export/osc   # returns .osc file
 - Endpoints: `GET /api/scenarios/{id}/export/osc` and `POST /api/scenarios/import/osc`.
   Import is parse-and-validate only — there is no org-scoped scenario storage to put it in.
 
-## 4.5 — Safety-Standards Alignment
+## 4.5 — Safety-Standards Alignment — ✅ DONE (2026-10-29; PDF export unverified, see PENDING)
 
 Not certification — alignment documentation that lets an enterprise safety team slot ORION
 into their process:
@@ -1631,8 +1632,16 @@ ISO story" from a first-meeting deal-killer into a credible answer.
 
 ### Acceptance Criteria
 
-- [ ] Traceability matrix exportable (CSV/PDF) for any suite
-- [ ] ODD coverage statement auto-generated from scenario metadata
+- [~] Traceability matrix exportable (CSV/PDF) for any suite —
+      `python -m arep.cli.standards traceability --suite <any of SUITES>`; CSV + HTML verified
+      for all six suites by `verify_roadmap.py`. **The PDF has never rendered**: it goes
+      through WeasyPrint, which lacks GTK on Windows, and CI does not install `[reporting]`.
+- [x] ODD coverage statement auto-generated from scenario metadata — `python -m arep.cli.standards
+      odd`; ranges recomputed independently from the YAML by `verify_roadmap.py` (full: 59/60
+      executable, speed limits 30–120 km/h, EMG-004 listed as refused, 9 not-covered items).
+- Every scenario carries `behavioral_requirement`, `hazard` (SOTIF triggering condition +
+  hazardous event) and, for 33 of them, a `verification_gap`. `docs/STANDARDS.md` holds the
+  ISO 26262-8 Clause 11 tool-confidence argument and never claims certification.
 
 ---
 

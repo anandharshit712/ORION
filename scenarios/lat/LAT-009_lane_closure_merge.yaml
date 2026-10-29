@@ -8,6 +8,14 @@ scenario:
     deadline: commit early, wait and take the gap behind, or stop. The
     neighbour's start position and speed are randomised widely, so some runs
     offer a comfortable gap and some offer none.
+  behavioral_requirement: >-
+    The ego must merge past a lane closure into an adjacent lane carrying traffic,
+    taking a gap only where one exists or stopping before the obstacle.
+  hazard: >-
+    Triggering condition: the ego lane ends at a stationary obstacle while a vehicle
+    in the adjacent lane occupies or approaches the merge gap. Hazardous event:
+    collision with the closure obstacle, or a side impact with the adjacent vehicle
+    during the merge.
   duration: 25.0
 
 ego:

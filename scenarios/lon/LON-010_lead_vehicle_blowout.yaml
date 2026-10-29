@@ -9,6 +9,16 @@ scenario:
     following distance can still be struck by something arriving at an angle.
     Substituted for the roadmap speed-bump theme, which needs road grade - not
     modelled today.
+  behavioral_requirement: >-
+    The ego must avoid a lead vehicle that suffers a tyre blowout, decelerating hard
+    with no warning while yawing in a direction that varies per run.
+  hazard: >-
+    Triggering condition: the lead vehicle's tyre fails, producing an unsignalled hard
+    deceleration and a yaw impulse. Hazardous event: collision with a lead vehicle
+    losing control, possibly arriving at an angle.
+  verification_gap: >-
+    Stands in for the roadmap's speed-bump theme, which needs road grade; the
+    simulated world is flat and that theme is not covered.
   duration: 22.0
 
 ego:

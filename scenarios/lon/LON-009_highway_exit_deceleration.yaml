@@ -7,6 +7,18 @@ scenario:
     category: the correct response is a measured deceleration, and a model that treats
     any lead slowdown as an emergency scores badly on stability while never being
     unsafe. Included so the library does not only reward braking hard.
+  behavioral_requirement: >-
+    The ego must decelerate smoothly to match a lead vehicle that slows steadily for
+    an exit and settles at a lower speed, without treating the slowdown as an
+    emergency.
+  hazard: >-
+    Triggering condition: the lead vehicle begins a gentle, sustained deceleration to
+    a lower cruising speed. Hazardous event: rear-end collision with the lead vehicle;
+    over-braking, the failure this scenario targets, is a stability fault rather than
+    a hazard here because nothing follows the ego.
+  verification_gap: >-
+    Over-braking is not a failure: it lowers the stability component of the composite,
+    but only contact and leaving the road fail the run.
   duration: 25.0
 
 ego:

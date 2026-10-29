@@ -8,6 +8,14 @@ scenario:
     needed for the pedestrian, and steering away from the cut-in aims at the
     kerb. The requirement is prioritising under conflict rather than reacting
     to whichever arrived first.
+  behavioral_requirement: >-
+    The ego must resolve a vehicle cutting in from the adjacent lane and a pedestrian
+    entering from the kerb ahead at the same time, when the response to each worsens
+    the other.
+  hazard: >-
+    Triggering condition: a vehicle cuts into the ego lane while a pedestrian steps
+    off the kerb ahead. Hazardous event: collision with the cutting-in vehicle or the
+    pedestrian.
   duration: 24.0
 
 ego:

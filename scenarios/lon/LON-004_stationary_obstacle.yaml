@@ -2,6 +2,13 @@ scenario:
   name: "LON-004 Stationary Vehicle Ahead — Ego Approaching at Speed"
   version: "1.0"
   description: "Stationary vehicle blocking ego's lane. Ego must decelerate to a full stop before contact. No lead-up warning."
+  behavioral_requirement: >-
+    The ego must come to a full stop before reaching a stationary vehicle that blocks
+    its lane, approaching at 40-80 km/h with no lead-up warning.
+  hazard: >-
+    Triggering condition: a stationary vehicle occupies the ego lane ahead from the
+    first frame. Hazardous event: collision with a stationary vehicle at approach
+    speed.
   duration: 20.0
 
 ego:

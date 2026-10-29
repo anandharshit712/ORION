@@ -25,9 +25,9 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 - **`docs/ARCHITECTURE.md`** — governs **the scenario taxonomy and the 4-layer execution architecture**: the "one scenario = one behavioral requirement" rule, the six categories, the strict scenario schema, L1–L4 layer contracts, the integration contract. Read before touching `scenario/`, `simulation/`, or adding scenarios.
 - **`docs/UI_DESIGN.md`** (v1.0) — governs **ALL frontend/UI visual work**. The binding design system ("Mission Control"): tokens, typography, components, theming, page-by-page specs. Any change under `orion-frontend/` must conform. Approved sample = `design/sample-mission-control.html`. See Section 9.
 
-Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
+Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), **`docs/STANDARDS.md`** (the ISO 26262 Clause 11 tool-confidence argument, the SOTIF mapping, how to generate the traceability matrix and ODD statement, and every limit a safety engineer must argue around — it never claims certification, and is updated in the same change as any limit it lists), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. **4.4 (OSC2 round trip, 2026-10-29)** is complete bar a third-party sample file. Remaining in Phase 4: **4.5 standards alignment** and the partial 4.2 (OpenDRIVE scenario wiring) — the roadmap sets the order. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. **4.4 (OSC2 round trip)** is complete bar a third-party sample file, and **4.5 (standards alignment)** is complete (both 2026-10-29). Remaining in Phase 4: the partial 4.2 (OpenDRIVE scenario wiring). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -263,7 +263,7 @@ run.unsubscribe(q)
   `RunRecord.frame_hash` and `LiveRun.frame_hash`, and sent in the `stream_end` message.
   Same `(model, scenario, seed)` → same digest; `tests/test_frame_determinism.py` enforces it.
 - `monitor.metrics_current` in frame = per-tick *proxy* (collision flag + speed-limit compliance). Authoritative scores still come from `CompositeEvaluator` after run ends.
-- `LiveRun` (in `api/sim_registry.py`) stores `final_metrics` after run completion, populated from last tick frame's `monitor.metrics_current`. Composite score computed inline: `safety×0.5 + compliance×0.2 + stability×0.15 + reactivity×0.15`. Proxy scores until P1.4 wires `CompositeEvaluator` to live runs.
+- `LiveRun` (in `api/sim_registry.py`) stores `final_metrics` after run completion, populated from last tick frame's `monitor.metrics_current`. Composite uses the `CompositeEvaluator` weights (`safety×0.35 + compliance×0.25 + stability×0.20 + reactivity×0.20`), the same as batch — the inputs are still per-tick proxies until `CompositeEvaluator` is wired to live runs.
 
 ---
 
@@ -323,6 +323,18 @@ environment:
 - Topology is declared, not inferred from `road_type`: "urban" describes a speed limit and a
   feel, not a shape — INT-001 is a four-way stop and LAT-001 is a straight road, and both are
   urban.
+
+### Requirement metadata (Phase 4.5)
+
+Every v2 scenario declares, in its `scenario:` block, `behavioral_requirement` (one sentence:
+what the ego must do to pass) and `hazard` (`Triggering condition: … Hazardous event: …`, ISO
+21448 vocabulary). Where the pass gate (collision + off-road only) does not check part of the
+requirement, it also declares `verification_gap` saying what. The engine never reads these;
+`arep/cli/standards.py` does (traceability matrix, ODD statement). `tests/test_standards_alignment.py`
+enforces presence, shape and uniqueness — not truth: write them from the scenario's actual
+setup, not its name. A new scenario without them fails the suite. Watch text-wrapping that
+breaks on a hyphen: a folded line ending in "time-to-" rejoins as "time-to- collision", and
+the test catches it.
 
 ### Suites (Phase 4.3)
 
@@ -785,6 +797,11 @@ docker run --rm --network host --ipc host orion-ros2 --scenario-id LON-003 --see
 # ROS2 acceptance tests run inside that image (skip elsewhere); the fake-bridge tests run anywhere
 pytest tests/test_ros2_bridge.py
 
+# Standards artefacts (Phase 4.5): traceability matrix (CSV/HTML/PDF) and ODD statement for any suite.
+# Results come only from a supplied run_suite report; without one every row says "not run".
+PYTHONPATH=. python -m arep.cli.standards traceability --suite core --report ./results/orion_suite_report.json --output-dir ./standards
+PYTHONPATH=. python -m arep.cli.standards odd --suite full --output-dir ./standards
+
 # Start everything (from project root)
 ./start.sh        # Linux/Mac (bash)
 start.bat         # Windows (cmd.exe)
@@ -1075,7 +1092,7 @@ Artefact fetching verifies the recorded SHA-256 before returning bytes that get 
 - **Deterministic replay (2.5)** — promoted from Phase 5; depends on Phase 0.5 frame hash. Closes `RunPage` stub.
 - **CompositeEvaluator wired to live runs** — dashboard scores are per-tick proxy metrics from `monitor.metrics_current`, not full post-run evaluation.
 - **Sensor simulation** — no LiDAR, camera, GPS/IMU today; observation = ground-truth state. Scheduled as **Phase 6** (`docs/ROADMAP.md`), which starts only after Phase 5 exits — structured sensor output (object lists, ranges), never rendered pixels. Until it ships, ORION = planning/control eval: don't promise perception testing anywhere, and don't build sensor code early.
-- **Standards alignment (Phase 4.5)** — no ISO 26262/21448 story today; traceability matrix + ODD declarations planned, certification never claimed.
+- ~~**Standards alignment (Phase 4.5)**~~ — **DONE 2026-10-29.** Per-scenario requirement/hazard/gap metadata, `arep.cli.standards` (traceability CSV/HTML/PDF, ODD JSON/HTML/PDF), `docs/STANDARDS.md`. Certification is never claimed. The PDFs have never rendered: WeasyPrint lacks GTK on Windows and CI does not install `[reporting]`.
 - **3D visualization polish + frontend debt (Phase 5)** — GLTF assets, trajectory traces, progressive TypeScript migration, frontend tests (currently zero), `DashboardPage.jsx` decomposition.
 
 ---

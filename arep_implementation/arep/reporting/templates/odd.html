@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}ODD Coverage — {{ odd.suite }}{% endblock %}
+{% block content %}
+<h1>ODD Coverage Statement — {{ odd.suite }}</h1>
+
+<div class="methodology">
+  Generated from the scenario files. {{ odd.executable }} of {{ odd.scenarios }} scenarios
+  execute; coverage below counts only those, because a scenario refused at load exercises
+  nothing. This states what the suite exercises in simulation. It is not an ODD for a
+  vehicle and not a certification artefact; see docs/STANDARDS.md.
+</div>
+
+<h2>Road</h2>
+<table>
+  <tr><th>Road type</th><th>Scenarios</th></tr>
+  {% for name, n in odd.road.types.items() %}<tr><td>{{ name }}</td><td>{{ n }}</td></tr>{% endfor %}
+</table>
+<table>
+  <tr><th>Topology</th><th>Scenarios</th></tr>
+  {% for name, n in odd.road.templates.items() %}<tr><td>{{ name }}</td><td>{{ n }}</td></tr>{% endfor %}
+</table>
+<p>Lanes: {{ odd.road.lanes|join(", ") }}. Lane widths (m): {{ odd.road.lane_widths_m|join(", ") }}.</p>
+
+<h2>Speed</h2>
+<table>
+  <tr><th>Scope</th><th>Speed limit (km/h)</th><th>Ego initial speed (km/h)</th></tr>
+  {% if odd.speeds.speed_limit %}
+  <tr><td><strong>All</strong></td>
+    <td>{{ odd.speeds.speed_limit.min_kmh }} – {{ odd.speeds.speed_limit.max_kmh }}</td>
+    <td>{{ odd.speeds.ego_initial_speed.min_kmh }} – {{ odd.speeds.ego_initial_speed.max_kmh }}</td></tr>
+  {% endif %}
+  {% for name, s in odd.speeds.by_road_type.items() %}
+  <tr><td>{{ name }}</td>
+    <td>{{ s.speed_limit.min_kmh }} – {{ s.speed_limit.max_kmh }}</td>
+    <td>{{ s.ego_initial_speed.min_kmh }} – {{ s.ego_initial_speed.max_kmh }}</td></tr>
+  {% endfor %}
+</table>
+<p>Ego initial speed is the union of each scenario's parameterised <code>ego_velocity</code>
+range, or its fixed initial speed where it declares none.</p>
+
+<h2>Actors</h2>
+<table>
+  <tr><th>Actor type</th><th>Instances</th></tr>
+  {% for name, n in odd.actors.types.items() %}<tr><td>{{ name }}</td><td>{{ n }}</td></tr>{% endfor %}
+</table>
+<table>
+  <tr><th>Behaviour</th><th>Instances</th></tr>
+  {% for name, n in odd.actors.behaviours.items() %}<tr><td>{{ name }}</td><td>{{ n }}</td></tr>{% endfor %}
+</table>
+
+<h2>Not covered</h2>
+<table>
+  <tr><th>Topic</th><th>Statement</th><th>Evidence</th></tr>
+  {% for item in odd.not_covered %}
+  <tr><td>{{ item.topic }}</td><td>{{ item.statement }}</td><td>{{ item.evidence }}</td></tr>
+  {% endfor %}
+  <tr><td>Declared weather</td>
+    <td>Labels declared by this suite:
+      {% for name, n in odd.weather_labels_declared.items() %}{{ name }} × {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}.
+      None of them reaches the physics or the Observation.</td>
+    <td>docs/DISCUSSIONS.md DI-01</td></tr>
+  {% for item in odd.refused_at_load %}
+  <tr><td>{{ item.scenario }} refused at load</td><td>{{ item.reason }}</td><td>docs/DISCUSSIONS.md DI-02</td></tr>
+  {% endfor %}
+</table>
+
+{% if odd.scenario_specific_gaps %}
+<h2>Scenario-specific gaps</h2>
+<table style="font-size: 9pt;">
+  <tr><th>Scenario</th><th>Not verified by the pass criterion</th></tr>
+  {% for item in odd.scenario_specific_gaps %}
+  <tr><td>{{ item.scenario }}</td><td>{{ item.gap }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

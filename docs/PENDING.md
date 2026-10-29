@@ -206,7 +206,10 @@ Details: `docs/DISCUSSIONS.md` DI-06.
 The 3D viewer jumps to each frame with no interpolation, so on a 60 Hz display one frame in
 five is drawn twice. Cosmetic, post-build. Details: `docs/DISCUSSIONS.md` DI-05.
 
-### One run in five on LON-003 / LAT-001 is void but scored
+### ~~One run in five on LON-003 / LAT-001 is void but scored~~ — fixed in 35207c9
+The flat road now extends behind the origin (defect 4 of the 4.3 review; METHODOLOGY change
+log). Kept for the record:
+
 A negative `ego_x_jitter` puts the ego behind the start of the flat road, and it terminates
 `off_road` at t=0.02 s. Measured: 20 of 100 LON-003 runs, each scored 0.82–0.90 and counted
 in the batch mean. The reported worst run (seed 139) is one of them. The library invariant
@@ -231,7 +234,35 @@ fixed by a few numbers drawn at run start, never random drift from tick to tick.
 remaining roadmap item. **Full finding, design and open questions**: `docs/DISCUSSIONS.md`
 DI-01. Even then, it is not ready to build until the parameter list, the NPC-fairness
 question and the mode policy are settled there. Until it ships, EMG-004 is refused at load
-(DI-02, built), so the suite runs 20 of 21 scenarios. It changes scoring, so it needs a `METHODOLOGY.md` change-log entry.
+(DI-02, built), so the suite runs 59 of 60 scenarios. It changes scoring, so it needs a `METHODOLOGY.md` change-log entry.
+
+### Pedestrian behaviour trees never run in nine scenarios
+EMG-006, INT-008, MLT-004, MLT-009, VRU-004, VRU-006, VRU-007, VRU-009 and VRU-010 declare
+`behavior.type: pedestrian` with a `bt_type` (`cautious_pedestrian` / `erratic_pedestrian`).
+Only `reactive_vehicle` and `reactive_pedestrian` dispatch to a tree
+(`simulation/world.py` `update_dynamic_objects`, `scenario/executor.py`
+`_build_npc_behaviors`), so those eleven pedestrians walk at constant velocity: the tree, its
+trigger and the sampled `walk_speed` overrides never run. Found by the 4.4 review. Fixing it
+moves those scenarios' scores, so it needs a METHODOLOGY change-log row and a re-measured
+library table — and a validator rule so a `bt_type` on a type that ignores it is refused
+rather than dropped.
+
+### Two scenarios' requirements are not verified by the pass gate
+INT-002 has no cross traffic and red-light running is not detected; INT-005 never tells the
+model to turn. Both pass any model that does not collide. Needs traffic-rule scoring and, for
+INT-005, a route in `Observation`. Their `verification_gap` fields say so; 31 other scenarios
+carry narrower gaps — see `python -m arep.cli.standards odd`.
+
+### LON-001's `initial_decel` range is never read
+The scripted lead reads `post_acceleration` (fixed −2.0), so the parameterised deceleration
+has no effect and adversarial search gets a dimension that does nothing. One instance of the
+open DI-02 "keys parsed and ignored" audit. Fixing it moves LON-001 scores, so it needs a
+METHODOLOGY change-log row.
+
+### Near-duplicate scenarios as executed
+VRU-001/VRU-006 differ by crossing markings that are not modelled and share a tree;
+VRU-004/VRU-008 differ by an occlusion that is not modelled. Candidates under the
+one-requirement rule (ARCHITECTURE §1.1): LON-001/LON-009, LON-004/LON-008, LAT-002/LAT-005.
 
 ### TTC approximations
 Constant-acceleration projection, with acceleration held constant over the projection and
@@ -244,11 +275,19 @@ scenario; it is not a calibrated time to impact.
 
 ### PDF rendering is unverified on Windows
 WeasyPrint cannot load its GTK libraries here, so `render_html()` is what the tests
-exercise. The PDF step runs in Linux CI.
+exercise. CI does not install the `[reporting]` extra either, so the PDF step is not
+exercised anywhere — including the 4.5 traceability and ODD PDFs, which have never rendered.
+Unblock: install `[reporting]` plus WeasyPrint's system libraries in one Linux CI job.
 
-### OSC2 round trips lose the parameterisation block
-By design, with a test pinning the behaviour. An exported scenario re-imported is the
-concrete case, not the parameterised family.
+### No tool qualification kit, and no automated hazard-discrimination check
+`docs/STANDARDS.md` §3: a credited (TI2) use of ORION defaults to TCL3, and there is no tool
+safety manual, tool requirements specification or validation report. Separately, nothing
+re-checks that each scenario's hazard still threatens a non-braking model; Phase 4.3 checked
+that by hand, once.
+
+### ~~OSC2 round trips lose the parameterisation block~~ — fixed in 4.4 (2026-10-29)
+Parameterisation is exported as OSC2 `parameter` declarations with `keep()` ranges and read
+back; `tests/test_osc_round_trip.py` covers all 59 loadable scenarios.
 
 ### ~~Scenario library is 21 of a target 60~~ — closed 2026-09-29
 Phase 4.3 is complete: 60 scenarios, ten per category. 59 execute (EMG-004 is refused at
@@ -374,7 +413,10 @@ it is a design decision rather than a repair.
 Until then, read INT results with the limitation in mind: they measure reaction inside a
 junction, not negotiation of one.
 
-### LON-002 is unsurvivable on about a tenth of its draws
+### ~~LON-002 is unsurvivable on about a tenth of its draws~~ — fixed in a05a6ab
+`lead_vehicle.initial_x` now starts at 55 m; `tests/test_scenario_feasibility.py` checks every
+scenario for the same arithmetic. Kept for the record:
+
 Found while measuring the finished library; it predates Phase 4.3 and is identical at
 `1932caa`, so it is not a regression from that work.
 

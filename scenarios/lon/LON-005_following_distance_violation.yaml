@@ -8,6 +8,14 @@ scenario:
     Distinct from LON-001, where the lead decelerates and the model is reacting to an
     event; here the hazard is present from the first frame and the model has to notice
     it unprompted. Maps to NHTSA Pre-Crash Type 12.
+  behavioral_requirement: >-
+    The ego must, unprompted, slow down to establish and hold a safe gap behind a much
+    slower lead vehicle that never brakes, rather than closing at the speed difference
+    until a hard stop is needed.
+  hazard: >-
+    Triggering condition: a lead vehicle travelling well below the ego speed is in the
+    ego lane from the first frame. Hazardous event: rear-end collision from a high
+    closing speed (NHTSA pre-crash type 12).
   duration: 25.0
 
 ego:

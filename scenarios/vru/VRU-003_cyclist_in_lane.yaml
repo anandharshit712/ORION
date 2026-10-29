@@ -5,6 +5,15 @@ scenario:
     Cyclist occupying ego's lane at 4.2 m/s (15 km/h). Ego approaches at 50 km/h.
     Ego must either decelerate to follow safely or perform a lane change with
     >1.5m clearance. No collision permitted.
+  behavioral_requirement: >-
+    The ego must close on a cyclist riding in its lane at 11-23 km/h by either
+    following at a safe distance or overtaking with adequate lateral clearance.
+  hazard: >-
+    Triggering condition: a cyclist travels ahead in the ego lane well below the ego
+    speed. Hazardous event: rear or side collision with a cyclist.
+  verification_gap: >-
+    The 1.5 m overtaking clearance in the description is not measured; only contact
+    and leaving the road fail the run.
   duration: 25.0
 
 ego:

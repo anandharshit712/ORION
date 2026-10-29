@@ -8,6 +8,18 @@ scenario:
     model to wait; one that never corrects teaches it to swerve at every wobble.
     It has to handle both from the same observation, which is what the road
     actually offers. Narrower lanes than LAT-003, so the lateral room is smaller.
+  behavioral_requirement: >-
+    The ego must handle an oncoming vehicle on a narrow rural road that crosses the
+    centre line and may or may not correct, neither waiting too long nor swerving off
+    the road.
+  hazard: >-
+    Triggering condition: the oncoming vehicle drifts across the centre line, and
+    whether it corrects is decided once per run. Hazardous event: head-on or offset
+    frontal collision, or leaving a narrow road while evading.
+  verification_gap: >-
+    Unproven as of 2026-10-01: no model in the repository passes it (emergency_brake
+    and ReferenceDriver both fail at 10 runs per scenario), so it is not yet shown
+    that the scenario is passable.
   duration: 20.0
 
 ego:

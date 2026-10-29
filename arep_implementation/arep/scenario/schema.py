@@ -146,6 +146,18 @@ class ScenarioDefinition:
     description: str = ""
     duration: float = 60.0
 
+    # Phase 4.5 standards metadata. Human documentation only — the engine never
+    # reads these (ARCHITECTURE.md §3.2); the traceability matrix and the ODD
+    # statement do. Optional, so the v1 fixtures in scenarios/basic/ still load.
+    #   behavioral_requirement  one sentence: what the ego must do to pass
+    #   hazard                  ISO 21448 vocabulary: triggering condition and
+    #                           hazardous event
+    #   verification_gap        what the pass criterion does NOT check for this
+    #                           scenario, so a PASS beside it is not overread
+    behavioral_requirement: str = ""
+    hazard: str = ""
+    verification_gap: str = ""
+
     # Ego vehicle
     ego_initial: VehicleInitialCondition = field(
         default_factory=VehicleInitialCondition
@@ -178,6 +190,9 @@ class ScenarioDefinition:
                 "name": self.name,
                 "version": self.version,
                 "description": self.description,
+                "behavioral_requirement": self.behavioral_requirement,
+                "hazard": self.hazard,
+                "verification_gap": self.verification_gap,
                 "duration": self.duration,
             },
             "ego": {

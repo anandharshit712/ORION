@@ -9,6 +9,16 @@ scenario:
     never be - braking hard for the runs where it veers away is its own kind of
     wrong. LON-010 puts the same failure ahead of the ego, where the answer is
     unambiguous.
+  behavioral_requirement: >-
+    The ego must respond proportionately to a vehicle level with it in the adjacent
+    lane that suffers a blowout and yaws either toward or away from it.
+  hazard: >-
+    Triggering condition: the vehicle beside the ego has a tyre failure, decelerating
+    hard and yawing in a direction drawn per run. Hazardous event: side impact from a
+    neighbour losing control.
+  verification_gap: >-
+    Unwarranted hard braking on the runs where the vehicle veers away is not a
+    failure; it shows only in the stability component.
   duration: 22.0
 
 ego:

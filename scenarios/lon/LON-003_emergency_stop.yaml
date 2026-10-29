@@ -6,6 +6,17 @@ scenario:
     initial decel, hesitation window probability, and final decel all vary per run.
     Ego initial speed and lead vehicle gap are also randomised so the AV model
     cannot rely on fixed patterns. Maps to NHTSA Pre-Crash Type 14.
+  behavioral_requirement: >-
+    The ego must stop without contact behind a lead vehicle that performs a staged
+    emergency stop reaching up to 9.8 m/s2, from an ego speed of 60-100 km/h.
+  hazard: >-
+    Triggering condition: the lead vehicle begins an emergency stop when its
+    time-to-collision with the ego falls below a randomised 2.5-5 s threshold. Hazardous
+    event: rear-end collision with a rapidly stopping lead vehicle (NHTSA pre-crash
+    type 14).
+  verification_gap: >-
+    The 'occluded cause' in the name is not modelled: there is no cause object and no
+    occlusion, and the lead vehicle's stop is fully observable.
   duration: 25.0
 
 ego:

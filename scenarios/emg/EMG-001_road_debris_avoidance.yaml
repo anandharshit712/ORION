@@ -5,6 +5,16 @@ scenario:
     Large static debris (truck tire) in ego's lane at highway speed. Ego must
     detect and perform an evasive lane change or emergency stop without collision.
     No advance warning. Debris first visible at approximately 50m.
+  behavioral_requirement: >-
+    The ego must avoid large stationary debris in its lane at highway speed by
+    changing lane or stopping, where braking alone is insufficient on the fastest
+    draws.
+  hazard: >-
+    Triggering condition: a large static object lies in the ego lane ahead. Hazardous
+    event: collision with road debris at highway speed.
+  verification_gap: >-
+    The debris is a stationary car-sized object observable from the first frame; the
+    50 m first-visibility distance in the description is not modelled.
   duration: 15.0
 
 ego:

@@ -114,6 +114,15 @@ class PDFGenerator:
             output_path,
         )
 
+    def render_pdf(
+        self,
+        template_name: str,
+        context: dict,
+        output_path: Optional[Path] = None,
+    ) -> bytes:
+        """Render any report template to PDF (Phase 4.5 standards artefacts)."""
+        return self._render(template_name, context, output_path)
+
     # ── Internals ────────────────────────────────────────────────────
 
     def render_html(self, template_name: str, context: dict) -> str:
@@ -145,6 +154,17 @@ class PDFGenerator:
         # required, so a caller who omits it still gets a report; anything in
         # the context wins.
         environment.globals.setdefault("org_name", "ORION")
+        # The footer states the composite weights. Read from the evaluator, not
+        # typed into the template: it said 0.50/0.20/0.15/0.15 against a code
+        # weighting of 0.35/0.25/0.20/0.20, on every report a reviewer received.
+        from arep.evaluation.composite import CompositeEvaluator as _CE
+
+        environment.globals["composite_weights"] = {
+            "safety": _CE.SAFETY_WEIGHT,
+            "compliance": _CE.COMPLIANCE_WEIGHT,
+            "stability": _CE.STABILITY_WEIGHT,
+            "reactivity": _CE.REACTIVITY_WEIGHT,
+        }
 
         return environment.get_template(template_name).render(**context)
 

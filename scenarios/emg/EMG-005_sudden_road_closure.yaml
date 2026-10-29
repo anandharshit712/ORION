@@ -7,6 +7,12 @@ scenario:
     scenarios: a model that has learned to steer around obstacles has nowhere to
     put the car, and the only safe behaviour is the one this category usually
     treats as insufficient.
+  behavioral_requirement: >-
+    The ego must stop from highway speed before a closure that blocks both lanes,
+    where no lateral escape exists.
+  hazard: >-
+    Triggering condition: stationary vehicles block both lanes ahead. Hazardous event:
+    collision with a full road closure at highway speed.
   duration: 25.0
 
 ego:

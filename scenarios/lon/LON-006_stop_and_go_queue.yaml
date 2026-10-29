@@ -7,6 +7,13 @@ scenario:
     brake well can still fail here by treating every new brake as the first: the
     requirement is stable gap-keeping across a sequence, not one correct reaction.
     The stagger is randomised, so the rhythm differs per run.
+  behavioral_requirement: >-
+    The ego must keep a stable gap through a queue in which three vehicles ahead brake
+    in staggered sequence, handling each successive deceleration rather than only the
+    first.
+  hazard: >-
+    Triggering condition: three queued vehicles ahead brake one after another at
+    randomised triggers. Hazardous event: rear-end collision in a stop-and-go queue.
   duration: 30.0
 
 ego:

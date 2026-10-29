@@ -7,6 +7,13 @@ scenario:
     reveal, and this one isolates the other half of the problem - a small, fast
     body on a path that does not stop at the kerb. A cautious pedestrian model
     hesitates and gives the ego time; this one does not.
+  behavioral_requirement: >-
+    The ego must stop for a child who runs into the carriageway from the roadside at
+    running pace without hesitating, visible throughout.
+  hazard: >-
+    Triggering condition: a child at the roadside runs into the ego lane as the ego
+    approaches, without pausing at the kerb. Hazardous event: collision with a child
+    pedestrian.
   duration: 18.0
 
 ego:

@@ -7,6 +7,16 @@ scenario:
     clearance while overtaking something narrow and unsteady: the swerve
     amplitude varies per run, so the clearance that was adequate on one draw is
     not on the next, and a fixed passing offset is not a strategy.
+  behavioral_requirement: >-
+    The ego must pass an e-scooter wobbling in the bike lane beside it while keeping
+    enough lateral clearance for a swerve amplitude that varies per run.
+  hazard: >-
+    Triggering condition: an e-scooter travelling between cycling and car speed
+    swerves laterally in the bike lane beside the ego's path. Hazardous event: side
+    collision with the e-scooter rider.
+  verification_gap: >-
+    Lateral clearance is not measured; only contact and leaving the road fail the run.
+    The e-scooter is a bicycle-type object driven by the erratic_cyclist tree.
   duration: 22.0
 
 ego:

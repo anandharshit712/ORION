@@ -8,6 +8,14 @@ scenario:
     drops, and a model that watches only longitudinal TTC sees no threat at all
     until the two bodies touch. Distinct from LAT-002, where the intrusion is a
     deliberate, quick manoeuvre.
+  behavioral_requirement: >-
+    The ego must notice and back away from an adjacent vehicle that creeps sideways
+    into its lane at matched speed, where longitudinal time-to-collision never signals
+    a threat.
+  hazard: >-
+    Triggering condition: an adjacent vehicle travelling at the ego speed drifts
+    slowly toward the ego lane over several seconds. Hazardous event: sideswipe at
+    near-zero closing speed.
   duration: 25.0
 
 ego:

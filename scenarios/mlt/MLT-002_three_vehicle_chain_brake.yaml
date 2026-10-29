@@ -8,6 +8,14 @@ scenario:
     that started it - and it starts later, with less warning. The requirement is
     a following distance that survives amplification, not one sized for the
     lead's own braking.
+  behavioral_requirement: >-
+    The ego must keep a following distance that survives a brake wave amplifying back
+    through three vehicles ahead, where the vehicle directly ahead brakes later and
+    harder than the one that started it.
+  hazard: >-
+    Triggering condition: the front vehicle of a three-vehicle column brakes, and each
+    vehicle behind brakes in reaction to the one ahead. Hazardous event: rear-end
+    collision at the back of a chain-braking column.
   duration: 28.0
 
 ego:

@@ -7,6 +7,18 @@ scenario:
     awareness of something overtaking that the forward sensors do not see, and
     the trap is that the obvious response to the lead - move over - is into the
     lane the emergency vehicle needs.
+  behavioral_requirement: >-
+    The ego must not move into the adjacent lane behind a slower lead while an
+    emergency vehicle closes from behind in that lane at well above traffic speed.
+  hazard: >-
+    Triggering condition: an emergency vehicle approaches from behind in the adjacent
+    lane while a slower vehicle sits ahead in the ego lane. Hazardous event: side or
+    rear impact with the emergency vehicle during a lane change, or rear-end collision
+    with the slow lead.
+  verification_gap: >-
+    The emergency vehicle is an ordinary car: no siren, lights or priority reaches the
+    Observation. Pulling over to yield is not scored; only contact and leaving the
+    road fail the run.
   duration: 25.0
 
 ego:

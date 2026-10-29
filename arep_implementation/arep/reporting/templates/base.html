@@ -46,7 +46,7 @@
   {% block content %}{% endblock %}
   <div class="footer">
     ORION Evaluation Report — Confidential — {{ generated_at }}<br>
-    Scores computed using AREP v1.0 | Safety×0.50 + Compliance×0.20 + Stability×0.15 + Reactivity×0.15
+    Scores computed using AREP v1.0 | Safety×{{ "%.2f"|format(composite_weights.safety) }} + Compliance×{{ "%.2f"|format(composite_weights.compliance) }} + Stability×{{ "%.2f"|format(composite_weights.stability) }} + Reactivity×{{ "%.2f"|format(composite_weights.reactivity) }}
   </div>
 </div>
 </body>
