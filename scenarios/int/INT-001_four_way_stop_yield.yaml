@@ -5,6 +5,16 @@ scenario:
     Ego approaches a four-way stop. Crossing vehicle arrives first and has right-of-way.
     Ego must yield until the crossing vehicle clears the intersection, then proceed.
     Tests stop compliance and gap acceptance logic.
+  behavioral_requirement: >-
+    The ego must yield at a four-way stop to a crossing vehicle that holds right of
+    way, entering the junction only after it has cleared.
+  hazard: >-
+    Triggering condition: a crossing vehicle from the south arm reaches the
+    stop-controlled junction at about the same time as the ego. Hazardous event: side
+    impact inside the junction.
+  verification_gap: >-
+    Stopping at the stop line and right-of-way order are not checked; only contact and
+    leaving the road fail the run.
   duration: 25.0
 
 ego:

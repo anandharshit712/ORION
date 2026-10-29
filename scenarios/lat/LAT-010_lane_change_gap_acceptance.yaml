@@ -8,6 +8,16 @@ scenario:
     not check, and the cost of getting it wrong is a side impact at high
     relative speed. Substituted for the roadmap wet-road lane-departure theme,
     which needs surface friction the physics does not yet read.
+  behavioral_requirement: >-
+    The ego must not change lane to pass a slow lead while a much faster vehicle
+    closes from behind in the target lane.
+  hazard: >-
+    Triggering condition: a slow lead ahead makes a lane change attractive while a
+    much faster vehicle approaches from behind in the adjacent lane. Hazardous event:
+    side or rear impact at high relative speed during a lane change.
+  verification_gap: >-
+    Stands in for the roadmap's wet-road lane-departure theme, which needs surface
+    friction the physics does not read; that theme is not covered.
   duration: 25.0
 
 ego:

@@ -10,6 +10,16 @@ scenario:
 
     Substituted for the roadmap's "flash-flood water" theme, which needs surface
     friction the physics does not read.
+  behavioral_requirement: >-
+    The ego must choose a path through several stationary objects spread across both
+    lanes at different distances, rather than avoiding only the nearest.
+  hazard: >-
+    Triggering condition: three stationary objects occupy alternating lanes at
+    staggered distances ahead, positions randomised per run. Hazardous event:
+    collision with a later object after evading the first.
+  verification_gap: >-
+    Stands in for the roadmap's 'flash-flood water' theme, which needs surface
+    friction the physics does not read; standing water is not covered.
   duration: 22.0
 
 ego:

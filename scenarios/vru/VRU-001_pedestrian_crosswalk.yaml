@@ -6,6 +6,15 @@ scenario:
     hesitate mid-crossing if ego is approaching fast, and retreats if the ego is
     very close without braking. Speed, hesitation probability, and trigger distance
     are randomised per run. Ego approach speed is also varied.
+  behavioral_requirement: >-
+    The ego must stop for a pedestrian crossing at a crosswalk ahead who may hesitate
+    mid-crossing or step back, holding until the lane is clear.
+  hazard: >-
+    Triggering condition: a pedestrian at the kerb begins crossing when the ego comes
+    within a randomised distance, and may hesitate or retreat if the ego approaches
+    fast. Hazardous event: collision with a crossing pedestrian.
+  verification_gap: >-
+    The crosswalk is a label: no marking exists in the road model or the Observation.
   duration: 20.0
 
 ego:

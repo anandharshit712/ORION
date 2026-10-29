@@ -6,6 +6,18 @@ scenario:
     and direction reversals on short intervals. The parked car creates full occlusion
     until the child is at the road edge. Ego approach speed and child start position
     are varied per run. Maps to Euro NCAP AEB VRU Child Crossing Occluded.
+  behavioral_requirement: >-
+    The ego must stop for a child who emerges beside a parked car and moves
+    erratically, pausing and reversing, while the ego approaches at 30-50 km/h.
+  hazard: >-
+    Triggering condition: a child pedestrian beside a parked car enters the ego lane
+    with random speed changes, pauses and reversals. Hazardous event: collision with a
+    child pedestrian (Euro NCAP AEB VRU child crossing).
+  verification_gap: >-
+    Occlusion is not modelled: the Observation is ground truth, so the parked car does
+    not hide the child and the reveal that the description and the Euro NCAP mapping
+    depend on does not happen. As executed this is close to VRU-004 with a parked car
+    and a more erratic child.
   duration: 15.0
 
 ego:

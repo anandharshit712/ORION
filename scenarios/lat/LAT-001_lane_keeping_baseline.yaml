@@ -2,6 +2,17 @@ scenario:
   name: "LAT-001 Lane Keeping Baseline — Straight Road No Traffic"
   version: "1.0"
   description: "Empty straight road. Ego must maintain lane center within 0.3m lateral offset for the full duration. Baseline lateral control test."
+  behavioral_requirement: >-
+    The ego must hold the centre of its lane on an empty straight road at 60-110 km/h
+    for the full run.
+  hazard: >-
+    Triggering condition: none beyond sustained driving from a randomised start
+    position, with no other road user present. Hazardous event: lane departure and
+    leaving the carriageway.
+  verification_gap: >-
+    Staying inside the lane is scored only in the compliance component of the
+    composite; the pass gate fails only leaving the road, and the 0.3 m lateral-offset
+    tolerance in the description is not checked.
   duration: 20.0
 
 ego:

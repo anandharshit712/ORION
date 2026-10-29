@@ -8,6 +8,13 @@ scenario:
     sight-restricted junction fast enough that a late reveal cannot be answered
     has already failed, whatever it does next. Spawned rather than placed, so
     it is genuinely absent from the scene until it is not.
+  behavioral_requirement: >-
+    The ego must approach a sight-restricted junction slowly enough to stop for cross
+    traffic that appears close to the junction partway through the approach.
+  hazard: >-
+    Triggering condition: a crossing vehicle is spawned 14 m from the junction centre
+    4.5 s into the run, standing in for one hidden behind a building line. Hazardous
+    event: side impact with late-revealed cross traffic.
   duration: 25.0
 
 ego:

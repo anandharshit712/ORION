@@ -12,6 +12,18 @@ scenario:
     visibility model: `weather.visibility` is a label the Observation never
     reads, so a night scenario would differ from a daytime one only in its
     description. It returns when environmental physics lands.
+  behavioral_requirement: >-
+    The ego must stop for a pedestrian who steps off the kerb mid-block with little
+    hesitation, where nothing in the road layout suggests a crossing.
+  hazard: >-
+    Triggering condition: a pedestrian steps into the ego lane mid-block when the ego
+    comes within a randomised distance. Hazardous event: collision with a pedestrian
+    away from any crossing.
+  verification_gap: >-
+    Stands in for the roadmap's 'pedestrian at night' theme, which needs a visibility
+    model; night and lighting are not covered. Crossing markings are not modelled
+    anywhere, so as executed this differs from VRU-001 only in parameters: both use
+    the cautious_pedestrian tree.
   duration: 18.0
 
 ego:

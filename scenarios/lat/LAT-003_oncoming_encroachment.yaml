@@ -2,6 +2,16 @@ scenario:
   name: "LAT-003 Oncoming Vehicle Lane Encroachment"
   version: "1.0"
   description: "Oncoming vehicle drifts into ego's lane. Ego must evasively steer right or brake without leaving the road boundary."
+  behavioral_requirement: >-
+    The ego must avoid an oncoming vehicle that drifts across the centre line into its
+    lane, by braking or steering right without leaving the road.
+  hazard: >-
+    Triggering condition: at a randomised 25-55 m separation the oncoming vehicle
+    drifts laterally into the ego lane. Hazardous event: head-on or offset frontal collision.
+  verification_gap: >-
+    Unproven as of 2026-10-01: no model in the repository passes it (emergency_brake
+    and ReferenceDriver both fail at 10 runs per scenario), so it is not yet shown
+    that the scenario is passable.
   duration: 15.0
 
 ego:

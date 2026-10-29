@@ -184,6 +184,10 @@ class ScenarioParser:
                 name=meta["name"],
                 version=str(meta["version"]),
                 description=meta.get("description", ""),
+                # Optional (Phase 4.5): documentation, never read by the engine.
+                behavioral_requirement=_text(meta.get("behavioral_requirement")),
+                hazard=_text(meta.get("hazard")),
+                verification_gap=_text(meta.get("verification_gap")),
                 duration=float(meta["duration"]),
                 ego_initial=ego_initial,
                 ego_constraints=ego_constraints,
@@ -198,3 +202,8 @@ class ScenarioParser:
 
         except (KeyError, TypeError, ValueError) as e:
             raise ScenarioParseError(f"Schema parsing error: {e}")
+
+
+def _text(value: object) -> str:
+    """A free-text metadata field as one line: absent is "", YAML folding undone."""
+    return " ".join(str(value).split()) if value is not None else ""

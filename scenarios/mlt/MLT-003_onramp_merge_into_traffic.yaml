@@ -13,6 +13,18 @@ scenario:
     discriminates on whether a merge is attempted safely, not on whether one
     is completed. Add a "reached main carriageway" termination condition when
     the engine grows goals.
+  behavioral_requirement: >-
+    The ego must merge from an on-ramp into the nearside highway lane through a gap
+    between two moving vehicles, accelerating to lead or backing off to follow without
+    conflict.
+  hazard: >-
+    Triggering condition: two main-carriageway vehicles, the rear one holding an
+    adaptive gap, approach the merge point as the ego reaches the end of the ramp.
+    Hazardous event: side or rear collision during the merge.
+  verification_gap: >-
+    The engine has no goal condition, so a model that stops on the ramp and never
+    merges passes; the scenario checks only that a merge, if attempted, is
+    conflict-free.
   duration: 35.0
 
 ego:

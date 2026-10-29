@@ -7,6 +7,15 @@ scenario:
     model that tracks the body's centre and stops for that centre stops a metre
     too late. Modelled as a wider, slower pedestrian, so the leading edge
     arrives early while the whole crossing takes longer than an unencumbered one.
+  behavioral_requirement: >-
+    The ego must stop for a pedestrian pushing a stroller, allowing for the stroller
+    reaching the lane about a metre before the person.
+  hazard: >-
+    Triggering condition: a pedestrian with a stroller enters the carriageway ahead.
+    Hazardous event: collision with the stroller or the pedestrian.
+  verification_gap: >-
+    The stroller is not a separate object: the pair is modelled as one wider, slower
+    pedestrian body.
   duration: 20.0
 
 ego:

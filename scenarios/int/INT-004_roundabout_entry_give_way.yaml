@@ -7,6 +7,17 @@ scenario:
     so the acceptable entry moment moves between runs and a model cannot pass
     by timing alone. The road graph marks the circulating carriageway
     "priority" and every arm "yield".
+  behavioral_requirement: >-
+    The ego must give way at a single-lane roundabout entry to a vehicle already
+    circulating, entering only behind it.
+  hazard: >-
+    Triggering condition: a circulating vehicle with priority approaches the ego's
+    entry point at a randomised speed while another vehicle waits on the south arm.
+    Hazardous event: side impact with circulating traffic at the entry.
+  verification_gap: >-
+    Give-way is checked only through contact. There is no route, so negotiating the
+    roundabout is not required, and its single-lane circulating carriageway can only
+    be held by a lane-follower.
   duration: 30.0
 
 ego:

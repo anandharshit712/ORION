@@ -5,6 +5,17 @@ scenario:
     Ego approaches a red traffic light at an intersection. Must stop at the line
     (x=60m). Light turns green after 5s. Ego must then proceed without
     exceeding speed limit. Tests red-light compliance and re-acceleration.
+  behavioral_requirement: >-
+    The ego must stop at the junction while its signal is red and proceed only after
+    it turns green, without exceeding the speed limit.
+  hazard: >-
+    Triggering condition: the signal facing the ego is red on approach and turns green
+    10 s into the run. Hazardous event: red-light violation into the junction; no
+    conflicting traffic is present in this scenario.
+  verification_gap: >-
+    Not verified. There is no cross traffic and red-light running is not detected, so
+    a model that drives through the red passes; only speed compliance in the composite
+    reflects this scenario's requirement.
   duration: 25.0
 
 ego:

@@ -5,6 +5,14 @@ scenario:
     Lead vehicle performs a two-stage hard brake. Initial decel, duration of first
     phase, and whether a hesitation pause occurs are all randomised each run.
     Ego closing speed and initial gap are also varied. Pattern-learning is blocked.
+  behavioral_requirement: >-
+    The ego must brake early and hard enough to avoid striking a lead vehicle that
+    performs a two-stage hard brake whose deceleration, timing and mid-brake release
+    vary per run.
+  hazard: >-
+    Triggering condition: the lead vehicle brakes hard when its time-to-collision with
+    the ego crosses a randomised threshold, sometimes pausing between the two stages.
+    Hazardous event: rear-end collision with the lead vehicle at highway speed.
   duration: 20.0
 
 ego:

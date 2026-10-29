@@ -5,6 +5,18 @@ scenario:
     Ego must complete an unprotected left turn through a gap in oncoming traffic.
     Two oncoming vehicles at road speed. Ego must accept a gap >=4.0s TTC and
     complete the turn without causing oncoming decel >0.1g. Maps to NHTSA Type 2.
+  behavioral_requirement: >-
+    The ego must complete an unprotected left turn across two oncoming vehicles,
+    accepting a gap of at least 4 s and not forcing the oncoming traffic to brake.
+  hazard: >-
+    Triggering condition: two oncoming vehicles approach the junction at road speed
+    with a randomised gap as the ego prepares to turn. Hazardous event: side impact
+    with an oncoming vehicle during the turn (NHTSA pre-crash type 2).
+  verification_gap: >-
+    Not verified. The Observation carries no route, so nothing tells the model to
+    turn; an ego that continues straight never enters the oncoming lane and passes.
+    Gap size and oncoming deceleration are not measured, and the oncoming vehicles
+    drive at constant velocity.
   duration: 30.0
 
 ego:

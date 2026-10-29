@@ -7,6 +7,13 @@ scenario:
     requirement is that losing sight of the original hazard is not the same as
     the hazard being gone: a model tracking the lead vehicle sees it continue
     normally, and the thing that will be hit was never a vehicle at all.
+  behavioral_requirement: >-
+    The ego must avoid an object shed from a lead vehicle that lands stationary in its
+    lane, while the vehicle that dropped it carries on normally.
+  hazard: >-
+    Triggering condition: an object is spawned stationary in the ego lane 2.5 s into
+    the run, behind a lead vehicle that continues at speed. Hazardous event: collision
+    with fallen load at highway speed.
   duration: 22.0
 
 ego:

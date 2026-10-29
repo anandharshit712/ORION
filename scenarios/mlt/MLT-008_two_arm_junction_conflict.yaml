@@ -9,6 +9,14 @@ scenario:
     as the whole problem and resumes behind it meets the second inside the box.
     Distinct from INT-009, where one stream comes from one arm and the question
     is which gap to take.
+  behavioral_requirement: >-
+    The ego must wait at an unsignalled junction until both crossing vehicles,
+    arriving seconds apart from opposite arms, have cleared, rather than resuming
+    after the first.
+  hazard: >-
+    Triggering condition: a vehicle from the south arm crosses the ego path as the ego
+    arrives, and a second from the north arm follows seconds later. Hazardous event:
+    side impact with the second crossing vehicle inside the junction.
   duration: 28.0
 
 ego:

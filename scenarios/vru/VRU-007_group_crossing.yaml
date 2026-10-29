@@ -7,6 +7,13 @@ scenario:
     that resumes as soon as the nearest hazard passes meets the second, and the
     stagger is randomised so the rhythm cannot be learned. The group tests
     persistence of caution, not detection.
+  behavioral_requirement: >-
+    The ego must stay stopped or slow until all three pedestrians in a staggered group
+    have crossed, rather than resuming once the first has passed.
+  hazard: >-
+    Triggering condition: three pedestrians cross the ego's path at staggered,
+    randomised times. Hazardous event: collision with a later pedestrian after
+    resuming behind an earlier one.
   duration: 22.0
 
 ego:

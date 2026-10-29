@@ -7,6 +7,13 @@ scenario:
     time budget is short, the closing speed is small, and a model tuned to highway
     TTC thresholds can reach the bumper having never crossed one. Nothing here is
     sudden - the failure mode is under-reaction rather than late reaction.
+  behavioral_requirement: >-
+    The ego must stop short of a stopped vehicle in an urban queue from 20-50 km/h
+    with a short gap, reacting at closing speeds too low to cross highway
+    time-to-collision thresholds.
+  hazard: >-
+    Triggering condition: a stationary vehicle sits a short distance ahead in the ego
+    lane at urban speed. Hazardous event: low-speed rear-end collision.
   duration: 18.0
 
 ego:

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Traceability Matrix — {{ suite }}{% endblock %}
+{% block content %}
+<h1>Traceability Matrix — {{ suite }}</h1>
+
+<div class="methodology">
+  <strong>Result source:</strong>
+  {% if report %}run_suite report — model {{ report.model }}, seed {{ report.seed }},
+  {{ report.runs_per_scenario }} runs per scenario.
+  {% else %}no report supplied, so every result reads "not run".{% endif %}
+  Results: {% for name, n in counts.items() %}{{ n }} {{ name }}{% if not loop.last %}, {% endif %}{% endfor %}.<br>
+  <strong>Pass criterion, every scenario:</strong> collision rate &lt; {{ collision_limit }}
+  and off-road rate &lt; {{ off_road_limit }} across the runs. Nothing else is checked by
+  the gate. Where a requirement asks for more, the "Not verified" column says what, and a
+  PASS beside it covers only the gate.<br>
+  <strong>Not a certification artefact.</strong> See docs/STANDARDS.md for what this
+  matrix can and cannot support.
+</div>
+
+<table style="font-size: 8pt;">
+  <tr>
+    <th>Scenario</th>
+    <th>Hazard (ISO 21448)</th>
+    <th>Behavioural requirement</th>
+    <th>Not verified by the pass criterion</th>
+    <th>Latest result</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td><strong>{{ r.scenario }}</strong><br>{{ r.category }}</td>
+    <td>{{ r.hazard }}</td>
+    <td>{{ r.behavioral_requirement }}</td>
+    <td>{{ r.verification_gap or "—" }}</td>
+    <td>
+      <span class="{% if r.result == 'PASS' %}score-pass{% elif r.result == 'FAIL' %}score-fail{% endif %}">{{ r.result }}</span>
+      {% if r.runs != "" %}<br>collision {{ r.collision_rate }}<br>off-road {{ r.off_road_rate }}<br>n = {{ r.runs }}{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

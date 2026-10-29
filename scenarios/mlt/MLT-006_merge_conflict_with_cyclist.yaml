@@ -6,6 +6,13 @@ scenario:
     the nearside where the ego would otherwise move. Both participants are
     slower and more vulnerable than a straightforward gap-acceptance problem
     allows for, and the space that resolves one conflict creates the other.
+  behavioral_requirement: >-
+    The ego must handle a vehicle merging toward its lane from the left while a
+    cyclist occupies the nearside space it would otherwise move into.
+  hazard: >-
+    Triggering condition: an adjacent vehicle drifts into the ego lane from the left
+    while a cyclist rides at the nearside edge. Hazardous event: side collision with
+    the merging vehicle, or collision with the cyclist.
   duration: 25.0
 
 ego:

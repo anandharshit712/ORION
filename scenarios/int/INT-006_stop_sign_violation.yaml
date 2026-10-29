@@ -8,6 +8,13 @@ scenario:
     one that stops and then moves is the case where a model has already decided
     the intersection is clear and stopped watching. Distinct from INT-001, where
     the crossing vehicle holds right of way and behaves correctly.
+  behavioral_requirement: >-
+    The ego must keep watching cross traffic that has stopped at its stop line and
+    avoid it when it pulls out in front after a randomised delay.
+  hazard: >-
+    Triggering condition: a cross-traffic vehicle stops at its stop line, then pulls
+    into the junction as the ego approaches. Hazardous event: side impact with a
+    vehicle violating the ego's right of way.
   duration: 25.0
 
 ego:

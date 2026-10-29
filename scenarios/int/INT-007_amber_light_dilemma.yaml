@@ -8,6 +8,17 @@ scenario:
     is a committed decision rather than an indecisive one, because braking late
     and then releasing is the behaviour that gets a car rear-ended. The change
     time is randomised, so the zone the ego is in when it happens varies.
+  behavioral_requirement: >-
+    The ego must make and commit to a stop-or-go decision when its signal turns amber
+    in the dilemma zone, and must not enter the junction on red.
+  hazard: >-
+    Triggering condition: the ego's signal turns amber as the ego nears the dilemma
+    zone and red 3 s later, when cross traffic is released. Hazardous event: side
+    impact with released cross traffic after entering on red.
+  verification_gap: >-
+    Entering on red fails the run only if it produces contact with the released cross
+    traffic; red-light running is not otherwise detected, and indecision (braking then
+    releasing) shows only in the stability component.
   duration: 22.0
 
 ego:

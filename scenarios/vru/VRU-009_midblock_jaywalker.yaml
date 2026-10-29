@@ -7,6 +7,13 @@ scenario:
     The requirement is that the projection accounts for both components: a model
     treating the crossing as purely lateral computes a clearance that the
     forward component has already eaten.
+  behavioral_requirement: >-
+    The ego must stop for a pedestrian crossing mid-block at an oblique angle,
+    accounting for the pedestrian's motion along the road as well as across it.
+  hazard: >-
+    Triggering condition: a pedestrian crosses the ego's path at about 60 degrees,
+    moving with the traffic flow as well as across it. Hazardous event: collision with
+    a jaywalking pedestrian.
   duration: 20.0
 
 ego:

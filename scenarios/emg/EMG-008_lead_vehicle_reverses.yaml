@@ -9,6 +9,18 @@ scenario:
 
     Substituted for the roadmap's "dust storm (visibility 30 m)" theme, which
     needs a visibility model the Observation does not carry.
+  behavioral_requirement: >-
+    The ego, which cannot reverse, must keep enough distance from, or move out of the
+    path of, a stopped vehicle ahead that starts backing toward it.
+  hazard: >-
+    Triggering condition: a stationary vehicle ahead in the ego lane begins reversing
+    toward the ego once it comes close. Hazardous event: collision with a reversing
+    vehicle, the gap closing without the ego moving into it.
+  verification_gap: >-
+    Unproven as of 2026-10-01: no model in the repository passes it (emergency_brake
+    and ReferenceDriver both fail at 10 runs per scenario), so it is not yet shown
+    that the scenario is passable. Stands in for the roadmap's 'dust storm (visibility
+    30 m)' theme, which needs a visibility model; reduced visibility is not covered.
   duration: 20.0
 
 ego:

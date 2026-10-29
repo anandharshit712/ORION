@@ -7,6 +7,13 @@ scenario:
     single vehicle: some runs offer a comfortable opening between the second and
     third, and some offer none within the scenario duration, where waiting is
     the correct answer and a timeout is not a failure.
+  behavioral_requirement: >-
+    The ego must pick a usable gap in a stream of three crossing vehicles, or wait out
+    the whole run when no gap is usable.
+  hazard: >-
+    Triggering condition: three vehicles cross the junction in sequence from one arm
+    with gaps that vary per run. Hazardous event: side impact with a crossing vehicle
+    after accepting an inadequate gap.
   duration: 30.0
 
 ego:

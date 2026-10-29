@@ -7,6 +7,14 @@ scenario:
     speeds; the requirement here is different because the time budget is not.
     At 30 m/s a one-second hesitation is thirty metres, so a model that waits to
     confirm the intrusion before acting has already spent the room it needed.
+  behavioral_requirement: >-
+    The ego must respond without hesitation to a vehicle changing into its lane with a
+    short gap at motorway speed (100-120 km/h), where one second of delay consumes
+    about 30 m.
+  hazard: >-
+    Triggering condition: an adjacent vehicle at motorway speed cuts into the ego lane
+    close ahead and may abort. Hazardous event: high-speed collision with a cutting-in
+    vehicle.
   duration: 22.0
 
 ego:

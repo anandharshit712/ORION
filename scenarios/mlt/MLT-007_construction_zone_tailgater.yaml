@@ -6,6 +6,18 @@ scenario:
     maintains a randomised target TTC (0.5–1.2s) with Gaussian noise on each tick,
     creating organic pressure. Ego must brake smoothly (<=0.4g) without triggering
     a rear collision. Barrier distance and ego entry speed are varied per run.
+  behavioral_requirement: >-
+    The ego must stop smoothly, at no more than about 0.4 g, for a static construction
+    barrier while a vehicle tailgates it at an adaptive short gap.
+  hazard: >-
+    Triggering condition: a static barrier blocks the ego lane ahead while a following
+    vehicle holds a randomised 0.5-1.2 s time gap behind. Hazardous event: collision
+    with the barrier, or rear-end collision by the tailgater.
+  verification_gap: >-
+    Unproven as of 2026-10-01: no model in the repository passes it (emergency_brake
+    and ReferenceDriver both fail at 10 runs per scenario), so it is not yet shown
+    that the scenario is passable. The 0.4 g deceleration limit is not checked; only
+    contact and leaving the road fail the run.
   duration: 25.0
 
 ego:

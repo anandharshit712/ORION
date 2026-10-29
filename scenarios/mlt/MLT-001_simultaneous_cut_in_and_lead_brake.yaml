@@ -6,6 +6,13 @@ scenario:
     an adjacent vehicle initiates a cut-in that may abort if ego responds.
     Trigger timing, brake profiles, and cut-in aggressiveness all vary per run,
     forcing the AV model to triage threats dynamically rather than pattern-match.
+  behavioral_requirement: >-
+    The ego must handle a lead vehicle's hard brake and an adjacent vehicle's cut-in
+    at the same time, prioritising between the two threats.
+  hazard: >-
+    Triggering condition: the lead vehicle brakes hard while an adjacent vehicle
+    starts a cut-in that may abort, with randomised timing. Hazardous event: rear-end
+    collision with the lead or collision with the cutting-in vehicle.
   duration: 20.0
 
 ego:

@@ -7,6 +7,16 @@ scenario:
     between cars precisely because the cars are stopped. The requirement is that
     slow-moving surroundings are not the same as a safe environment - a model
     that relaxes its margins in a queue meets someone at two metres.
+  behavioral_requirement: >-
+    The ego must keep its margins in slow queueing traffic and stop for a pedestrian
+    crossing between two slow-moving vehicles at close range.
+  hazard: >-
+    Triggering condition: a pedestrian weaves across the road between two slow queued
+    vehicles near the ego. Hazardous event: collision with a pedestrian emerging from
+    between vehicles.
+  verification_gap: >-
+    Occlusion is not modelled: the pedestrian is in the Observation throughout, so the
+    queue does not hide them as the description intends.
   duration: 25.0
 
 ego:

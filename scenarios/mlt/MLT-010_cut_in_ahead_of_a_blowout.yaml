@@ -7,6 +7,13 @@ scenario:
     problem and the blowout is the one that matters: a model that solves the
     intrusion by settling in behind the new lead has put itself directly behind
     a vehicle about to lose control, with the gap it just accepted.
+  behavioral_requirement: >-
+    The ego, after a vehicle cuts in ahead, must leave enough gap behind the new lead
+    to survive the blowout of the vehicle beyond it moments later.
+  hazard: >-
+    Triggering condition: a vehicle cuts in front of the ego, then the vehicle beyond
+    it suffers a tyre blowout and decelerates hard. Hazardous event: rear-end
+    collision in a chain after accepting a short gap behind the cut-in vehicle.
   duration: 25.0
 
 ego:

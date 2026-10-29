@@ -2,6 +2,17 @@ scenario:
   name: "LON-001 Lead Vehicle Gradual Slowdown"
   version: "1.0"
   description: "Lead vehicle decelerates at -2 m/s2 from highway speed. Ego must close-regulate following distance without collision."
+  behavioral_requirement: >-
+    The ego must slow to hold a safe following gap behind a highway lead vehicle that
+    decelerates steadily at about 2 m/s2 and settles at 40 km/h.
+  hazard: >-
+    Triggering condition: the lead vehicle in the ego lane begins a sustained moderate
+    deceleration 3 s into the run. Hazardous event: rear-end collision with the lead
+    vehicle.
+  verification_gap: >-
+    The parameterised initial_decel range is never read: the lead uses the scripted
+    behaviour, which reads post_acceleration, so it decelerates at 2 m/s2 on every run
+    and the deceleration does not vary as the parameterisation block implies.
   duration: 30.0
 
 ego:

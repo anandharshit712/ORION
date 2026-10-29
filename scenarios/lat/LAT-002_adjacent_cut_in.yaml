@@ -5,6 +5,13 @@ scenario:
     NPC in left lane initiates a cut-in but may abort mid-manoeuvre if the ego
     vehicle brakes or slows. Signal duration, lateral speed, and abort probability
     are randomised per run. Ego and NPC speeds are also varied. Maps to NHTSA Type 45.
+  behavioral_requirement: >-
+    The ego must give way to an adjacent vehicle cutting into its lane at ordinary
+    highway speed, opening a gap while the cut-in may abort mid-manoeuvre.
+  hazard: >-
+    Triggering condition: a vehicle in the adjacent lane moves into the ego lane at a
+    randomised lateral speed and may abort. Hazardous event: collision with a
+    cutting-in vehicle (NHTSA pre-crash type 45).
   duration: 20.0
 
 ego:
