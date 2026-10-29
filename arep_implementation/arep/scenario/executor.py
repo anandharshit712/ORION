@@ -13,6 +13,7 @@ import numpy as np
 
 from arep.config import SimulationConfig
 from arep.core.state import (
+    TrafficLightState,
     WorldState,
     VehicleState,
     Vector2D,
@@ -22,6 +23,7 @@ from arep.core.state import (
 )
 from arep.core.random_manager import RandomManager
 from arep.scenario.schema import ScenarioDefinition
+from arep.scenario.importance import ImportanceRegion
 from arep.scenario.parameterizer import ScenarioParameterizer
 from arep.utils.exceptions import ScenarioParseError
 from arep.utils.logging_config import get_logger
@@ -66,6 +68,7 @@ class ScenarioExecutor:
         self,
         scenario: ScenarioDefinition,
         rng: RandomManager,
+        region: ImportanceRegion | None = None,
     ) -> WorldState:
         """
         Build the initial WorldState.
@@ -73,18 +76,20 @@ class ScenarioExecutor:
         Args:
             scenario: Parsed and validated scenario.
             rng: Random manager.
+            region: Optional parameter sub-region to oversample (Phase 4.3).
 
         Returns:
-            Ready-to-simulate WorldState.
+            Ready-to-simulate WorldState. Its `importance_weight` carries the
+            sampling weight of this instance; 1.0 for an ordinary uniform draw.
         """
         # L2: apply dynamic parameterization ranges before building world
-        self.parameterizer.apply(scenario, rng)
+        weight = self.parameterizer.apply(scenario, rng, region)
 
         ego = self._create_ego(scenario)
         objects = self._create_traffic_objects(scenario)
         road_graph = self._create_road_graph(scenario)
         lanes = self._create_lanes(scenario, road_graph)
-        lights = self._create_traffic_lights(scenario, rng)
+        lights = self._create_traffic_lights(scenario, rng, road_graph)
         npc_behaviors = self._build_npc_behaviors(scenario)
 
         world = self.world_manager.create_initial_world(
@@ -95,6 +100,7 @@ class ScenarioExecutor:
             weather_condition=scenario.weather.condition,
             visibility=scenario.weather.visibility,
         )
+        world.importance_weight = weight
         world.npc_behaviors = npc_behaviors
         # Carried alongside `lanes` rather than replacing it (Phase 1.5).
         # Everything downstream — observations, lane compliance, the tick frame —
@@ -235,8 +241,50 @@ class ScenarioExecutor:
             # 0.0, costing ~0.08 composite each for no behavioural reason.
             lane_y = (lane_idx - (road.lanes - 1) / 2.0) * road.lane_width
 
-            # Straight centerline (1 km)
-            centerline = [Vector2D(float(x), lane_y) for x in np.linspace(0, 1000, 100)]
+            # Straight centerline, 1 km of it, extended to cover everything
+            # the scenario actually places on the road.
+            #
+            # It used to be exactly linspace(0, 1000), which meant the road did
+            # not exist behind the origin -- and `get_closest_point` clamps to
+            # the polyline, so a vehicle at x = -5 measured its distance to the
+            # centreline's *start point* and got 5 m of "lateral" offset from a
+            # purely longitudinal displacement. That reads as off-road.
+            #
+            # Scenarios put things there routinely: `ego_x_jitter` runs to -5 in
+            # the older scenarios, a tailgater starts at -22, an overtaking
+            # vehicle at -75, an emergency vehicle at -90. The ego ones
+            # terminated at the first tick, and because leaving the road was not
+            # a failure until Phase 4.3 those one-tick runs were scored and
+            # averaged in with the rest -- 2 runs in 10 on LON-003.
+            #
+            # The existing points are kept exactly and new ones are stepped out
+            # from them at the same spacing, so every projection inside the old
+            # range is bit-identical and the frame-hash determinism tests still
+            # pin what they always pinned.
+            xs = [float(x) for x in np.linspace(0, 1000, 100)]
+            step = xs[1] - xs[0]
+            # getattr, because this function needs only `road` to lay out
+            # geometry and that is how it is called from the lane-convention
+            # test. The occupancy scan widens the road to fit what is on it; it
+            # does not get to widen what a caller must supply.
+            ego_initial = getattr(scenario, "ego_initial", None)
+            occupied = [getattr(ego_initial, "x", 0.0)] + [
+                obj.initial.x
+                for obj in (getattr(scenario, "traffic_objects", None) or [])
+            ]
+            margin = 100.0
+            behind, ahead = [], []
+            cursor = xs[0]
+            while cursor > min([0.0] + occupied) - margin:
+                cursor -= step
+                behind.append(cursor)
+            cursor = xs[-1]
+            while cursor < max([1000.0] + occupied) + margin:
+                cursor += step
+                ahead.append(cursor)
+            centerline = [
+                Vector2D(x, lane_y) for x in (list(reversed(behind)) + xs + ahead)
+            ]
 
             lanes.append(
                 LaneInfo(
@@ -275,6 +323,41 @@ class ScenarioExecutor:
         self,
         scenario: ScenarioDefinition,
         rng: RandomManager,
+        road_graph=None,
     ) -> List[TrafficLightInfo]:
-        """Placeholder — no traffic lights from scenario yet."""
-        return []
+        """One light per junction that declares it.
+
+        This returned `[]` unconditionally, so `world.traffic_lights` was always
+        empty. Every layer above it existed and worked on nothing:
+        `Junction.has_traffic_light` was set by the road templates and by the
+        OpenDRIVE parser and read by no one, `WorldManager.update_traffic_lights`
+        ran each tick over an empty list, `get_nearest_traffic_light()` always
+        returned None, and `Observation.traffic_light_state` was therefore always
+        OFF at 1000 m. INT-002 declared a four-way junction with
+        `has_traffic_light: true` and two `change_traffic_light` events, and
+        scored models on an intersection that had no signal in it.
+
+        The id is derived from the junction so a scenario can name it:
+        `tl_<junction_id>`.
+
+        Initial state is RED rather than GREEN. A light that starts green is
+        scenery until it changes; starting red means the scenario is testing
+        something from the first frame, and a scenario that wants otherwise
+        says so with an event at `trigger_time: 0.0`.
+        """
+        if road_graph is None:
+            return []
+
+        return [
+            TrafficLightInfo(
+                light_id=f"tl_{junction.junction_id}",
+                position=junction.position,
+                state=TrafficLightState.RED,
+                # No signal timing plan exists yet, so there is no next change
+                # to count down to. Reporting a countdown we cannot honour
+                # would have the model plan against a phase that never arrives.
+                time_remaining=0.0,
+            )
+            for junction in road_graph.junctions.values()
+            if junction.has_traffic_light
+        ]

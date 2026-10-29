@@ -71,6 +71,7 @@ pairs = {
     "composite_score": report.get("composite_mean", ""),
     "safety_score": report.get("safety_mean", ""),
     "collision_rate": report.get("collision_rate", ""),
+    "off_road_rate": report.get("off_road_rate", ""),
     "pass_rate": report.get("pass_rate", ""),
     "scenarios_passed": report.get("scenarios_passed", ""),
     "scenario_count": report.get("scenario_count", ""),

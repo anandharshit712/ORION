@@ -1,0 +1,90 @@
+scenario:
+  name: "LAT-005 High-Speed Lane-Change Conflict - Late Cut-In at Motorway Speed"
+  version: "2.0"
+  description: >
+    A vehicle changes into the ego lane at motorway speed with a short gap, and
+    may abort if the ego reacts. LAT-002 tests the same manoeuvre at ordinary
+    speeds; the requirement here is different because the time budget is not.
+    At 30 m/s a one-second hesitation is thirty metres, so a model that waits to
+    confirm the intrusion before acting has already spent the room it needed.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 30.56
+  constraints:
+    max_velocity: 36.11
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 33.33
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: cutting_vehicle
+    type: car
+    initial:
+      x: 22.0
+      y: 1.75
+      heading: 0.0
+      velocity: 29.17
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_cut_in
+        trigger_type: time
+        trigger_value: 3.0
+        signal_duration:
+          min: 0.1
+          max: 0.5
+        abort_prob: 0.3
+        lateral_target_y: -1.75
+        lateral_speed:
+          min: 1.5
+          max: 3.5
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 2005
+
+parameterization:
+  ego_velocity:
+    min: 27.78
+    max: 33.33
+  ego_x_jitter:
+    min: 0.0
+    max: 5.0
+  npc_overrides:
+    cutting_vehicle:
+      initial_velocity:
+        min: 26.39
+        max: 31.94
+      initial_x:
+        min: 14.0
+        max: 34.0
+      parameters:
+        trigger_value:
+          min: 1.5
+          max: 5.0
+        abort_prob:
+          min: 0.0
+          max: 0.6
+        lateral_speed:
+          min: 1.2
+          max: 4.0

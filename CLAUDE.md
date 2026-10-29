@@ -25,9 +25,9 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 - **`docs/ARCHITECTURE.md`** — governs **the scenario taxonomy and the 4-layer execution architecture**: the "one scenario = one behavioral requirement" rule, the six categories, the strict scenario schema, L1–L4 layer contracts, the integration contract. Read before touching `scenario/`, `simulation/`, or adding scenarios.
 - **`docs/UI_DESIGN.md`** (v1.0) — governs **ALL frontend/UI visual work**. The binding design system ("Mission Control"): tokens, typography, components, theming, page-by-page specs. Any change under `orion-frontend/` must conform. Approved sample = `design/sample-mission-control.html`. See Section 9.
 
-Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
+Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0 and 1 are complete** — see Section 13 for what each defect became. Current priority: **wiring the dashboard** (Phase 5.2) — six of seven sections still render `ComingSoon` while the APIs behind them exist, so nothing built in Phases 2–4 is reachable from a browser. Then the confidence intervals (2.1 remainder), then deterministic replay (2.5). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. Current priority: **Phase 4.1, the ROS2 connector** — 4.3 is complete (60 scenarios, importance sampling, named suites). `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -304,9 +304,58 @@ environment:
   feel, not a shape — INT-001 is a four-way stop and LAT-001 is a straight road, and both are
   urban.
 
+### Suites (Phase 4.3)
+
+`SUITES` in `arep/cli/run_suite.py` names sets of categories:
+`core` (LON+LAT, 20) · `intersection` (10) · `vru` (10) · `emergency` (10) ·
+`multi-agent` (10) · `full` (60). Pass one to `--scenarios`.
+
+Membership only — **no plan gating lives there.** Which plan may run which suite is a pricing
+decision; putting an entitlement table in the CI runner would leave the CLI, the API and the
+billing code each holding a copy of the answer. It belongs beside `PLAN_CREDITS` in
+`api/billing.py` once the prices are decided. A test asserts the sellable suites partition the
+library exactly: a scenario in no suite cannot be sold, one in two is double-counted, and the
+runner is happy either way.
+
+### Importance sampling (Phase 4.3)
+
+`arep/scenario/importance.py`. A batch may oversample a named sub-region of a scenario's
+parameter space so large suites spend runs where failures live:
+
+```python
+from arep.scenario.importance import ImportanceRegion
+runner.run_batch(path, model, num_runs=100, importance=ImportanceRegion(
+    bounds={"lead_vehicle.initial_x": (25.0, 32.0)},   # names match failure_clustering
+    fraction=0.6,
+))
+```
+
+- **The bias is weighted back.** Every run carries a likelihood ratio; `StatisticalAggregator`
+  uses the weighted estimator and publishes `effective_n` (Kish) alongside `num_runs`. An
+  unweighted rate from a biased draw looks exactly like an honest one, which is why the weight
+  is not optional.
+- **`region=None` draws no coin and takes the RNG stream it always took.** Every stored score,
+  baseline and frame hash is keyed to that sequence. Never add an unconditional draw to
+  `ScenarioParameterizer.apply`.
+- **Bounds narrow a declared range, never widen it.** A bound outside the scenario's own
+  `parameterization` is clipped; a disjoint one is dropped.
+- **`POST /api/runs/batch` does not accept a region** — `RunRecord` has no column for a weight,
+  so a queued batch would lose it and the API would publish the biased draw as the scenario's
+  rate. Adding the column is what unblocks the API path.
+
+See `docs/METHODOLOGY.md` §8.5.
+
 ### The foundational taxonomy rule
 
 **One scenario = one behavioral requirement.** Weather, lighting, surface friction = `parameterization` modifiers — NOT separate scenarios. Never create new scenario file just to change weather.
+
+**That is the rule, not yet the implementation (DI-01).** Today `ScenarioParameterizer`
+samples only positions, speeds and NPC parameters. `weather.condition` and `visibility` are
+labels that physics and `Observation` never read, friction is one global config value
+(`phys.surface_friction`), and the default `kinematic` mode ignores friction entirely.
+`change_weather` is not an implemented event type, so EMG-004 is refused at load (DI-02, see
+Section 13). Don't describe a scenario as testing rain or ice until `docs/DISCUSSIONS.md`
+DI-01 is built.
 
 ### NPC behavior types (available in `behavior.type`)
 
@@ -317,6 +366,13 @@ Defined in `simulation/npc_bt.py`:
 - `follow_lane` — basic lane following
 - `scripted` — event-driven via `events:` block in YAML
 - `pedestrian` — VRU movement model
+
+`behavior.parameters.bt_type` selects the tree. Registered trees (`_BT_REGISTRY`):
+`hesitant_brake`, `hesitant_cut_in`, `adaptive_tailgate`, `cautious_pedestrian`,
+`erratic_pedestrian`, `junction_yield`, and from Phase 4.3 `oncoming_drift`,
+`red_light_runner`, `erratic_cyclist`, `wrong_way_driver`, `tire_blowout`.
+**Write the tree before the scenario that needs it** — a scenario whose hazard has no tree
+still runs and still scores, against a vehicle going straight.
 
 ---
 
@@ -333,11 +389,37 @@ Four metric modules in `arep/evaluation/`, each returns typed result dataclass:
 
 `CompositeEvaluator` (in `evaluation/composite.py`) combines all four into single `composite_score`.
 
-Test **passes** when: `collision_rate < 0.01` and `intervention_rate < 0.05` across N runs.
+Test **passes** when: `collision_rate < 0.01` **and** `off_road_rate < 0.01` across N runs
+(`COLLISION_RATE_LIMIT` / `OFF_ROAD_RATE_LIMIT` in `cli/run_suite.py`).
+
+**Off-road became a failure in Phase 4.3 and was not one before.** The criterion was the
+collision rate alone, so a model that drove off the carriageway passed: on INT-004 the
+reference driver left the road at 3.5 s and the lane-keeper at 2.6 s, and both were recorded
+as passes scoring 0.912 and 0.801. The scoring compounds it — an off-road run ends early, so
+there is little of it left to score badly. Adding a new limit of this kind means adding a
+report field, which is also a CI output: declare it in `action.yml` and publish it in
+`ci/orion-ci.sh`, or `test_ci_integration_files.py` fails.
 
 TTC thresholds: `TTC_SAFE = 10.0s` (score = 1.0), `TTC_CRITICAL = 2.0s` (flags critical step).
 
 **Never change metric weights** (`COLLISION_WEIGHT = 0.50`, `MIN_TTC_WEIGHT = 0.30`, `CRITICAL_TTC_WEIGHT = 0.20`) without updating specification document and all existing baselines.
+
+**Nothing in the composite rewards making progress.** Safety, compliance, stability and
+reactivity all measure *how* the vehicle behaves; none measures whether it went anywhere. A
+model that brakes to a standstill in the first second scores 0.962 stability and 0.988
+composite on LON-001, and the suite's pass criterion (a collision and intervention rate)
+inherits this, so refusing to move passes most of the library. Read every composite with that
+in mind, and never present a score against `EmergencyBrake` as a competitive result.
+`tests/test_reference_model.py` pins the behaviour so adding a progress term later fails
+loudly; `docs/PENDING.md` has what such a term would need.
+
+**A scenario must be passable.** `tests/test_scenario_feasibility.py` checks every scenario for
+a corner of its declared ranges where no braking behaviour avoids contact — the ego braking at
+its full declared `max_deceleration` from tick zero, with no reaction delay. Twelve scenarios
+failed it when it was first written, LON-002 by 14.7 m. Such a scenario still runs and still
+produces a score; it just scores the geometry it handed the model rather than the response.
+Where braking is *meant* to be insufficient, add the scenario to `EVASION_SCENARIOS` in that
+file — that is a claim about the scenario's purpose, not a way to quiet the check.
 
 **Scoring methodology is documented in `docs/METHODOLOGY.md`** — every weight, threshold
 and stated approximation, written for a customer's safety reviewer. Update it in the same
@@ -421,7 +503,18 @@ there is nothing to forge). The header wins when both are present. `get_current_
 **Path split — read before adding a frontend call.** Only the auth router (`/api/auth/*`) and the live-run router (`/api/runs/*`) are mounted under `/api`. `/scenarios/`, `/jobs/`, `/results/*`, `/evaluate/*`, `/models/` and `/health` are mounted at the **root**. `src/services/api.js` therefore spells out each full path rather than prefixing everything, and `vite.config.js` proxies every one of those root prefixes. Getting this wrong is quiet: the dev server answers with `index.html` and the call fails as a JSON parse error rather than a 404. Four methods shipped broken this way and went unnoticed because the sections that would call them are not wired up yet.
 
 Built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
-`"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`
+`"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`, `"ReferenceDriver"`
+
+**`ReferenceDriver` is the only non-degenerate one, and that is what it is for.** The other
+four hold one action, brake at maximum always, steer without any longitudinal sense, or emit
+noise — fine for testing the harness, useless for reviewing a scenario. When a degenerate
+model fails a scenario, nothing distinguishes "this scenario correctly demands a behaviour the
+model lacks" from "this scenario is impossible", and eight of the sixty were being called
+correct failures on exactly that basis. `ReferenceDriverModel` is IDM car-following plus PD
+lane keeping plus bounded evasion; run `run_suite --model reference` against any scenario a
+degenerate model fails and the answer stops being an argument. It is a *reference*, not a good
+driver — its IDM parameters are conventional literature values and are deliberately not tuned
+against this library.
 
 To add new model to API, add to `AVAILABLE_MODELS` dict in `api/routes.py`.
 Don't instantiate models outside that dict — dict is registry.
@@ -656,6 +749,9 @@ pytest --cov=arep --cov-report=term-missing --cov-fail-under=70
 # CI suite runner (exit 0 pass / 1 model failed / 2 harness could not answer)
 PYTHONPATH=. python -m arep.cli.run_suite --scenarios all --model emergency_brake     --runs-per-scenario 10 --output-dir ./results --format json
 
+# One sellable suite rather than the whole library
+PYTHONPATH=. python -m arep.cli.run_suite --scenarios core --model emergency_brake
+
 # Same, failing the run on a regression against a previous report as well as on
 # the absolute collision bar. A missing baseline is the normal first run and is
 # skipped rather than failing.
@@ -684,6 +780,17 @@ start.bat         # Windows (cmd.exe)
 - **Never hardcode seeds, config values, or API URLs** — from `config/default.yaml` and `vite.config.js` proxy.
 - **Never hardcode secrets or credential fallbacks** — no default JWT secrets, no default DB passwords. Fail fast if env var missing (Phase 0.1 pattern).
 - **Never deserialise untrusted pickle/cloudpickle outside the sandboxed model path** — customer artefacts are hostile input (D-01).
+
+**Never let a test or a script send real email.** `arep/config/env.py` auto-loads a `.env`
+from the workspace root, so a developer's SMTP credentials reach any process that imports the
+config — including pytest. The suite signs up through the real `/api/auth/signup` endpoint in
+twenty-one modules, so a single full run delivered about thirty verification emails to a live
+inbox before this was noticed. Three guards now, and they are independent on purpose:
+`tests/conftest.py` clears `SMTP_HOST`/`SMTP_FROM`/`SMTP_USER`/`SMTP_PASS` outright (not
+`setdefault` — no unit test has a reason to send mail), `email_sender._deliver` refuses when
+`PYTEST_CURRENT_TEST` is set, and `scripts/api_smoke.py` / `scripts/ws_smoke.py` clear the
+same variables because they run outside pytest. `tests/test_email_never_sent_from_tests.py`
+pins all of it. Any new script that signs up does the same.
 
 **Secret/config resolution (Phase 0.1 — DONE, D-02 closed)**: never read `ORION_SECRET_KEY` / `ORION_DATABASE_URL` directly with a fallback default. Go through `arep/config/validate.py`: `resolve_secret_key()`, `resolve_database_url()`, `validate_startup()`. Non-dev (`ORION_ENV` not in dev/test/local) refuses to boot on missing/weak/placeholder secret or SQLite URL; dev gets an ephemeral secret + `sqlite:///arep.db`. `validate_startup()` runs in `app.py` lifespan. docker-compose pulls all secrets from git-ignored `infrastructure/.env` (`env_file:` + `${VAR}`); see `infrastructure/.env.example`.
 
@@ -832,11 +939,60 @@ on the production host is an operational step, not development work.
    `RoadSegment`, `Junction`) and `core/road_templates.py` (six factories) exist and are wired
    through `environment.road.template`. See Section 6.
 
-**All 21 scenarios execute.** Verified with `arep.cli.run_suite --scenarios all`: 18 pass
-against `emergency_brake`. The three that fail — EMG-002, LAT-003, MLT-007 — fail *correctly*:
-each needs evasive steering or gentle braking, and a brake-only model cannot pass them. Same
-category as `ConstantAction` failing the LON scenarios. Don't "fix" them by weakening the
-scenario.
+**60 scenarios; 59 execute.** Ten per category; EMG-004 is refused at load (DI-02).
+Measured 2026-10-01 at 10 runs per scenario:
+
+| model | passes | what it is |
+| --- | --- | --- |
+| `emergency_brake` | **52 / 59** | brakes at maximum always — passes by not moving |
+| `ReferenceDriver` | **32 / 59** | IDM + lane keeping + evasion + crossing yield |
+| `SimpleLaneKeep` | 12 / 59 | steering PD, no longitudinal sense |
+
+**Read the first row with care.** `emergency_brake` scores highest because nothing in the
+composite rewards making progress and the pass criterion is a collision and off-road rate, so
+stopping dead passes most of the library. It is a floor, not a benchmark — never present a
+score against it as a competitive result.
+
+`ReferenceDriver` passes scenarios `emergency_brake` fails (EMG-001 road debris, which needs
+evasion) and fails scenarios `emergency_brake` passes (junctions, and lateral scenarios where
+its bounded evasion heuristic costs it the road). That divergence is the useful part: the two
+fail *different* scenarios, so the library discriminates behaviour rather than just "did you
+brake".
+
+Six scenarios are failed by **both** — EMG-002, EMG-008, LAT-003, LAT-007, MLT-005, MLT-007.
+Those remain unproven: no model in the repo passes them, and nobody has demonstrated one that
+can. Don't describe them as "correct failures" without that caveat.
+
+**The Phase 4.3 review found seven platform defects, each hidden by the one before it.** In
+the order they were found, because that order is the point:
+
+1. Twelve scenarios had a corner no braking behaviour could survive (LON-002 by 14.7 m).
+2. There was no reference model, so "fails correctly" was an argument and not a measurement.
+3. **Leaving the road did not fail a scenario.** A model could drive into a field at 3.5 s
+   and score 0.912.
+4. The flat road did not exist behind x=0, so any scenario with negative `ego_x_jitter`
+   terminated some runs after one tick — and scored them at that length.
+5. **`Observation.lane_offset` had no sign**, so a lane-keeping controller steered the same
+   way whichever side it had drifted to and every perturbation ran away. Lane keeping was not
+   achievable. The signed value had existed since Phase 0.5 and only the metrics used it.
+6. The lane handed to a model could be one *crossing its path* at a junction.
+7. **Every templated scenario ran off the end of its own road** — INT-001 drives 218 m along
+   an arm that stops at 80.
+
+Each is closed, each has a test, and `docs/METHODOLOGY.md` carries the evidence and the
+change-log rows. Three of them moved scores; results are not comparable across this phase for
+any model that steers.
+
+**EMG-004 no longer loads, on purpose (DI-02).** It declares a `change_weather` event the
+engine cannot execute, and used to load, run and pass while testing a dry road. The old
+"18 of 21" figure counted it. Unimplemented event types are now refused by
+`ScenarioValidator`; `run_suite` skips such a scenario and names it in the report rather
+than aborting the suite or dropping it quietly. EMG-004 returns when `docs/DISCUSSIONS.md`
+DI-01 gives weather something to change.
+
+**Event types live in `IMPLEMENTED_EVENT_TYPES` (`scenario/events.py`)** — currently
+`spawn_vehicle`, `spawn_pedestrian`, `change_traffic_light`. Adding a name there without
+writing its handler re-opens the silent-drop hole, and a test asserts each name has one.
 
 ### Done (P1.1 + P1.2 + P1.3)
 

@@ -452,3 +452,261 @@ def test_without_a_road_graph_it_just_cruises():
 
     assert npc.velocity == pytest.approx(9.0)
     assert npc.position.x > 0.0
+
+
+# ══ Phase 4.3 behaviour trees ═══════════════════════════════════════════════
+#
+# These five exist so the library can grow past 21 scenarios with hazards that
+# actually happen. Each test names the behaviour the scenario is buying: a BT
+# that ticks without raising but drives straight would pass a smoke test and
+# score every model as safe.
+
+
+def _run(bt, behavior, npc, steps, ego=None, sim_time_start=0.0):
+    """Drive a BT for `steps` ticks and return the path it produced."""
+    rng = RandomManager(7)
+    path = [npc]
+    obj = npc
+    for i in range(steps):
+        world = _world(
+            sim_time=sim_time_start + i * DT,
+            ego=ego or _vehicle(x=0.0, velocity=20.0, object_id="ego"),
+            npc=obj,
+        )
+        obj = bt.tick(obj, behavior, world, rng, DT)
+        path.append(obj)
+    return path
+
+
+# -- oncoming_drift --------------------------------------------------------
+
+
+def test_oncoming_drift_moves_laterally_toward_the_target():
+    """The hazard is lateral. A drift that only moves forward is an oncoming
+    car in its own lane, which is not a test of anything."""
+    bt = npc_bt.OncomingDriftBT()
+    behavior = _behavior(
+        trigger_type="time",
+        trigger_value=0.0,
+        drift_rate=1.0,
+        drift_target_y=-3.5,
+        correct_prob=0.0,
+        correct_delay=10.0,
+    )
+    path = _run(
+        bt, behavior, _vehicle(x=100.0, y=0.0, velocity=15.0, heading=math.pi), 60
+    )
+
+    assert path[-1].position.y < path[0].position.y - 0.2, "no lateral drift"
+
+
+def test_oncoming_drift_can_correct_back_to_its_own_lane():
+    """correct_prob=1 must actually return it. A BT that only ever commits
+    trains a model that every wobble is an emergency."""
+    bt = npc_bt.OncomingDriftBT()
+    behavior = _behavior(
+        trigger_type="time",
+        trigger_value=0.0,
+        drift_rate=1.0,
+        drift_target_y=-3.5,
+        correct_prob=1.0,
+        correct_delay=0.2,
+        correct_rate=4.0,
+    )
+    path = _run(
+        bt, behavior, _vehicle(x=100.0, y=0.0, velocity=15.0, heading=math.pi), 200
+    )
+
+    worst = min(p.position.y for p in path)
+    assert worst < -0.05, "it never drifted in the first place"
+    assert abs(path[-1].position.y) < 0.1, "it drifted and never came back"
+
+
+def test_oncoming_drift_decides_once_rather_than_every_tick():
+    """A per-tick probability roll turns any correct_prob into "eventually,
+    always" — at 50 Hz even 1% fires within a second."""
+    bt = npc_bt.OncomingDriftBT()
+    behavior = _behavior(
+        trigger_type="time",
+        trigger_value=0.0,
+        drift_rate=1.0,
+        drift_target_y=-3.5,
+        correct_prob=0.0,
+        correct_delay=0.1,
+    )
+    _run(bt, behavior, _vehicle(x=100.0, y=0.0, velocity=15.0, heading=math.pi), 300)
+
+    assert behavior["_bt_state"] == "committed"
+
+
+# -- red_light_runner ------------------------------------------------------
+
+
+def test_red_light_runner_stops_then_goes():
+    """Both halves matter. Never stopping makes it an obstacle visible from
+    far off; never going makes it scenery."""
+    bt = npc_bt.RedLightRunnerBT()
+    behavior = _behavior(
+        stop_x=10.0, wait_delay=0.4, launch_accel=3.0, max_velocity=12.0
+    )
+    npc = _vehicle(x=0.0, y=0.0, velocity=8.0, heading=0.0)
+
+    path = _run(bt, behavior, npc, 200)
+    speeds = [p.velocity for p in path]
+
+    assert min(speeds) == 0.0, "it never stopped at the line"
+    assert speeds[-1] > 1.0, "it stopped and never ran the light"
+
+
+def test_red_light_runner_waits_the_configured_delay():
+    bt = npc_bt.RedLightRunnerBT()
+    behavior = _behavior(stop_x=0.0, wait_delay=1.0, launch_accel=3.0)
+    path = _run(bt, behavior, _vehicle(x=0.0, velocity=8.0), 100)
+
+    # 1.0 s of wait at 50 Hz is 50 ticks; it must still be stationary just
+    # before that and moving well after.
+    assert path[40].velocity == 0.0
+    assert path[-1].velocity > 0.0
+
+
+# -- erratic_cyclist -------------------------------------------------------
+
+
+def test_erratic_cyclist_swerves_around_its_heading():
+    bt = npc_bt.ErraticCyclistBT()
+    behavior = _behavior(forward_speed=5.0, swerve_magnitude=0.8, swerve_period=2.0)
+    path = _run(bt, behavior, _vehicle(x=0.0, y=0.0, velocity=5.0), 300)
+
+    ys = [p.position.y for p in path]
+    assert max(ys) - min(ys) > 0.3, "no lateral swerve"
+    # It is a cyclist, not a pedestrian: it must keep making forward progress.
+    assert path[-1].position.x > path[0].position.x + 10.0
+
+
+def test_erratic_cyclist_is_reproducible_from_the_seed():
+    """A per-tick random walk would depend on tick count and move under any
+    timestep change; the sine does not."""
+    bt = npc_bt.ErraticCyclistBT()
+    params = dict(forward_speed=5.0, swerve_magnitude=0.8, swerve_period=2.0)
+
+    a = _run(bt, _behavior(**params), _vehicle(velocity=5.0), 120)
+    b = _run(bt, _behavior(**params), _vehicle(velocity=5.0), 120)
+
+    assert [p.position.y for p in a] == [p.position.y for p in b]
+
+
+# -- wrong_way_driver ------------------------------------------------------
+
+
+def test_wrong_way_driver_escalates_when_the_ego_does_not_brake():
+    bt = npc_bt.WrongWayDriverBT()
+    behavior = _behavior(
+        trigger_type="time", trigger_value=0.0, escalate_accel=2.0, max_velocity=40.0
+    )
+    coasting_ego = _vehicle(x=0.0, velocity=20.0, object_id="ego")
+    coasting_ego.acceleration = 0.0
+
+    path = _run(
+        bt,
+        behavior,
+        _vehicle(x=200.0, velocity=20.0, heading=math.pi),
+        100,
+        ego=coasting_ego,
+    )
+
+    assert path[-1].velocity > path[0].velocity + 1.0, "it did not escalate"
+
+
+def test_wrong_way_driver_holds_speed_once_the_ego_yields():
+    """It escalates against indifference, not against a model that reacted —
+    otherwise no behaviour can ever resolve it and the scenario is unwinnable
+    by construction rather than by difficulty."""
+    bt = npc_bt.WrongWayDriverBT()
+    behavior = _behavior(
+        trigger_type="time",
+        trigger_value=0.0,
+        escalate_accel=2.0,
+        ego_brake_thresh=-1.5,
+    )
+    braking_ego = _vehicle(x=0.0, velocity=20.0, object_id="ego")
+    braking_ego.acceleration = -4.0
+
+    path = _run(
+        bt,
+        behavior,
+        _vehicle(x=200.0, velocity=20.0, heading=math.pi),
+        100,
+        ego=braking_ego,
+    )
+
+    assert path[-1].velocity == pytest.approx(path[0].velocity, abs=0.01)
+
+
+# -- tire_blowout ----------------------------------------------------------
+
+
+def test_tire_blowout_both_slows_and_changes_heading():
+    """Two hazards at once is the point: a model that only manages following
+    distance still gets hit by something arriving sideways."""
+    bt = npc_bt.TireBlowoutBT()
+    behavior = _behavior(
+        trigger_type="time",
+        trigger_value=0.0,
+        yaw_impulse=0.4,
+        decel=-6.0,
+        yaw_duration=1.0,
+    )
+    path = _run(bt, behavior, _vehicle(x=50.0, velocity=25.0), 60)
+
+    assert path[-1].velocity < path[0].velocity - 3.0, "it did not slow"
+    assert abs(path[-1].heading - path[0].heading) > 0.05, "it did not yaw"
+
+
+def test_tire_blowout_yaws_both_ways_across_seeds():
+    """A blowout that always veers the same way is one manoeuvre, not a
+    hazard — a model could learn the direction."""
+    bt = npc_bt.TireBlowoutBT()
+    headings = set()
+
+    for seed in range(12):
+        behavior = _behavior(
+            trigger_type="time", trigger_value=0.0, yaw_impulse=0.4, decel=-6.0
+        )
+        rng = RandomManager(seed)
+        obj = _vehicle(x=50.0, velocity=25.0)
+        for i in range(40):
+            obj = bt.tick(obj, behavior, _world(sim_time=i * DT, npc=obj), rng, DT)
+        headings.add(obj.heading > 0)
+
+    assert headings == {True, False}, "the yaw direction never varied across seeds"
+
+
+def test_tire_blowout_stops_yawing_after_its_duration():
+    """A permanent yaw rate turns the NPC into a circle, which is not what a
+    blowout does and makes the rest of the run meaningless."""
+    bt = npc_bt.TireBlowoutBT()
+    behavior = _behavior(
+        trigger_type="time",
+        trigger_value=0.0,
+        yaw_impulse=0.4,
+        decel=-1.0,
+        yaw_duration=0.2,
+    )
+    path = _run(bt, behavior, _vehicle(x=50.0, velocity=25.0), 200)
+
+    assert path[-1].heading == pytest.approx(path[60].heading, abs=1e-9)
+
+
+# -- Registry --------------------------------------------------------------
+
+
+def test_every_new_bt_is_registered():
+    """A BT the YAML cannot name is a BT no scenario can use."""
+    for name in (
+        "oncoming_drift",
+        "red_light_runner",
+        "erratic_cyclist",
+        "wrong_way_driver",
+        "tire_blowout",
+    ):
+        assert npc_bt.get_bt(name) is not None

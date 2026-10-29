@@ -174,13 +174,36 @@ class Observation:
         if lane is not None:
             lane_valid = True
             lane_width = lane.width
-            closest = lane.get_closest_point(ego.position)
-            lane_offset = ego.position.distance_to(closest)
 
-            # Heading error: difference between ego heading and lane direction
-            # Approximate lane direction from nearest segment
-            # (simplified: use centerline direction at closest point)
-            lane_heading_error = 0.0  # Simplified for initial implementation
+            # Signed, negative left of the direction of travel and positive
+            # right, matching the sign convention on Action.steering.
+            #
+            # This was the unsigned distance until Phase 4.3, and the sign is
+            # not cosmetic: a lane-keeping controller computes its correction
+            # from this number, so without it the car steers the same way
+            # whichever side of the centreline it has drifted to, and any
+            # perturbation runs away instead of being corrected. Measured on
+            # LAT-001, the lane-keeping baseline: both steering models in the
+            # repo left the road on half the seeds, and every one of the ten
+            # intersection scenarios was unpassable by anything that steered.
+            #
+            # The signed version has existed since Phase 0.5 (D-05) and the
+            # compliance metric has used it all along. Only the observation --
+            # the copy the model actually sees -- was left unsigned, so the
+            # platform scored models on a lane discipline it never gave them
+            # the information to achieve.
+            lane_offset = lane.get_signed_lateral_offset(ego.position)
+
+            # Signed heading error against the lane's direction of travel,
+            # wrapped to [-pi, pi]. Previously hardcoded to 0.0 and marked
+            # "simplified for initial implementation", which silently disabled
+            # the derivative term of every lane-keeping controller written
+            # against this interface.
+            lane_heading = lane.get_heading_at(ego.position)
+            lane_heading_error = math.atan2(
+                math.sin(ego.heading - lane_heading),
+                math.cos(ego.heading - lane_heading),
+            )
 
         # ── Speed limit ──────────────────────────────────────────────
         speed_limit = world.get_speed_limit()

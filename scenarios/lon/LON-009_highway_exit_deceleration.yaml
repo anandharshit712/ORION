@@ -1,0 +1,90 @@
+scenario:
+  name: "LON-009 Highway Exit Deceleration - Gentle Lead Slowdown Without Over-Braking"
+  version: "2.0"
+  description: >
+    The lead vehicle slows steadily for an exit and settles at a lower speed rather
+    than stopping. The requirement is the inverse of every emergency scenario in this
+    category: the correct response is a measured deceleration, and a model that treats
+    any lead slowdown as an emergency scores badly on stability while never being
+    unsafe. Included so the library does not only reward braking hard.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 27.78
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: exiting_vehicle
+    type: car
+    initial:
+      x: 60.0
+      y: -1.75
+      heading: 0.0
+      velocity: 26.39
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 5.0
+        initial_decel: -1.2
+        initial_brake_duration:
+          min: 2.0
+          max: 4.0
+        hesitation_prob: 0.0
+        final_decel: -1.5
+        min_velocity: 13.89
+        max_velocity: 30.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 1009
+
+parameterization:
+  ego_velocity:
+    min: 22.22
+    max: 31.94
+  ego_x_jitter:
+    min: -6.0
+    max: 6.0
+  npc_overrides:
+    exiting_vehicle:
+      initial_velocity:
+        min: 23.61
+        max: 28.00
+      initial_x:
+        min: 45.0
+        max: 85.0
+      parameters:
+        trigger_value:
+          min: 3.0
+          max: 8.0
+        initial_decel:
+          min: -2.0
+          max: -0.8
+        min_velocity:
+          min: 11.11
+          max: 16.67

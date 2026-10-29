@@ -220,9 +220,30 @@ Stated so that nobody infers coverage that is not there:
   LiDAR, camera, radar, GPS or IMU model, and no sensor noise, occlusion or
   detection failure. ORION evaluates planning and control. A model that would fail
   because its perception stack missed an object will score well here.
-- **No road topology beyond a flat straight road.** Intersections, curves, merges
-  and gradients are not yet modelled, which is why the intersection and multi-agent
-  scenario categories are not yet executable.
+- **Nothing rewards making progress.** Safety, compliance, stability and
+  reactivity all measure how the vehicle behaves; none measures whether it got
+  anywhere. A model that brakes to a standstill in the first second and never
+  moves again scores 0.962 stability and 0.988 composite on LON-001, because a
+  stationary car has no jerk, no steering variance, no speeding and no
+  collisions. This is the single largest thing to know when reading a composite
+  score: **a high score is evidence of not crashing, not evidence of driving.**
+  Scenario pass/fail inherits it — the criterion is a collision and intervention
+  rate, so refusing to move passes most of the library. Any comparison between
+  two models has to be read with this in mind, and comparing a real model
+  against `EmergencyBrake` is not the compliment it looks like. Adding a
+  progress term is tracked in `docs/PENDING.md`; `tests/test_reference_model.py`
+  pins the current behaviour so it cannot change unnoticed.
+- **Road topology is modelled, but there is no route and no lane assignment.**
+  Since Phase 1.5 a scenario can declare a junction, an on-ramp or a
+  roundabout, and all six categories execute. What the model receives is the
+  offset and heading error against the *nearest* lane, plus object positions.
+  There is no map, no route, no lookahead along the road graph, and — the
+  binding limitation — **nothing tells a model which lane it is supposed to be
+  in.** On a junction the nearest lane can be an arm crossing the vehicle's
+  path, so a lane-following controller can be steered into traffic by the
+  interface itself. A model can react inside a junction; it cannot plan through
+  one. The roundabout template compounds this with a single-lane circulating
+  carriageway that only a lane-follower can hold.
 - **No certification claim.** ORION is not an ISO 26262 or ISO 21448 tool and
   produces no evidence package for either.
 
@@ -294,6 +315,70 @@ A collision outranks a low composite when choosing the worst run. The run a
 reviewer needs is the one that crashed, even when a different run scored lower
 on the weighted average.
 
+### Importance sampling, and why `n` is not the run count
+
+`arep/scenario/importance.py`
+
+Uniform sampling spends runs evenly across a scenario's declared parameter
+ranges. At suite scale that is mostly waste: a scenario whose failures live in
+a narrow corner will spend 95 of 100 runs re-confirming the safe region. A
+batch may instead name a sub-region and oversample it, so the runs land where
+the failures are:
+
+```python
+region = ImportanceRegion(
+    bounds={"lead_vehicle.initial_x": (25.0, 32.0)},   # the failing corner
+    fraction=0.6,                                       # 60% of runs drawn there
+)
+runner.run_batch(path, model, num_runs=100, importance=region)
+```
+
+Two properties make this safe to publish a number from.
+
+**The bias is paid back.** Each run carries the likelihood ratio between the
+scenario's declared uniform distribution and the distribution it was actually
+drawn from, and every mean, interval and percentile is computed against those
+weights. A batch that draws half its runs from a failure region occupying 10%
+of the space sees collisions in over half its runs; the weighted estimator
+reports the scenario's rate, not the draw's. `tests/test_importance_sampling.py`
+pins this against a rate that is known by construction.
+
+The weight follows where a point *landed*, not which branch of the sampler
+produced it. The proposal is a mixture — with probability `fraction` it draws
+from the region, otherwise from the whole declared space — and that second
+branch lands inside the region too, at a rate equal to the region's volume.
+Weighting by the branch under-counts the region and biases every rate the batch
+reports. It is a silent error: the estimate stays plausible and is simply
+wrong.
+
+**The reported `n` falls.** A weighted batch publishes an `effective_n`
+(Kish: `(Σw)² / Σw²`) alongside its run count, and every interval is built on
+the effective figure for both the standard error and the degrees of freedom. A
+100-run batch that spent 60 runs in one corner is not 100 runs' worth of
+evidence about the scenario as a whole, and an interval that ignored that would
+be narrower than the evidence supports — the direction that gets a model signed
+off. For an ordinary uniform batch `effective_n == num_runs` exactly.
+
+Two limits worth stating:
+
+- **Region bounds narrow a declared range and never widen it.** A bound
+  reaching outside the scenario's own `parameterization` block is clipped to
+  it, and one that does not overlap at all is dropped. A suite may concentrate
+  runs inside what the scenario author sanctioned; it may not score a model on
+  parameters the author never wrote down.
+- **A region pinned to a single value (zero volume) cannot be weighted back.**
+  Those runs are reported at weight 0 and contribute nothing to the population
+  estimate — the proposal density there is infinite and no estimator exists. A
+  batch where *every* run is degenerate is refused rather than averaged. Such
+  runs still ran and their failures are still real failures; they just cannot
+  speak for the rest of the space.
+
+Importance sampling is available through `EvaluationRunner.run_batch` — the
+CLI, SDK and library paths. **`POST /api/runs/batch` does not accept a region**,
+because `RunRecord` has no column to persist a weight and a queued batch would
+lose it, leaving the API to report the biased draw as if it were the scenario.
+The API path is uniform-only until that column exists.
+
 ---
 
 ## 8.6 When ORION calls a change a regression
@@ -362,7 +447,129 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
 | 0.5 | Live dashboard adopts the `CompositeEvaluator` weights | Dashboard composites shift; batch results unchanged |
 | 2.1 | TTC projects under constant acceleration instead of constant velocity | `min_ttc` rises for braking models and falls for accelerating ones; safety scores move for any scenario with acceleration |
+| 4.3-fix | `Observation.lane_offset` is signed; `lane_heading_error` is computed rather than 0.0 | Scores move for **any model that steers**. Lane keeping was not achievable before this, so results for steering models are not comparable across it. A non-steering model (`EmergencyBrake`) is unaffected and its frame digests are unchanged. |
+| 4.3-fix | The flat road extends behind the origin | Aggregates change on any scenario with negative `ego_x_jitter`: runs that previously terminated after one tick, and were averaged in at that length, now run properly. |
+| 4.3-fix | Leaving the carriageway fails a scenario | Pass/fail only; no composite moves. Scenarios where a model ends up off the road now fail instead of passing — this is a change in the verdict, not in any score. |
+| 4.3-fix | Twelve scenarios had their lead-vehicle start positions moved further away | Composite rises and collision rate falls on those twelve for any braking model. They contained a parameter corner no braking behaviour could survive — see below. Scores on them are not comparable across this change. |
+| 4.3 | Importance sampling: aggregates are weighted, batches report `effective_n` | No effect on any uniform batch — `effective_n == num_runs` and the estimators are the ones they always were. A batch run with `importance=` reports the scenario's rates rather than its own draw's, and an interval built on the effective sample size. |
 | 1.5-fix | One lane-centre formula for the flat road and the road graph | Lane compliance rises from 0.0 to 1.0 on the 15 scenarios that start the ego at y=-1.75; composite rises by exactly +0.100 for each. INT-003 rises +0.050 from dropping a lateral `ego_x_jitter` wider than its lane. The 5 templated scenarios are unchanged. |
+
+### The lane offset a model was given had no sign
+
+The single most consequential defect found in the Phase 4.3 review, and the
+cause of most of the others.
+
+`Observation.lane_offset` was the unsigned distance to the lane centreline. A
+lane-keeping controller computes its steering correction from that number, so
+it corrected in the same direction whichever side it had drifted to: every
+perturbation was amplified rather than damped, and the vehicle left the road.
+
+Traced on LAT-001, the lane-keeping baseline, seed 46:
+
+| t | y | offset shown to the model | steering |
+| --- | --- | --- | --- |
+| 5.00 s | −1.750 | +0.000 | −0.000 |
+| 5.50 s | −1.752 | **+0.002** | −0.001 |
+| 6.00 s | −1.806 | **+0.056** | −0.019 |
+| 6.50 s | −3.082 | **+1.332** | −0.466 |
+
+The drift is toward negative y throughout and the reported offset is positive
+throughout, so the correction drives the car further out. Off-road at 6.56 s.
+
+The signed offset has existed since Phase 0.5, where it was added for defect
+D-05, and the compliance metric has used it ever since. Only the observation —
+the copy the model actually receives — was left unsigned. **ORION was scoring
+models on a lane discipline it never gave them the information to achieve.**
+
+`lane_heading_error` was hardcoded to `0.0`, commented "simplified for initial
+implementation". That silently disabled the derivative term of every
+lane-keeping controller written against this interface, leaving the
+proportional term to correct a drift it could only ever react to after the
+fact. It is now the signed, wrapped difference between the ego heading and the
+lane's direction of travel.
+
+Effect, off-road runs in ten seeds:
+
+| model | scenario | before | after |
+| --- | --- | --- | --- |
+| `ReferenceDriver` | LAT-001 | 5 | 0 |
+| `SimpleLaneKeep` | LAT-001 | 5 | 0 |
+| `ReferenceDriver` | LON-001 | 2 | 0 |
+| `SimpleLaneKeep` | LON-001 | 1 | 0 |
+
+Before the fix, all ten intersection scenarios were unpassable by any model
+that steered — `SimpleLaneKeep` left the road on 10 of 10 at rates of 1.000 —
+so the INT category was in effect testing whether a model stops, because
+stopping was the only way through it.
+
+It was findable only because leaving the road became a scenario failure in the
+same phase. Until then a model could drive into a field and pass, so nothing
+ever pointed at the reason.
+
+### Leaving the road is a failure
+
+The pass criterion used to be the collision rate alone. Nothing checked whether
+the vehicle was still on the road, so a model that drove off it passed.
+
+Measured on INT-004, the roundabout-entry scenario:
+
+| model | outcome | composite |
+| --- | --- | --- |
+| `ReferenceDriver` | off-road at 3.5 s | 0.912 |
+| `SimpleLaneKeep` | off-road at 2.6 s | 0.801 |
+| `EmergencyBrake` | stopped, ran to timeout | 0.992 |
+
+All three were recorded as passes. The scoring compounds the problem rather
+than catching it: an off-road run terminates early, so there is very little of
+it left to score badly, and departing the carriageway promptly can outscore
+driving the scenario properly.
+
+`run_suite` now fails a scenario when more than 1% of runs end `off_road`, the
+same bar the collision rate uses, and `off_road_rate` is reported per scenario
+and suite-wide. This changes verdicts only — no composite, mean or interval
+moves, so scores remain comparable across the change.
+
+Two consequences worth stating, because both were previously invisible:
+
+- **A PD lane-keeper is marginally stable and occasionally diverges.** On an
+  untouched scenario (LON-001) `SimpleLaneKeep` ends off the road on 1 seed in
+  20. That was always true; it simply never failed anything.
+- **The roundabout template cannot be driven by anything in the repo.** Its
+  circulating carriageway is a single lane on a curve, so a straight path
+  across the circle is off-road at every point between the two crossings. Both
+  steering models leave it within four seconds. INT-004's former "pass" was
+  entirely an artefact of this criterion.
+
+### The 4.3 feasibility correction
+
+Twelve scenarios contained a corner of their declared parameter ranges where no
+braking behaviour avoided contact. The check is deliberately generous to the
+scenario — the ego brakes at its full declared `max_deceleration` from tick
+zero, with no reaction delay — so a scenario failing it cannot be passed by any
+braking model at all. It was scoring a model on the geometry it was handed
+rather than on how it responded.
+
+LON-002 was the worst of them and the one that surfaced it: at the corner the
+ego needed about 48 m to stop while the lead could start 35 m ahead. It failed
+`emergency_brake` on 10% of runs, which reads exactly like a demanding scenario
+rather than a broken one.
+
+The fix moves each lead's start position further away — both the nominal `x` and
+the `initial_x` range, shifted together so the spread that blocks
+pattern-learning is preserved — until the worst corner has at least 5 m of
+slack. The scenarios still demand hard braking; they no longer demand the
+impossible. Discrimination was re-measured on all twelve: `emergency_brake` now
+collides on none of them and `ConstantAction` still collides on 80–100%, so the
+scenarios separate a braking model from a non-braking one exactly as before.
+
+Affected: LON-002, LON-003, LON-004, LON-005, LON-008, LON-010, LAT-008,
+LAT-010, MLT-002, EMG-007, EMG-009, VRU-003.
+
+Not affected, deliberately: EMG-001, EMG-002, LAT-003 and LAT-007 are evasion
+scenarios where braking is *supposed* to be insufficient. `tests/test_scenario_feasibility.py`
+enforces the invariant for every scenario and carries an explicit allowlist for
+those, so adding to it is a claim about a scenario's purpose rather than a way
+to silence the check.
 
 ### The 1.5 lane-geometry correction
 

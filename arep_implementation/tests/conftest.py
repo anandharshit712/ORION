@@ -21,6 +21,18 @@ import os
 # setdefault, not assignment: CI can force it on to check the wiring end to end.
 os.environ.setdefault("ORION_RATE_LIMIT_ENABLED", "false")
 
+# Hard-cleared, not setdefault. `arep/config/env.py` auto-loads a .env from the
+# workspace root, so a developer's real SMTP credentials reach the test process
+# without anyone passing them. The suite signs up through the real endpoint in
+# twenty-one modules, and a full run therefore delivered about thirty
+# verification emails to a live inbox.
+#
+# There is no legitimate reason for a unit test to send external mail, so unlike
+# the rate limiter this is not overridable. `email_sender` refuses under pytest
+# as well; either layer alone would have stopped it.
+for _smtp_var in ("SMTP_HOST", "SMTP_FROM", "SMTP_USER", "SMTP_PASS"):
+    os.environ.pop(_smtp_var, None)
+
 
 def verify_email_for(email: str) -> None:
     """Mark a signed-up test user's address verified (Phase 0.4, D-04).

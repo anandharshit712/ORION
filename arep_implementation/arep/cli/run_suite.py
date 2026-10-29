@@ -41,12 +41,22 @@ EXIT_ERROR = 2
 # platform-wide criterion in CLAUDE.md section 7.
 COLLISION_RATE_LIMIT = 0.01
 
+# Leaving the carriageway is a failure too, and used not to be. Until this was
+# added the criterion was the collision rate alone, so a model that drove off
+# the road passed: INT-004 terminated `off_road` at 3.5 s for the reference
+# driver and at 2.6 s for the lane-keeper, and both were scored as passes with
+# composites of 0.912 and 0.801. The scoring compounds it — an off-road run
+# ends early, so there is little of it left to score badly, and departing the
+# road promptly can outscore driving the scenario properly.
+OFF_ROAD_RATE_LIMIT = 0.01
+
 # ── Built-in model name → class mapping ──────────────────────────────────
 BUILTIN_MODELS = {
     "emergency_brake": "arep.models.examples.example_models.EmergencyBrakeModel",
     "constant": "arep.models.examples.example_models.ConstantActionModel",
     "lane_keep": "arep.models.examples.example_models.SimpleLaneKeepModel",
     "random": "arep.models.examples.example_models.RandomModel",
+    "reference": "arep.models.examples.example_models.ReferenceDriverModel",
 }
 
 # ── Scenario category → file pattern ─────────────────────────────────────
@@ -59,6 +69,26 @@ CATEGORY_PATTERNS = {
     "MLT": "scenarios/mlt/MLT-*.yaml",
 }
 
+# ── Named suites (Phase 4.3 packaging) ───────────────────────────────────
+# A suite is a named set of categories, nothing more. Which plan may run which
+# suite is a pricing decision and is deliberately not encoded here: putting an
+# entitlement table in the CI runner would mean the CLI, the API and the
+# billing code each carried their own copy of the answer.
+#
+# "core" is LON + LAT because those are the control behaviours every other
+# category assumes are already working — a model that cannot hold a lane or a
+# following distance has nothing to say about an intersection. The roadmap
+# wrote Core as 18 scenarios when the whole library was 18; at 60 the same
+# intent is the 20 longitudinal and lateral ones.
+SUITES = {
+    "core": ["LON", "LAT"],
+    "intersection": ["INT"],
+    "vru": ["VRU"],
+    "emergency": ["EMG"],
+    "multi-agent": ["MLT"],
+    "full": ["LON", "LAT", "INT", "VRU", "EMG", "MLT"],
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -68,7 +98,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--scenarios",
         default="all",
-        help="Scenarios to run: 'all', a category (LON/LAT/INT/VRU/EMG/MLT), or a scenario ID",
+        help=(
+            "Scenarios to run: 'all', a suite "
+            "(core/intersection/vru/emergency/multi-agent/full), "
+            "a category (LON/LAT/INT/VRU/EMG/MLT), or a scenario ID"
+        ),
     )
     p.add_argument(
         "--runs-per-scenario",
@@ -143,6 +177,17 @@ def resolve_scenarios(selector: str, root: Path) -> List[Path]:
             raise FileNotFoundError(f"No scenarios found under {root / 'scenarios'}")
         return paths
 
+    suite = SUITES.get(selector.lower())
+    if suite is not None:
+        paths = [
+            path
+            for category in suite
+            for path in sorted(root.glob(CATEGORY_PATTERNS[category]))
+        ]
+        if not paths:
+            raise FileNotFoundError(f"Suite {selector!r} resolved to no scenarios")
+        return paths
+
     category = selector.upper()
     if category in CATEGORY_PATTERNS:
         paths = sorted(root.glob(CATEGORY_PATTERNS[category]))
@@ -159,7 +204,8 @@ def resolve_scenarios(selector: str, root: Path) -> List[Path]:
         return matches
 
     raise FileNotFoundError(
-        f"Unknown scenario selector {selector!r}. Use 'all', a category "
+        f"Unknown scenario selector {selector!r}. Use 'all', a suite "
+        f"({'/'.join(SUITES)}), a category "
         f"({'/'.join(CATEGORY_PATTERNS)}), a scenario id, or a path."
     )
 
@@ -198,17 +244,39 @@ def run_suite(
     """Run every scenario and collect one report structure."""
     from arep.execution.runner import EvaluationRunner
 
+    from arep.utils.exceptions import ScenarioParseError, ScenarioValidationError
+
     runner = EvaluationRunner()
     scenarios: List[Dict[str, Any]] = []
+    unloadable: List[Dict[str, str]] = []
 
     for path in scenario_paths:
         logger.info("Running %s", path.name)
-        batch = runner.run_batch(str(path), model, runs_per_scenario, seed)
+        try:
+            batch = runner.run_batch(str(path), model, runs_per_scenario, seed)
+        except (ScenarioParseError, ScenarioValidationError) as exc:
+            # Skipped *and reported*, which is the project rule for unsupported
+            # input. Aborting the whole suite would mean one scenario the
+            # engine cannot execute takes every other scenario's score with it;
+            # dropping it quietly would mean a suite that silently shrank.
+            # EMG-004 is here deliberately until DI-01 gives weather something
+            # to change.
+            logger.error("Cannot load %s: %s", path.name, exc)
+            unloadable.append({"scenario": path.stem, "error": str(exc).strip()})
+            continue
         aggregated = batch.aggregated
 
         # A scenario passes on collision rate, not on composite score. A model
-        # can be uncomfortable and safe; it cannot be comfortable and crash.
+        # can be uncomfortable and safe; it cannot be comfortable and crash --
+        # nor comfortable and in a field.
         collision_rate = float(getattr(aggregated, "collision_rate", 0.0))
+        runs = batch.per_run_results or []
+        off_road_rate = (
+            sum(1 for r in runs if getattr(r, "termination_reason", "") == "off_road")
+            / len(runs)
+            if runs
+            else 0.0
+        )
         scenarios.append(
             {
                 "scenario": path.stem,
@@ -220,7 +288,11 @@ def run_suite(
                 "stability_mean": round(float(aggregated.stability_mean), 4),
                 "reactivity_mean": round(float(aggregated.reactivity_mean), 4),
                 "collision_rate": round(collision_rate, 4),
-                "passed": collision_rate < COLLISION_RATE_LIMIT,
+                "off_road_rate": round(off_road_rate, 4),
+                "passed": (
+                    collision_rate < COLLISION_RATE_LIMIT
+                    and off_road_rate < OFF_ROAD_RATE_LIMIT
+                ),
             }
         )
 
@@ -245,7 +317,13 @@ def run_suite(
         "safety_mean": _mean("safety_mean"),
         "collision_rate": _mean("collision_rate"),
         "collision_rate_limit": COLLISION_RATE_LIMIT,
+        "off_road_rate": _mean("off_road_rate"),
+        "off_road_rate_limit": OFF_ROAD_RATE_LIMIT,
         "scenarios": scenarios,
+        # Named, not omitted: a suite that quietly ran fewer scenarios than the
+        # selector asked for is reporting a pass rate over a set nobody chose.
+        "unloadable": unloadable,
+        "scenarios_requested": len(scenarios) + len(unloadable),
     }
 
 
@@ -406,11 +484,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"{report['scenarios_passed']}/{report['scenario_count']} scenarios passed "
         f"({report['pass_rate'] * 100:.0f}%) — report: {written}"
     )
+    for skipped in report.get("unloadable", []):
+        # Loud, and above the per-scenario failures: a scenario that could not
+        # run is a different problem from one the model failed.
+        print(
+            f"  NOT RUN {skipped['scenario']}: {skipped['error'].splitlines()[-1].strip()}"
+        )
     for scenario in report["scenarios"]:
         if not scenario["passed"]:
             print(
                 f"  FAIL {scenario['scenario']}: "
-                f"collision rate {scenario['collision_rate']:.3f} "
+                f"collision rate {scenario['collision_rate']:.3f}, "
+                f"off-road rate {scenario['off_road_rate']:.3f} "
                 f">= {COLLISION_RATE_LIMIT}",
             )
 

@@ -35,7 +35,7 @@ environment:
     speed_limit: 33.33
     template: highway_onramp
     template_params:
-      main_length: 400.0
+      main_length: 950.0
       ramp_length: 150.0
       merge_point: 250.0
 

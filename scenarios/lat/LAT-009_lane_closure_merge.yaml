@@ -1,0 +1,84 @@
+scenario:
+  name: "LAT-009 Lane-Closure Merge - Blocked Lane With Traffic Beside It"
+  version: "2.0"
+  description: >
+    LAT-008 with the escape route occupied. The ego lane ends in a stationary
+    obstacle and the adjacent lane carries a vehicle whose position decides
+    whether a gap exists at all. The requirement is gap acceptance under a
+    deadline: commit early, wait and take the gap behind, or stop. The
+    neighbour's start position and speed are randomised widely, so some runs
+    offer a comfortable gap and some offer none.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 25.0
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: closure_obstacle
+    type: car
+    initial:
+      x: 110.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: adjacent_traffic
+    type: car
+    initial:
+      x: 25.0
+      y: 1.75
+      heading: 0.0
+      velocity: 22.22
+    behavior:
+      type: constant_velocity
+      parameters: {}
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 2009
+
+parameterization:
+  ego_velocity:
+    min: 18.06
+    max: 26.39
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    closure_obstacle:
+      initial_x:
+        min: 85.0
+        max: 145.0
+    adjacent_traffic:
+      initial_velocity:
+        min: 18.06
+        max: 26.39
+      initial_x:
+        min: -15.0
+        max: 55.0

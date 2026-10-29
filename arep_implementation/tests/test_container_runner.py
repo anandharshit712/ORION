@@ -194,7 +194,7 @@ def test_close_only_kills_once(monkeypatch):
     runner.close()
 
     assert len(calls) == 1
-    assert calls[0][:2] == ["docker", "kill"]
+    assert calls[0][:3] == ["docker", "rm", "-f"]
 
 
 def test_free_ports_do_not_repeat():

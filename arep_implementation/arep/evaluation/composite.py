@@ -45,6 +45,10 @@ class EvaluationResult:
     duration: float = 0.0
     termination_reason: str = ""
     master_seed: int = 0
+    # Importance-sampling weight (Phase 4.3). 1.0 unless the batch oversampled
+    # a parameter sub-region. A caller averaging these results without it
+    # reports the biased draw rather than the scenario.
+    importance_weight: float = 1.0
 
     def to_dict(self) -> dict:
         return {

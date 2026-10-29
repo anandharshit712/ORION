@@ -1,0 +1,94 @@
+scenario:
+  name: "LAT-006 Sideswipe Approach - Slow Steady Encroachment at Matched Speed"
+  version: "2.0"
+  description: >
+    An adjacent vehicle holds the ego speed and creeps sideways over several
+    seconds. Nothing about it is sudden, and that is the requirement: closing
+    speed is near zero, so time-to-collision along the travel direction never
+    drops, and a model that watches only longitudinal TTC sees no threat at all
+    until the two bodies touch. Distinct from LAT-002, where the intrusion is a
+    deliberate, quick manoeuvre.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: drifting_neighbour
+    type: car
+    initial:
+      x: 3.0
+      y: 1.75
+      heading: 0.0
+      velocity: 25.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: oncoming_drift
+        trigger_type: time
+        trigger_value: 3.0
+        drift_rate:
+          min: 0.15
+          max: 0.45
+        drift_target_y: -1.75
+        correct_prob: 0.25
+        correct_delay:
+          min: 2.0
+          max: 5.0
+        correct_rate:
+          min: 0.8
+          max: 2.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 2006
+
+parameterization:
+  ego_velocity:
+    min: 20.83
+    max: 29.17
+  ego_x_jitter:
+    min: 0.0
+    max: 5.0
+  npc_overrides:
+    drifting_neighbour:
+      initial_velocity:
+        min: 22.22
+        max: 27.78
+      initial_x:
+        min: -4.0
+        max: 10.0
+      parameters:
+        trigger_value:
+          min: 2.0
+          max: 6.0
+        drift_rate:
+          min: 0.1
+          max: 0.6
+        correct_prob:
+          min: 0.0
+          max: 0.6

@@ -1,0 +1,94 @@
+scenario:
+  name: "LAT-007 Narrow Road Oncoming - Centre-Line Drift With Uncertain Correction"
+  version: "2.0"
+  description: >
+    An oncoming vehicle on a narrow road drifts across the centre line and may
+    or may not correct, decided once per run rather than re-rolled every tick.
+    That uncertainty is the requirement. A drift that always corrects teaches a
+    model to wait; one that never corrects teaches it to swerve at every wobble.
+    It has to handle both from the same observation, which is what the road
+    actually offers. Narrower lanes than LAT-003, so the lateral room is smaller.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.5
+    heading: 0.0
+    velocity: 16.67
+  constraints:
+    max_velocity: 25.0
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: rural
+    lanes: 2
+    lane_width: 3.0
+    speed_limit: 19.44
+  weather:
+    condition: clear
+    visibility: 900.0
+
+traffic:
+  - id: oncoming_vehicle
+    type: car
+    initial:
+      x: 140.0
+      y: 1.5
+      heading: 3.14159
+      velocity: 16.67
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: oncoming_drift
+        trigger_type: time
+        trigger_value: 2.0
+        drift_rate:
+          min: 0.4
+          max: 1.1
+        drift_target_y: -1.5
+        correct_prob: 0.5
+        correct_delay:
+          min: 0.8
+          max: 2.5
+        correct_rate:
+          min: 1.2
+          max: 3.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 2007
+
+parameterization:
+  ego_velocity:
+    min: 13.89
+    max: 19.44
+  ego_x_jitter:
+    min: 0.0
+    max: 5.0
+  npc_overrides:
+    oncoming_vehicle:
+      initial_velocity:
+        min: 13.89
+        max: 19.44
+      initial_x:
+        min: 110.0
+        max: 175.0
+      parameters:
+        trigger_value:
+          min: 1.0
+          max: 4.0
+        drift_rate:
+          min: 0.3
+          max: 1.3
+        correct_prob:
+          min: 0.15
+          max: 0.85

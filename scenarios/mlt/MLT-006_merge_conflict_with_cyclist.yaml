@@ -1,0 +1,113 @@
+scenario:
+  name: "MLT-006 Merge Conflict With a Cyclist - Two Merges Into One Space"
+  version: "2.0"
+  description: >
+    A vehicle merges toward the ego lane from the left while a cyclist occupies
+    the nearside where the ego would otherwise move. Both participants are
+    slower and more vulnerable than a straightforward gap-acceptance problem
+    allows for, and the space that resolves one conflict creates the other.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 16.67
+  constraints:
+    max_velocity: 25.0
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 16.67
+  weather:
+    condition: clear
+    visibility: 900.0
+
+traffic:
+  - id: merging_vehicle
+    type: car
+    initial:
+      x: 20.0
+      y: 1.75
+      heading: 0.0
+      velocity: 15.28
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: oncoming_drift
+        trigger_type: time
+        trigger_value: 3.5
+        drift_rate:
+          min: 0.3
+          max: 0.9
+        drift_target_y: -1.75
+        correct_prob: 0.3
+        correct_delay:
+          min: 1.5
+          max: 3.5
+        correct_rate:
+          min: 1.0
+          max: 2.5
+  - id: nearside_cyclist
+    type: bicycle
+    initial:
+      x: 34.0
+      y: -4.4
+      heading: 0.0
+      velocity: 5.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: erratic_cyclist
+        trigger_type: time
+        trigger_value: 0.0
+        forward_speed:
+          min: 4.0
+          max: 6.5
+        swerve_magnitude:
+          min: 0.2
+          max: 0.8
+        swerve_period:
+          min: 1.5
+          max: 3.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 6006
+
+parameterization:
+  ego_velocity:
+    min: 13.89
+    max: 20.83
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    merging_vehicle:
+      initial_x:
+        min: 12.0
+        max: 32.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 5.5
+    nearside_cyclist:
+      initial_x:
+        min: 24.0
+        max: 48.0
+      parameters:
+        forward_speed:
+          min: 3.5
+          max: 7.0

@@ -35,6 +35,43 @@ def _all_scenarios() -> list[Path]:
     return sorted(LIBRARY.rglob("*.yaml")) + sorted(BASIC.rglob("*.yaml"))
 
 
+def _declares_unimplemented_event(path: Path) -> str | None:
+    """The event type this scenario declares that the engine cannot execute.
+
+    Derived from the YAML rather than a hardcoded filename list, so it cannot
+    go stale: the day DI-01 implements `change_weather`, EMG-004 rejoins every
+    test below without anyone editing this file.
+    """
+    import yaml
+
+    from arep.scenario.events import IMPLEMENTED_EVENT_TYPES
+
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+    for event in data.get("events") or []:
+        event_type = (event or {}).get("type")
+        if event_type and event_type not in IMPLEMENTED_EVENT_TYPES:
+            return str(event_type)
+    return None
+
+
+def _skip_if_unloadable(path: Path) -> None:
+    """Scenarios refused at load (DI-02) cannot satisfy tests that parse them.
+
+    Skipped rather than removed from the parametrisation, so the reason is
+    printed on every run instead of the scenario quietly vanishing from the
+    suite.
+    """
+    event_type = _declares_unimplemented_event(path)
+    if event_type:
+        pytest.skip(
+            f"declares unimplemented event {event_type!r} and is refused at "
+            "load (DI-02); returns when DI-01 implements it"
+        )
+
+
 ALL = _all_scenarios()
 
 
@@ -46,6 +83,7 @@ def test_the_library_is_actually_there():
 
 @pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
 def test_every_scenario_parses(path: Path):
+    _skip_if_unloadable(path)
     scenario, content_hash = ScenarioParser().parse_file(str(path))
     assert scenario is not None
     assert len(content_hash) == 64, "content hash is what versions a scenario"
@@ -53,6 +91,7 @@ def test_every_scenario_parses(path: Path):
 
 @pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
 def test_every_scenario_has_the_fields_execution_needs(path: Path):
+    _skip_if_unloadable(path)
     scenario, _ = ScenarioParser().parse_file(str(path))
 
     assert scenario.name, "a scenario without a name cannot be reported on"
@@ -67,6 +106,7 @@ def test_every_scenario_has_the_fields_execution_needs(path: Path):
 
 @pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
 def test_every_scenario_terminates(path: Path):
+    _skip_if_unloadable(path)
     """A scenario with no timeout can hang a worker until the wall-clock kill."""
     scenario, _ = ScenarioParser().parse_file(str(path))
     assert scenario.termination is not None
@@ -111,6 +151,7 @@ KNOWN_BEHAVIOURS = {
 
 @pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
 def test_traffic_objects_declare_a_known_behaviour(path: Path):
+    _skip_if_unloadable(path)
     """A behaviour the simulator cannot build fails only at run time."""
     scenario, _ = ScenarioParser().parse_file(str(path))
 
@@ -123,6 +164,7 @@ def test_traffic_objects_declare_a_known_behaviour(path: Path):
 
 @pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
 def test_reactive_objects_name_a_registered_behaviour_tree(path: Path):
+    _skip_if_unloadable(path)
     """reactive_* dispatches on bt_type, and get_bt() raises on an unknown one.
 
     A typo here is a ValueError deep inside a worker mid-batch, after the
@@ -160,8 +202,11 @@ def test_content_hash_is_stable_across_parses():
 
 def test_content_hash_differs_between_scenarios():
     parser = ScenarioParser()
-    hashes = {parser.parse_file(str(p))[1] for p in ALL}
-    assert len(hashes) == len(ALL), "two scenarios hash identically"
+    # Only the ones that load. A scenario refused at load (DI-02) has no hash,
+    # and counting it here would fail this test for an unrelated reason.
+    loadable = [p for p in ALL if not _declares_unimplemented_event(p)]
+    hashes = {parser.parse_file(str(p))[1] for p in loadable}
+    assert len(hashes) == len(loadable), "two scenarios hash identically"
 
 
 # ── Lane geometry ────────────────────────────────────────────────────────
@@ -219,6 +264,7 @@ def test_both_lane_builders_agree_on_where_lane_zero_is():
 
 @pytest.mark.parametrize("path", ALL, ids=lambda p: p.name)
 def test_every_scenario_starts_the_ego_inside_a_lane(path: Path):
+    _skip_if_unloadable(path)
     """The ego must begin the run within its lane, body included.
 
     This is the same body-edge test lane compliance scores with
@@ -267,6 +313,7 @@ PRODUCTION = [p for p in ALL if LIBRARY in p.parents]
     ids=lambda p: p.name,
 )
 def test_every_production_scenario_declares_ranges(path: Path):
+    _skip_if_unloadable(path)
     """A scenario with no ranges is one fixed situation, not a test.
 
     The two v1 fixtures under arep_implementation/scenarios/basic/ are exempt:
@@ -289,6 +336,7 @@ def test_every_production_scenario_declares_ranges(path: Path):
     ids=lambda p: p.name,
 )
 def test_declared_ranges_are_ordered_and_non_empty(path: Path):
+    _skip_if_unloadable(path)
     """min < max, always.
 
     An inverted range samples nothing meaningful, and an equal one is a scalar

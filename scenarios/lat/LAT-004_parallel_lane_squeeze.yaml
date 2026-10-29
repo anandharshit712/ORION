@@ -1,0 +1,130 @@
+scenario:
+  name: "LAT-004 Parallel Lane Squeeze - Encroachment From Both Sides"
+  version: "2.0"
+  description: >
+    Three lanes, ego in the middle, a vehicle either side drifting inward at the
+    same time. Neither neighbour is a hazard alone; together they remove the
+    lateral room the model would normally use to solve the problem. The
+    requirement is that it recognises the escape route closing and manages speed
+    rather than steering into a gap that is no longer there. Drift rates and
+    correction probabilities are independent per side, so some runs give one way
+    out and some give none.
+  duration: 25.0
+
+ego:
+  initial:
+    x: 0.0
+    y: 0.0
+    heading: 0.0
+    velocity: 25.0
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 3
+    lane_width: 3.5
+    speed_limit: 27.78
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: left_neighbour
+    type: car
+    initial:
+      x: 12.0
+      y: 3.5
+      heading: 0.0
+      velocity: 25.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: oncoming_drift
+        trigger_type: time
+        trigger_value: 4.0
+        drift_rate:
+          min: 0.25
+          max: 0.7
+        drift_target_y: 0.0
+        correct_prob: 0.45
+        correct_delay:
+          min: 1.0
+          max: 3.0
+        correct_rate:
+          min: 1.0
+          max: 2.5
+  - id: right_neighbour
+    type: car
+    initial:
+      x: 8.0
+      y: -3.5
+      heading: 0.0
+      velocity: 24.0
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: oncoming_drift
+        trigger_type: time
+        trigger_value: 5.5
+        drift_rate:
+          min: 0.25
+          max: 0.7
+        drift_target_y: 0.0
+        correct_prob: 0.45
+        correct_delay:
+          min: 1.0
+          max: 3.0
+        correct_rate:
+          min: 1.0
+          max: 2.5
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 25.0
+
+master_seed: 2004
+
+parameterization:
+  ego_velocity:
+    min: 20.83
+    max: 29.17
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    left_neighbour:
+      initial_x:
+        min: 5.0
+        max: 22.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 6.0
+        drift_rate:
+          min: 0.2
+          max: 0.9
+        correct_prob:
+          min: 0.1
+          max: 0.8
+    right_neighbour:
+      initial_x:
+        min: 2.0
+        max: 18.0
+      parameters:
+        trigger_value:
+          min: 3.5
+          max: 7.5
+        drift_rate:
+          min: 0.2
+          max: 0.9
+        correct_prob:
+          min: 0.1
+          max: 0.8

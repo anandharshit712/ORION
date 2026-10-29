@@ -1,0 +1,85 @@
+scenario:
+  name: "VRU-002 Cyclist at a Crosswalk - Riding Across Rather Than Walking"
+  version: "2.0"
+  description: >
+    A cyclist crosses at a marked crossing without dismounting, so they enter
+    the carriageway at three times walking pace. The requirement is the closing
+    speed: a model tuned to pedestrian crossing times has roughly a third of the
+    reaction budget it expects, and the cyclist is already in the lane by the
+    time a pedestrian would still be at the kerb.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 11.11
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 900.0
+
+traffic:
+  - id: crossing_cyclist
+    type: bicycle
+    initial:
+      x: 55.0
+      y: -9.0
+      heading: 1.5708
+      velocity: 4.17
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: erratic_cyclist
+        trigger_type: time
+        trigger_value: 0.0
+        forward_speed:
+          min: 3.3
+          max: 5.5
+        swerve_magnitude:
+          min: 0.1
+          max: 0.4
+        swerve_period:
+          min: 1.5
+          max: 3.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 4002
+
+parameterization:
+  ego_velocity:
+    min: 8.33
+    max: 13.89
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    crossing_cyclist:
+      initial_x:
+        min: 40.0
+        max: 70.0
+      initial_y:
+        min: -12.0
+        max: -6.0
+      parameters:
+        forward_speed:
+          min: 2.8
+          max: 6.0

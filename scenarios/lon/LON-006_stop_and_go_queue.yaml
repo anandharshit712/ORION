@@ -1,0 +1,145 @@
+scenario:
+  name: "LON-006 Stop-and-Go Queue - Repeated Decelerations in a Braking Column"
+  version: "2.0"
+  description: >
+    Three vehicles ahead brake at staggered triggers, so the ego meets one
+    deceleration after another rather than a single event. A model that handles one
+    brake well can still fail here by treating every new brake as the first: the
+    requirement is stable gap-keeping across a sequence, not one correct reaction.
+    The stagger is randomised, so the rhythm differs per run.
+  duration: 30.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 18.06
+  constraints:
+    max_velocity: 27.78
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 16.67
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: queue_first
+    type: car
+    initial:
+      x: 35.0
+      y: -1.75
+      heading: 0.0
+      velocity: 15.28
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 4.0
+        initial_decel: -3.0
+        initial_brake_duration:
+          min: 0.4
+          max: 1.2
+        hesitation_prob: 0.5
+        hesitation_accel:
+          min: 0.8
+          max: 2.0
+        final_decel: -4.5
+        min_velocity: 0.0
+        max_velocity: 20.0
+  - id: queue_second
+    type: car
+    initial:
+      x: 62.0
+      y: -1.75
+      heading: 0.0
+      velocity: 15.28
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 7.5
+        initial_decel: -3.5
+        hesitation_prob: 0.3
+        final_decel: -5.0
+        min_velocity: 0.0
+        max_velocity: 20.0
+  - id: queue_third
+    type: car
+    initial:
+      x: 92.0
+      y: -1.75
+      heading: 0.0
+      velocity: 15.28
+    behavior:
+      type: reactive_vehicle
+      parameters:
+        bt_type: hesitant_brake
+        trigger_type: time
+        trigger_value: 11.0
+        initial_decel: -3.0
+        hesitation_prob: 0.4
+        final_decel: -4.0
+        min_velocity: 0.0
+        max_velocity: 20.0
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 30.0
+
+master_seed: 1006
+
+parameterization:
+  ego_velocity:
+    min: 13.89
+    max: 20.83
+  ego_x_jitter:
+    min: -4.0
+    max: 4.0
+  npc_overrides:
+    queue_first:
+      initial_velocity:
+        min: 12.50
+        max: 18.06
+      initial_x:
+        min: 28.0
+        max: 45.0
+      parameters:
+        trigger_value:
+          min: 2.5
+          max: 5.5
+        initial_decel:
+          min: -4.5
+          max: -2.0
+    queue_second:
+      initial_x:
+        min: 55.0
+        max: 75.0
+      parameters:
+        trigger_value:
+          min: 6.0
+          max: 9.5
+        final_decel:
+          min: -6.0
+          max: -3.5
+    queue_third:
+      initial_x:
+        min: 85.0
+        max: 110.0
+      parameters:
+        trigger_value:
+          min: 9.5
+          max: 13.0

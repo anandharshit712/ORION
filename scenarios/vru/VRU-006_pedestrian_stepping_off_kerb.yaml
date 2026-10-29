@@ -1,0 +1,88 @@
+scenario:
+  name: "VRU-006 Pedestrian Stepping Off the Kerb - No Crossing, No Warning"
+  version: "2.0"
+  description: >
+    A pedestrian steps off the kerb mid-block with no crossing markings and no
+    hesitation, on a road where nothing signals that anyone might. The
+    requirement is that a model does not treat crossing markings as the only
+    place a person appears - the marked crossing in VRU-001 gives a model
+    somewhere to look, and this one removes it.
+
+    Substituted for the roadmap's "pedestrian at night" theme. That one needs a
+    visibility model: `weather.visibility` is a label the Observation never
+    reads, so a night scenario would differ from a daytime one only in its
+    description. It returns when environmental physics lands.
+  duration: 18.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 12.50
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 13.89
+  weather:
+    condition: clear
+    visibility: 850.0
+
+traffic:
+  - id: stepping_pedestrian
+    type: pedestrian
+    initial:
+      x: 45.0
+      y: -6.5
+      heading: 1.5708
+      velocity: 1.3
+    behavior:
+      type: pedestrian
+      parameters:
+        bt_type: cautious_pedestrian
+        trigger_type: proximity
+        trigger_value: 22.0
+        walk_speed:
+          min: 1.0
+          max: 1.9
+        hesitate_prob: 0.1
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 18.0
+
+master_seed: 4006
+
+parameterization:
+  ego_velocity:
+    min: 9.72
+    max: 15.28
+  ego_x_jitter:
+    min: 0.0
+    max: 6.0
+  npc_overrides:
+    stepping_pedestrian:
+      initial_x:
+        min: 32.0
+        max: 58.0
+      parameters:
+        trigger_value:
+          min: 15.0
+          max: 28.0
+        walk_speed:
+          min: 0.9
+          max: 2.1
+        hesitate_prob:
+          min: 0.0
+          max: 0.3

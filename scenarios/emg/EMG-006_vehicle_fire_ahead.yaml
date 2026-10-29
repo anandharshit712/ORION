@@ -1,0 +1,91 @@
+scenario:
+  name: "EMG-006 Vehicle Fire Ahead - Stopped Vehicle and Occupants on Foot"
+  version: "2.0"
+  description: >
+    A vehicle has stopped in the lane and its occupants are out of it, on the
+    carriageway beside it. Two hazards of different kinds in the same place: the
+    obstacle is static and visible, the people are moving and are not where a
+    model expects people to be. The requirement is that clearing the vehicle is
+    not the end of the problem.
+  duration: 22.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 22.22
+  constraints:
+    max_velocity: 33.33
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: highway
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 25.0
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic:
+  - id: burning_vehicle
+    type: car
+    initial:
+      x: 100.0
+      y: -1.75
+      heading: 0.0
+      velocity: 0.0
+    behavior:
+      type: constant_velocity
+      parameters: {}
+  - id: occupant_on_foot
+    type: pedestrian
+    initial:
+      x: 92.0
+      y: -4.5
+      heading: 1.5708
+      velocity: 1.2
+    behavior:
+      type: pedestrian
+      parameters:
+        bt_type: erratic_pedestrian
+        trigger_type: proximity
+        trigger_value: 45.0
+        walk_speed:
+          min: 0.9
+          max: 2.0
+        direction_change_prob: 0.2
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 22.0
+
+master_seed: 5006
+
+parameterization:
+  ego_velocity:
+    min: 18.06
+    max: 27.78
+  ego_x_jitter:
+    min: 0.0
+    max: 8.0
+  npc_overrides:
+    burning_vehicle:
+      initial_x:
+        min: 80.0
+        max: 130.0
+    occupant_on_foot:
+      initial_x:
+        min: 72.0
+        max: 120.0
+      parameters:
+        trigger_value:
+          min: 30.0
+          max: 55.0

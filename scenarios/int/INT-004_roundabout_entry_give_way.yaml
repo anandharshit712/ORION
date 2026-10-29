@@ -31,8 +31,7 @@ environment:
     template_params:
       radius: 20.0
       arm_count: 4
-      arm_length: 60.0
-
+      arm_length: 300.0
   weather:
     condition: clear
     visibility: 1000.0

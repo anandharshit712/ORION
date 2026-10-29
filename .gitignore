@@ -69,3 +69,7 @@ HOLD_AND_DOUBTS.md
 # change on every run is not something to carry in git history. Findings worth
 # keeping go in the commit message and the docs, not here.
 test-results/
+
+# Build tracker — a status board for the repository owner, rewritten after each
+# task. Not committed: it is a view of state, and docs/ROADMAP.md is the authority.
+PROGRESS.md

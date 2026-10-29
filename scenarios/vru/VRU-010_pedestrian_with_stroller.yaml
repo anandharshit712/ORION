@@ -1,0 +1,82 @@
+scenario:
+  name: "VRU-010 Pedestrian With a Stroller - Leading Extent Before the Body"
+  version: "2.0"
+  description: >
+    A pedestrian pushing a stroller enters the carriageway. The stroller reaches
+    the lane roughly a metre before the person does, which is the requirement: a
+    model that tracks the body's centre and stops for that centre stops a metre
+    too late. Modelled as a wider, slower pedestrian, so the leading edge
+    arrives early while the whole crossing takes longer than an unencumbered one.
+  duration: 20.0
+
+ego:
+  initial:
+    x: 0.0
+    y: -1.75
+    heading: 0.0
+    velocity: 11.11
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.83
+    max_steering: 0.5
+
+environment:
+  road:
+    type: urban
+    lanes: 2
+    lane_width: 3.5
+    speed_limit: 11.11
+  weather:
+    condition: clear
+    visibility: 900.0
+
+traffic:
+  - id: stroller_pedestrian
+    type: pedestrian
+    initial:
+      x: 42.0
+      y: -7.5
+      heading: 1.5708
+      velocity: 1.0
+      length: 1.8
+      width: 0.9
+    behavior:
+      type: pedestrian
+      parameters:
+        bt_type: cautious_pedestrian
+        trigger_type: proximity
+        trigger_value: 24.0
+        walk_speed:
+          min: 0.8
+          max: 1.4
+        hesitate_prob: 0.25
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 4010
+
+parameterization:
+  ego_velocity:
+    min: 8.33
+    max: 13.89
+  ego_x_jitter:
+    min: 0.0
+    max: 5.0
+  npc_overrides:
+    stroller_pedestrian:
+      initial_x:
+        min: 30.0
+        max: 56.0
+      parameters:
+        trigger_value:
+          min: 17.0
+          max: 30.0
+        walk_speed:
+          min: 0.7
+          max: 1.6
