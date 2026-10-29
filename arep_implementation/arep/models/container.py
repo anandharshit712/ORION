@@ -226,9 +226,11 @@ class ContainerModelRunner(ModelInterface):
         if not self._started:
             return
         self._started = False
+        # rm -f, not kill: kill returns before --rm has removed the container,
+        # so a caller checking straight after close() could still see it.
         try:
             subprocess.run(
-                ["docker", "kill", self.container_name],
+                ["docker", "rm", "-f", self.container_name],
                 check=False,
                 capture_output=True,
                 timeout=30,
