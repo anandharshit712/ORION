@@ -175,6 +175,10 @@ export const api = {
 
   getLiveRun: (runId) => request(`${API}/runs/${runId}`),
 
+  // Lane centrelines + widths for the viewer (4.2). Static per run, so it is
+  // fetched once rather than carried in every (hashed) tick frame.
+  getRunRoad: (runId) => request(`${API}/runs/${runId}/road`),
+
   // Single-use, 60-second credential for the run's WebSocket (D-04). The
   // session JWT must never appear in a socket URL — URLs reach access logs,
   // proxy logs and browser history.

@@ -1,10 +1,12 @@
 import { useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
+import { OrbitControls, Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAuth } from '../../context/AuthContext';
 import { useSimulationStream } from '../../hooks/useSimulationStream';
+import { useApiData } from '../../hooks/useApiData';
+import { api } from '../../services/api';
 import Icon from '../common/Icon';
 import './SimulationViewer.css';
 
@@ -62,6 +64,53 @@ function Road() {
   );
 }
 
+// Ribbon for one lane centreline from GET /api/runs/{id}/road: two vertices
+// per point, offset half a width along the left normal. Backend (x, y) maps to
+// three.js (x, -z) — the same mapping Vehicle uses, so lanes and cars agree.
+export function laneRibbon(points, width) {
+  const n = points.length;
+  const positions = new Float32Array(n * 6);
+  const left = [];
+  const right = [];
+  for (let i = 0; i < n; i += 1) {
+    const [ax, ay] = points[Math.max(0, i - 1)];
+    const [bx, by] = points[Math.min(n - 1, i + 1)];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const nx = (-(by - ay) / len) * (width / 2);
+    const ny = ((bx - ax) / len) * (width / 2);
+    const [x, y] = points[i];
+    positions.set([x + nx, 0, -(y + ny), x - nx, 0, -(y - ny)], i * 6);
+    left.push([x + nx, 0.02, -(y + ny)]);
+    right.push([x - nx, 0.02, -(y - ny)]);
+  }
+  const index = new Uint32Array(Math.max(0, n - 1) * 6);
+  for (let i = 0; i < n - 1; i += 1) {
+    const a = 2 * i;
+    index.set([a, a + 2, a + 1, a + 1, a + 2, a + 3], i * 6);
+  }
+  return { positions, index, left, right };
+}
+
+function Lane({ points, width }) {
+  const { positions, index, left, right } = useMemo(
+    () => laneRibbon(points, width),
+    [points, width],
+  );
+  return (
+    <group>
+      <mesh receiveShadow>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+          <bufferAttribute attach="index" args={[index, 1]} />
+        </bufferGeometry>
+        <meshStandardMaterial color={C_CARBON} side={THREE.DoubleSide} />
+      </mesh>
+      <Line points={left} color={C_LINE} lineWidth={1} />
+      <Line points={right} color={C_LINE} lineWidth={1} />
+    </group>
+  );
+}
+
 function Vehicle({ x, y, heading, length = 4.5, width = 2.0, height = 1.5, color = C_AMBER }) {
   const ref = useRef();
   useFrame(() => {
@@ -81,14 +130,22 @@ function Vehicle({ x, y, heading, length = 4.5, width = 2.0, height = 1.5, color
 
 // Exported so replay renders the identical scene rather than a second one
 // that drifts from it — the point of replay is that it looks the same.
-export function Scene({ frame }) {
+// `lanes` is the run's real geometry when the caller has it (live runs); the
+// fixed straight Road is the fallback, e.g. for stored-frame replay.
+export function Scene({ frame, lanes }) {
   const ego = frame?.ego;
   const npcs = frame?.npcs ?? [];
   return (
     <>
       <ambientLight intensity={0.6} />
       <directionalLight position={[50, 80, 40]} intensity={0.9} castShadow />
-      <Road />
+      {lanes?.length ? (
+        lanes.map((lane) => (
+          <Lane key={lane.id} points={lane.points} width={lane.width} />
+        ))
+      ) : (
+        <Road />
+      )}
       <Grid
         args={[ROAD_LENGTH, ROAD_LENGTH]}
         position={[0, 0.005, 0]}
@@ -287,6 +344,8 @@ export default function SimulationViewer() {
   const { runId } = useParams();
   const navigate = useNavigate();
   const { frame, status, error, latencyRef } = useSimulationStream(runId);
+  // Fetched once; a failure just leaves the fallback straight road drawn.
+  const { data: road } = useApiData(() => api.getRunRoad(runId), [runId]);
 
   return (
     <div className="sim-viewer">
@@ -303,7 +362,7 @@ export default function SimulationViewer() {
         camera={{ position: [0, 50, 50], fov: 40 }}
         style={{ background: C_CARBON }}
       >
-        <Scene frame={frame} />
+        <Scene frame={frame} lanes={road?.lanes} />
         <OrbitControls
           enableDamping
           dampingFactor={0.1}
