@@ -1578,7 +1578,7 @@ their own copy. It belongs beside `PLAN_CREDITS` in `api/billing.py` once the pr
 decided. A test asserts the sellable suites partition the library exactly: a scenario in no
 suite cannot be sold, one in two is double-counted, and the runner is happy either way.
 
-## 4.4 — OpenSCENARIO 2.0 Import / Export — ⚠ PARTIAL (round trip works for the modelled subset; not a conforming parser, parameterisation lost by design)
+## 4.4 — OpenSCENARIO 2.0 Import / Export — ✅ DONE (2026-10-29; 59/59 round trip incl. parameterisation; a third-party sample file is still not committed, see PENDING)
 
 Read standard `.osc` files into `ScenarioDefinition` objects and write ORION scenarios back
 out — the migration path from CARLA and ASAM member tools.
@@ -1598,13 +1598,21 @@ GET  /api/scenarios/{id}/export/osc   # returns .osc file
 
 ### Acceptance Criteria
 
-- [~] OSC2 import produces a valid `ScenarioDefinition` — verified on exported output.
-      **The ASAM `CutIn.osc` sample is not committed**, so import is untested against a
-      third-party file. This is a line reader for the modelled subset, not a conforming
-      parser.
-- [x] Exporting LON-003 produces OpenSCENARIO 2.0 that re-imports — round trip verified.
-      The parameterisation block is lost by design, with a test pinning it.
-- [ ] Round-trip (ORION → OSC → ORION) preserves triggers and NPC parameters
+- [~] OSC2 import produces a valid `ScenarioDefinition` — verified on exported output for all
+      59 loadable scenarios and on a hand-authored cut-in
+      (`tests/fixtures/osc/cut_in_hand_authored.osc`, labelled as such). **The ASAM
+      `CutIn.osc` sample is still not committed**, so import is untested against a file this
+      project did not write. Unsupported constructs (paths, lanes, relative positions,
+      `change_lane`) are skipped and returned in `skipped`. A line reader for the modelled
+      subset, not a conforming parser.
+- [x] Exporting LON-003 produces OpenSCENARIO 2.0 that re-imports. Parameterisation is no
+      longer lost: each range is an OSC2 `parameter` with a `keep()` constraint range.
+- [x] Round-trip (ORION → OSC → ORION) preserves triggers and NPC parameters — 59/59 loadable
+      scenarios, whole `ScenarioDefinition` equal (`tests/test_osc_round_trip.py`). EMG-004 is
+      refused at load (DI-02). Fields with no OSC2 construct travel as `#@orion` annotation
+      lines, which other tools read as comments.
+- Endpoints: `GET /api/scenarios/{id}/export/osc` and `POST /api/scenarios/import/osc`.
+  Import is parse-and-validate only — there is no org-scoped scenario storage to put it in.
 
 ## 4.5 — Safety-Standards Alignment
 

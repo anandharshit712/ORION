@@ -173,7 +173,20 @@ exercised here.
 Two acceptance criteria name third-party files that are absent:
 `tests/fixtures/TownSimple.xodr` (4.2) and the ASAM `CutIn.osc` sample (4.4). Both parsers
 are tested against generated or round-tripped input instead, so neither has been exercised
-against a file this project did not write.
+against a file this project did not write. The OSC importer also has a hand-authored cut-in
+(`tests/fixtures/osc/cut_in_hand_authored.osc`), which is closer but still ours. Unblock: a
+sample with a clearly redistributable licence (MIT/Apache/CC0/BSD), committed with its source
+URL and licence beside it.
+
+### Imported OSC scenarios are not stored
+`POST /api/scenarios/import/osc` parses and validates, and returns the scenario; it stores
+nothing. Scenarios are files in the library and there is no org-scoped scenario storage.
+Unblock: a storage design for customer scenarios.
+
+### Third-party OSC2 relative constructs are not mapped
+`lane()`, `position(behind: ...)`, `change_lane`, `path` and map calls are skipped and
+reported, so an imported third-party cut-in loses the cut-in itself. Unblock: resolve
+relative positions against the ego, then map lateral manoeuvres to `hesitant_cut_in`.
 
 ### Deterministic replay — storage and scaling
 Replay is built end to end (corrected 2026-09-29; this entry used to say the viewer was
