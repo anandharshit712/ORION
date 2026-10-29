@@ -26,7 +26,7 @@ class Action:
     Control action from the model.
 
     All values are normalized to standard ranges:
-      steering:  [-1, 1]  (left to right)
+      steering:  [-1, 1]  (positive = left: it increases the heading, counter-clockwise)
       throttle:  [0, 1]   (no throttle to full throttle)
       brake:     [0, 1]   (no brake to full brake)
 

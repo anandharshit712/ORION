@@ -172,11 +172,43 @@ exercised here.
 ### Interop fixtures are not committed
 Two acceptance criteria name third-party files that are absent:
 `tests/fixtures/TownSimple.xodr` (4.2) and the ASAM `CutIn.osc` sample (4.4). Both parsers
-are tested against generated or round-tripped input instead, so neither has been exercised
-against a file this project did not write. The OSC importer also has a hand-authored cut-in
-(`tests/fixtures/osc/cut_in_hand_authored.osc`), which is closer but still ours. Unblock: a
+are tested against hand-authored or round-tripped input instead
+(`tests/fixtures/xodr/orion_junction.xodr`, `tests/fixtures/osc/cut_in_hand_authored.osc`),
+so neither has been exercised against a file this project did not write. Unblock: a
 sample with a clearly redistributable licence (MIT/Apache/CC0/BSD), committed with its source
 URL and licence beside it.
+
+### The lane-keeping controllers have the offset term backwards
+`lane_offset` is negative to the left, and positive `Action.steering` turns left (the physics
+heading increases with it: `θ' = v/L·tan(δ)`). `SimpleLaneKeep` and `ReferenceDriver` steer
+`-(kp·lane_offset + kd·heading_error)`, so the offset term pushes the car further from its
+lane and only the heading term corrects. Measured on LAT-001 with no traffic: SimpleLaneKeep
+started 0.5 m left of centre swings to +1.04 m right and ends `off_road`; started 0.5 m right
+it also ends `off_road`. Hidden on straight roads that start centred, fatal on a curve:
+XODR-001 is 0/10 for ReferenceDriver, and with `kp` flipped it tracks within ±0.2 m. CLAUDE.md
+said "negative = left" for `Action.steering`, which is how the controllers came to be written
+this way; customer models written against that doc would inherit it. Fixing the controllers
+moves ReferenceDriver's and SimpleLaneKeep's scores across the library, so it needs a
+METHODOLOGY change-log row and a re-measured library table.
+
+### `POST /api/maps/upload` is not built (4.2)
+Nothing can reference an uploaded map: scenarios are library files resolved by path, OSC
+import is parse-only, and there is no scenario upload. `OpenDRIVEParser().read(bytes)` already
+takes bytes, refuses DOCTYPE and returns `warnings`. Unblock: decide how a scenario names an
+org-scoped map. Before accepting uploads, harden the DOCTYPE check: it is a byte match, so a
+UTF-16 document passes it (expat's own entity-expansion limits still apply).
+
+### OpenDRIVE scenarios cannot be replayed or exported to OSC2
+Replay parses a stored YAML string with no file to resolve the map against, and the `.osc`
+export does not carry the map, so both refuse a `source: xodr` scenario. Stored-frame replay
+also draws the straight road for every scenario — no geometry is stored per run. Unblock:
+store the map bytes (or a hash-addressed copy) and the lane geometry with the run.
+
+### OpenDRIVE subset limits
+Only each road's first laneSection is modelled; laneOffset and width tapers are ignored,
+uneven or non-contiguous driving lanes are reported, and `<object>` is not imported. A road
+with an unsupported geometry is skipped whole rather than interpolated across. All of it is
+reported in `XodrMap.warnings`.
 
 ### Imported OSC scenarios are not stored
 `POST /api/scenarios/import/osc` parses and validates, and returns the scenario; it stores

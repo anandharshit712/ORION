@@ -78,7 +78,8 @@ class RoadSegment:
                 f"lane_index {lane_index} out of range for segment "
                 f"{self.segment_id!r} ({self.lane_count} lanes)"
             )
-        # Offset from road center: negative = left of travel direction
+        # Offset from road center along the CCW (left) normal: negative = right of travel
+        # direction, so lane 0 is the rightmost lane
         lane_offset = (lane_index - (self.lane_count - 1) / 2.0) * self.lane_width
         result = []
         for i, pt in enumerate(self.centerline):

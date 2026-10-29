@@ -22,7 +22,9 @@ class Action:
     Control action produced by the model each tick.
 
     All fields are normalised to [-1.0, 1.0]:
-      steering : negative = left, positive = right
+      steering : positive = left, negative = right (positive increases the heading,
+                 counter-clockwise). Observation.lane_offset is negative to the left, so a
+                 lane-keeper steers +k * lane_offset toward the centre.
       throttle : 0.0 = no acceleration, 1.0 = max acceleration
       brake    : 0.0 = no braking, 1.0 = max braking
     """
