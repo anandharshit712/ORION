@@ -209,7 +209,7 @@ nothing from `arep`) translates the ticks to `/orion/ego/odom` and `/orion/objec
 
 `Action` has three normalized fields, all in `[-1.0, 1.0]`:
 
-- `steering`: **positive = left, negative = right** (maps to ±`max_steering_angle = 0.5 rad`). Positive steering increases the heading, which is counter-clockwise — the physics (`θ' = v/L·tan(δ)`) and the ROS2 bridge agree. This line used to say the opposite; `lane_offset` is negative to the left, so a correct lane-keeper steers `+kp·lane_offset`. The bundled `SimpleLaneKeep` and `ReferenceDriver` still have it backwards (`docs/PENDING.md`).
+- `steering`: **positive = left, negative = right** (maps to ±`max_steering_angle = 0.5 rad`). Positive steering increases the heading, which is counter-clockwise — the physics (`θ' = v/L·tan(δ)`) and the ROS2 bridge agree. This line used to say the opposite; `lane_offset` is negative to the left, so a correct lane-keeper steers `+kp·lane_offset`. The bundled `SimpleLaneKeep` and `ReferenceDriver` had it backwards until 2026-10-30, and were undamped besides; both now steer `kp·lane_offset − kd·lane_heading_error` with `kp=0.1, kd=1.0` (ζ ≈ 0.68, derivation in `SimpleLaneKeepModel`'s docstring).
 - `throttle`: `[0.0, 1.0]` — maps to `max_acceleration = 3.0 m/s²`
 - `brake`: `[0.0, 1.0]` — maps to `max_deceleration = 8.0 m/s²`
 
@@ -1012,12 +1012,12 @@ on the production host is an operational step, not development work.
    through `environment.road.template`. See Section 6.
 
 **60 scenarios; 59 execute.** Ten per category; EMG-004 is refused at load (DI-02).
-Measured 2026-10-01 at 10 runs per scenario:
+Measured 2026-10-30 at 10 runs per scenario, after the lane-keeper sign fix:
 
 | model | passes | what it is |
 | --- | --- | --- |
 | `emergency_brake` | **52 / 59** | brakes at maximum always — passes by not moving |
-| `ReferenceDriver` | **32 / 59** | IDM + lane keeping + evasion + crossing yield |
+| `ReferenceDriver` | **39 / 59** | IDM + lane keeping + evasion + crossing yield |
 | `SimpleLaneKeep` | 12 / 59 | steering PD, no longitudinal sense |
 
 **Read the first row with care.** `emergency_brake` scores highest because nothing in the
@@ -1025,14 +1025,14 @@ composite rewards making progress and the pass criterion is a collision and off-
 stopping dead passes most of the library. It is a floor, not a benchmark — never present a
 score against it as a competitive result.
 
-`ReferenceDriver` passes scenarios `emergency_brake` fails (EMG-001 road debris, which needs
-evasion) and fails scenarios `emergency_brake` passes (junctions, and lateral scenarios where
-its bounded evasion heuristic costs it the road). That divergence is the useful part: the two
-fail *different* scenarios, so the library discriminates behaviour rather than just "did you
-brake".
+`ReferenceDriver` fails scenarios `emergency_brake` passes (junctions, and scenarios where its
+bounded evasion heuristic costs it the road), so the library discriminates behaviour rather
+than just "did you brake". The converse no longer holds: it used to pass EMG-001 (road
+debris, which needs evasion), and as measured on 2026-10-30 it leaves the road on 1 run in 10
+there, so it passes nothing `emergency_brake` fails.
 
-Six scenarios are failed by **both** — EMG-002, EMG-008, LAT-003, LAT-007, MLT-005, MLT-007.
-Those remain unproven: no model in the repo passes them, and nobody has demonstrated one that
+Seven scenarios are failed by **both** — EMG-001, EMG-002, EMG-008, LAT-003, LAT-007, MLT-005,
+MLT-007. Those remain unproven: no model in the repo passes them, and nobody has demonstrated one that
 can. Don't describe them as "correct failures" without that caveat.
 
 **The Phase 4.3 review found seven platform defects, each hidden by the one before it.** In
