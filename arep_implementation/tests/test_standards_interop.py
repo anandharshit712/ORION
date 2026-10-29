@@ -209,16 +209,23 @@ def test_export_carries_the_trigger():
 
 def test_export_flags_what_it_cannot_express():
     """An exported scenario that quietly loses a behaviour is worse than no
-    export: the recipient runs it believing it is the same test."""
+    export: the recipient runs it believing it is the same test. The
+    hesitation phase has no OSC2 equivalent, so it travels as a marked
+    annotation that other tools read as a comment."""
     scenario, _ = ScenarioParser().parse_file(LON003)
     osc = OpenSCENARIOExporter().export(scenario)
-    assert "no direct equivalent" in osc or "not represented" in osc
+    annotation = next(
+        line for line in osc.splitlines() if "#@orion actor lead_vehicle" in line
+    )
+    assert "hesitation_duration" in annotation
 
 
 def test_export_records_the_parameter_ranges():
+    """As OSC2 parameter declarations with keep() ranges, per the spec."""
     scenario, _ = ScenarioParser().parse_file(LON003)
     osc = OpenSCENARIOExporter().export(scenario)
-    assert "ego_velocity" in osc
+    assert "    ego_velocity: float" in osc
+    assert "keep(ego_velocity in [16.67 .. 27.78])" in osc
 
 
 def test_export_produces_a_safe_identifier():
@@ -339,7 +346,7 @@ def test_export_then_import_preserves_the_essentials():
     osc = OpenSCENARIOExporter().export(original)
     imported = OpenSCENARIOImporter().import_string(osc, source="round-trip")
 
-    assert imported.name.startswith("LON_003")
+    assert imported.name == original.name
     assert [o.id for o in imported.traffic_objects] == [
         o.id for o in original.traffic_objects
     ]
@@ -349,14 +356,13 @@ def test_export_then_import_preserves_the_essentials():
     assert npc.behavior.parameters["trigger_type"] == "ttc"
 
 
-def test_the_round_trip_is_lossy_and_says_so():
-    """Stated rather than implied: the parameterisation block does not
-    survive, because OSC2 parameter declarations are written as comments."""
+def test_the_parameterisation_survives_the_round_trip():
+    """It used to be written as comments and lost. A scenario that comes back
+    without its ranges runs one fixed setting and still scores (ARCHITECTURE
+    §1.6.1), so this is pinned rather than assumed."""
     original, _ = ScenarioParser().parse_file(LON003)
     imported = OpenSCENARIOImporter().import_string(
         OpenSCENARIOExporter().export(original),
     )
     assert original.parameterization
-    assert (
-        not imported.parameterization
-    ), "if this starts surviving, update the docstring that says it does not"
+    assert imported.parameterization == original.parameterization

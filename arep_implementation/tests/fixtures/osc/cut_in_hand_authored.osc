@@ -1,0 +1,41 @@
+# Hand-authored test fixture. NOT an ASAM sample, and NOT produced by
+# ORION's exporter: written by hand in OpenSCENARIO 2.0 DSL syntax, in the
+# style of the public cut-in examples, so that ORION's importer is exercised
+# against a file it did not write.
+#
+# It deliberately mixes constructs ORION reads (actors, units, duration,
+# wait conditions, drive/brake, a parameter range) with constructs it does
+# not (paths, maps, lanes, relative positions, a lane change, an unknown
+# parameter). The test asserts the second group is skipped AND reported.
+
+import osc.standard
+
+scenario cut_in_hand_authored:
+    path: Path
+    path.set_map("Town04")
+    path.path_min_driving_lanes(2)
+
+    ego_velocity: speed
+    keep(ego_velocity in [60kph .. 100kph])
+    cut_in_gap: length
+    keep(cut_in_gap in [10m .. 25m])
+
+    ego_vehicle: vehicle
+    npc: vehicle
+
+    do parallel(duration: 18s):
+        ego_vehicle.drive(path) with:
+            speed(80kph)
+            lane(1, at: start)
+
+        serial:
+            npc.drive(path) with:
+                speed(90kph)
+                lane(right_of: ego_vehicle, at: start)
+                position(15m, behind: ego_vehicle, at: start)
+            wait elapsed(4s)
+            npc.change_lane(side: left) with:
+                lane(same_as: ego_vehicle, at: end)
+            wait distance_to(ego_vehicle) < 20m
+            npc.brake() with:
+                deceleration(5mpsps)

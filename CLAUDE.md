@@ -27,7 +27,7 @@ All project documentation lives in `docs/`. Three documents govern; each owns on
 
 Supporting, non-governing: **`docs/PENDING.md`** (the running list of known-open work that is deliberately not being done now — each entry says what is missing, why it is open, and what would unblock it. It does not set priority; the roadmap does, and the roadmap wins when they disagree. Add an item here rather than leaving it in a commit message or a chat log, and move it into the roadmap if it becomes a blocker), **`docs/DISCUSSIONS.md`** (features and gaps raised in interview-style design reviews, entries `DI-NN`. Each records the verified finding, the direction agreed, a proposed design, and the questions still **to discuss before building**. **It is a post-build backlog: nothing in it is picked up until every build item in `docs/ROADMAP.md` is done.** Until then, remaining roadmap work proceeds exactly as the roadmap specifies. Don't change its scope, order or design to fit a DI entry, and don't start DI work early "while in the area". When the build is complete, read an entry before building anything it covers, and don't build while its open questions would change the design. Add a new entry whenever a review turns up a gap, and give it a short pointer in `PENDING.md`), `docs/PROJECT_IDEA.pdf` (the detailed product idea — exec summary, positioning, status, business model), `docs/MARKET.md` (19-competitor analysis, the four moats), `docs/reference/` (external research), `docs/archive/` (superseded originals — historical only, never cite as authority).
 
-**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. Remaining in Phase 4: **4.5 standards alignment**, plus the partial 4.2 (OpenDRIVE scenario wiring) and 4.4 (OSC2) — the roadmap sets the order. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
+**Phases 0–3 are complete** (2026-09-28); what remains in them needs external people, not code — see Section 13. 4.3 (60 scenarios, importance sampling, named suites) and **4.1 (ROS2 bridge, 2026-10-09)** are complete. **4.4 (OSC2 round trip, 2026-10-29)** is complete bar a third-party sample file. Remaining in Phase 4: **4.5 standards alignment** and the partial 4.2 (OpenDRIVE scenario wiring) — the roadmap sets the order. `docs/METHODOLOGY.md` documents scoring and must be updated alongside any scoring change.
 
 ---
 
@@ -507,6 +507,8 @@ POST   /api/search/              body: {scenario_path->scenario_id, model_id, ma
 GET    /api/search/{id}/status   progress only — evals_done, best_fitness, falsification_found
 GET    /api/search/{id}/result   the above plus best_params, every distinct failure, failure_rate, evaluation history
 GET    /api/search/              this org's searches, newest first
+GET    /api/scenarios/{scenario_id}/export/osc  library scenario (id e.g. LON-003) as OpenSCENARIO 2.0 text
+POST   /api/scenarios/import/osc  body: raw .osc text (<=256 KB) — {valid, scenario, skipped, validation_errors}; stores nothing
 ```
 
 POST `/api/auth/logout` clears both cookies (public — clearing cookies you may not have is a no-op).
@@ -520,7 +522,7 @@ there is nothing to forge). The header wins when both are present. `get_current_
 `GET /api/runs/` and `GET /api/runs/{run_id}` return `RunStatusResponse` with:
 `composite_score`, `safety_score`, `compliance_score`, `stability_score`, `reactivity_score`, `collision_occurred` — populated once `status == "completed"`.
 
-**Path split — read before adding a frontend call.** Only the auth router (`/api/auth/*`) and the live-run router (`/api/runs/*`) are mounted under `/api`. `/scenarios/`, `/jobs/`, `/results/*`, `/evaluate/*`, `/models/` and `/health` are mounted at the **root**. `src/services/api.js` therefore spells out each full path rather than prefixing everything, and `vite.config.js` proxies every one of those root prefixes. Getting this wrong is quiet: the dev server answers with `index.html` and the call fails as a JSON parse error rather than a 404. Four methods shipped broken this way and went unnoticed because the sections that would call them are not wired up yet.
+**Path split — read before adding a frontend call.** Only the auth router (`/api/auth/*`), the live-run router (`/api/runs/*`) and the OSC router (`/api/scenarios/*`, import/export only) are mounted under `/api` — the `/scenarios/` catalogue itself stays at the root. `/scenarios/`, `/jobs/`, `/results/*`, `/evaluate/*`, `/models/` and `/health` are mounted at the **root**. `src/services/api.js` therefore spells out each full path rather than prefixing everything, and `vite.config.js` proxies every one of those root prefixes. Getting this wrong is quiet: the dev server answers with `index.html` and the call fails as a JSON parse error rather than a 404. Four methods shipped broken this way and went unnoticed because the sections that would call them are not wired up yet.
 
 Built-in model names (registered in `api/routes.py` `AVAILABLE_MODELS`):
 `"ConstantAction"`, `"EmergencyBrake"`, `"SimpleLaneKeep"`, `"Random"`, `"ReferenceDriver"`
@@ -1040,7 +1042,7 @@ the module docstring before assuming coverage.
 | `cli/run_suite.py` | CI entrypoint | Exit **0** pass / **1** model failed / **2** ORION could not answer — keep 1 and 2 distinct |
 | `ci/orion-ci.sh` | The CI entrypoint both integrations run | Configured only by `ORION_*` env vars; must stay LF and must not use `set -e` |
 | `maps/xodr_parser.py` | OpenDRIVE → `RoadGraph` | Line and arc geometry only; spirals and poly3 are skipped **and logged** |
-| `scenario/osc_importer.py`, `osc_exporter.py` | OpenSCENARIO 2.0 ↔ `ScenarioDefinition` | A line reader for the modelled subset, not a conforming parser. The round trip loses the parameterisation block |
+| `scenario/osc_importer.py`, `osc_exporter.py`, `api/osc_routes.py` | OpenSCENARIO 2.0 ↔ `ScenarioDefinition`; export and parse-only import over HTTP | A line reader for the modelled subset, not a conforming parser. Fields with no OSC2 construct travel as `#@orion` annotation lines (comments to other tools). All 59 loadable scenarios round-trip with the whole `ScenarioDefinition` equal, parameterisation included as `keep()` ranges. Third-party paths, lanes, relative positions and lane changes are skipped and returned in `skipped`. **Extend exporter and importer together** — each field is encoded exactly once, as OSC2 or as an annotation, never both; `tests/test_osc_round_trip.py` compares the full dataclass for every library scenario |
 
 **The rule these share**: unsupported input is skipped *and reported*, never silently dropped.
 A scenario missing its hazard still runs and still produces a score, which is the dangerous
