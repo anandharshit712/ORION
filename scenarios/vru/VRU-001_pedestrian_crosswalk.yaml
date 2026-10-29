@@ -57,7 +57,6 @@ traffic:
           min: 0.7
           max: 1.4
         mid_hesitation_prob: 0.35
-        start_y: -5.0     # retreat reference point
 
 termination:
   conditions:

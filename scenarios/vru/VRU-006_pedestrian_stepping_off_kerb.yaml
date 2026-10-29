@@ -55,7 +55,7 @@ traffic:
       x: 45.0
       y: -6.5
       heading: 1.5708
-      velocity: 1.3
+      velocity: 0.0
     behavior:
       type: pedestrian
       parameters:
@@ -65,7 +65,7 @@ traffic:
         walk_speed:
           min: 1.0
           max: 1.9
-        hesitate_prob: 0.1
+        mid_hesitation_prob: 0.1
 
 termination:
   conditions:
@@ -95,6 +95,6 @@ parameterization:
         walk_speed:
           min: 0.9
           max: 2.1
-        hesitate_prob:
+        mid_hesitation_prob:
           min: 0.0
           max: 0.3

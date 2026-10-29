@@ -416,20 +416,29 @@ DI-01 is built.
 
 ### NPC behavior types (available in `behavior.type`)
 
-Defined in `simulation/npc_bt.py`:
+Dispatch is in `WorldManager.update_dynamic_objects` (`simulation/world.py`):
 
-- `constant_velocity` — maintains fixed speed
-- `reactive_vehicle` — responds to TTC triggers; supports `bt_type`: `hesitant_brake`, `aggressive_cut_in`
-- `follow_lane` — basic lane following
-- `scripted` — event-driven via `events:` block in YAML
-- `pedestrian` — VRU movement model
+- **`behavior.parameters.bt_type` set → that tree runs, whatever `type` says.** `type` is a
+  label (`reactive_vehicle`, `reactive_pedestrian`, `pedestrian`) once a tree is named.
+- `scripted` (no `bt_type`) — waits for `trigger_type`/`trigger_value`, then
+  `start_velocity`, `post_acceleration` toward `min_velocity`/`max_velocity`, or a `cut_in`
+  to `lateral_target_y`. Not the `events:` block — that is `scenario/events.py`.
+- Anything else, `constant_velocity` included — straight line at the initial velocity.
+  `follow_lane` is not implemented and falls through to this.
 
-`behavior.parameters.bt_type` selects the tree. Registered trees (`_BT_REGISTRY`):
+Registered trees (`_BT_REGISTRY` in `simulation/npc_bt.py`):
 `hesitant_brake`, `hesitant_cut_in`, `adaptive_tailgate`, `cautious_pedestrian`,
 `erratic_pedestrian`, `junction_yield`, and from Phase 4.3 `oncoming_drift`,
 `red_light_runner`, `erratic_cyclist`, `wrong_way_driver`, `tire_blowout`.
+`ScenarioValidator` refuses an unknown `bt_type`, and a `bt_type` on a `scripted` NPC.
+
 **Write the tree before the scenario that needs it** — a scenario whose hazard has no tree
-still runs and still scores, against a vehicle going straight.
+still runs and still scores, against a vehicle going straight. **And name only parameters
+it reads**: `tests/test_npc_behaviour_params.py` scans each tree's and the script's source
+for the keys they read and fails a scenario that declares or overrides any other. Eleven
+pedestrians, MLT-005's tailgater and LON-001's lead all shipped with parameters nothing
+read. A tree waiting for its trigger stands still, so declare such an NPC with
+`velocity: 0.0` or it reports a speed it is not moving at.
 
 ---
 
@@ -1012,13 +1021,14 @@ on the production host is an operational step, not development work.
    through `environment.road.template`. See Section 6.
 
 **60 scenarios; 59 execute.** Ten per category; EMG-004 is refused at load (DI-02).
-Measured 2026-10-30 at 10 runs per scenario, after the lane-keeper sign fix:
+Measured 2026-10-30 at 10 runs per scenario, after the lane-keeper sign fix and with every
+declared NPC behaviour running:
 
 | model | passes | what it is |
 | --- | --- | --- |
 | `emergency_brake` | **52 / 59** | brakes at maximum always — passes by not moving |
-| `ReferenceDriver` | **39 / 59** | IDM + lane keeping + evasion + crossing yield |
-| `SimpleLaneKeep` | 12 / 59 | steering PD, no longitudinal sense |
+| `ReferenceDriver` | **38 / 59** | IDM + lane keeping + evasion + crossing yield |
+| `SimpleLaneKeep` | 14 / 59 | steering PD, no longitudinal sense |
 
 **Read the first row with care.** `emergency_brake` scores highest because nothing in the
 composite rewards making progress and the pass criterion is a collision and off-road rate, so

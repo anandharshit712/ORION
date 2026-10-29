@@ -249,10 +249,11 @@ The scenario library maps onto the SOTIF activities as follows:
   MLT-007. No model in the repository passes them (measured 2026-10-30, 10 runs per scenario), so it
   has not been shown that they can be passed. A FAIL there is not yet evidence against your
   model. Their verification gap says so.
-- **Silently ignored YAML keys are still possible.** DI-02 closed the event-type hole but its
-  audit of keys the parser accepts and ignores is open. One instance was found writing this
-  document: LON-001 parameterises `initial_decel`, which its scripted lead vehicle never
-  reads, so its deceleration is the same on every run.
+- **Silently ignored YAML keys are still possible outside NPC behaviour.** DI-02 closed the
+  event-type hole, and NPC behaviour parameters are now checked against the source of the
+  tree or script that reads them (`tests/test_npc_behaviour_params.py`) — that check found
+  thirteen NPCs whose declared behaviour never ran, LON-001's unread `initial_decel` among
+  them, all fixed. The wider audit of keys the parser accepts and ignores is still open.
 - **Some scenarios are close to duplicates as executed**, because the detail that separates
   them is not modelled: VRU-001 and VRU-006 differ by crossing markings that do not exist in
   the road model; VRU-008 is VRU-004 plus a parked car that does not occlude. Both are

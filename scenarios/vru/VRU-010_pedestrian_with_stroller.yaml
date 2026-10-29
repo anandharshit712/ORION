@@ -47,7 +47,7 @@ traffic:
       x: 42.0
       y: -7.5
       heading: 1.5708
-      velocity: 1.0
+      velocity: 0.0
       length: 1.8
       width: 0.9
     behavior:
@@ -59,7 +59,7 @@ traffic:
         walk_speed:
           min: 0.8
           max: 1.4
-        hesitate_prob: 0.25
+        mid_hesitation_prob: 0.25
 
 termination:
   conditions:

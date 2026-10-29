@@ -358,7 +358,9 @@ class AdaptiveTailgateBT(BaseBT):
     Small Gaussian noise each tick creates organic, non-robotic behaviour.
 
     Key parameters:
-      target_ttc   {min:0.5, max:1.2}  desired time-headway in seconds
+      target_ttc    {min:0.5, max:1.2}  desired time-headway in seconds
+      target_gap    {min, max} m        a fixed gap instead; wins over target_ttc
+      max_velocity  m/s (default 45)
     """
 
     def tick(self, obj, behavior, world, rng, dt):
@@ -366,8 +368,10 @@ class AdaptiveTailgateBT(BaseBT):
         data = behavior.setdefault("_bt_data", {})
         gen = rng.get("traffic")
 
-        # Initialise target TTC once
-        if "target_ttc" not in data:
+        # Initialise the target once: one draw either way
+        if "target_gap" in params:
+            data.setdefault("target_gap", _sample(params["target_gap"], gen))
+        elif "target_ttc" not in data:
             data["target_ttc"] = _sample(
                 params.get("target_ttc", {"min": 0.5, "max": 1.2}), gen
             )
@@ -375,14 +379,18 @@ class AdaptiveTailgateBT(BaseBT):
         ego = world.ego_vehicle
         dist = obj.position.distance_to(ego.position)
         gap = dist - (obj.length / 2.0 + ego.length / 2.0)
-        target_gap = data["target_ttc"] * max(obj.velocity, 1.0)
+        target_gap = data.get("target_gap")
+        if target_gap is None:
+            target_gap = data["target_ttc"] * max(obj.velocity, 1.0)
         gap_error = gap - target_gap
 
         # Proportional controller + noise
         accel = -2.0 * gap_error + float(gen.normal(0.0, 0.4))
         accel = max(-8.0, min(3.0, accel))
 
-        return _apply_accel(obj, accel, 0.0, 45.0, dt)
+        return _apply_accel(
+            obj, accel, 0.0, float(params.get("max_velocity", 45.0)), dt
+        )
 
 
 # ── Pedestrian / VRU BTs ─────────────────────────────────────────────────────
@@ -401,8 +409,10 @@ class CautiousPedestrianBT(BaseBT):
 
     Key parameters:
       walk_speed          {min:0.7, max:1.4}  m/s
-      start_y             float  y-coordinate of waiting position (for retreat check)
       mid_hesitation_prob 0–1   chance of hesitating once while crossing
+
+    The waiting position (for the retreat check) is wherever the pedestrian
+    starts. It waits stationary, so declare it with initial velocity 0.
     """
 
     def tick(self, obj, behavior, world, rng, dt):
@@ -498,8 +508,9 @@ class ErraticPedestrianBT(BaseBT):
     Designed for VRU-008 to defeat any pattern-matching by the AV model.
 
     Key parameters:
-      walk_speed_range   {min:0.4, max:1.6}   m/s
-      decision_interval  {min:0.2, max:1.4}   s between state changes
+      walk_speed_range      {min:0.4, max:1.6}   m/s
+      decision_interval     {min:0.2, max:1.4}   s between state changes
+      direction_change_prob 0–1 (default 0.20)   chance a decision reverses
     """
 
     def tick(self, obj, behavior, world, rng, dt):
@@ -523,15 +534,18 @@ class ErraticPedestrianBT(BaseBT):
         # Random decision at each interval
         if world.sim_time >= data.get("next_decision_t", float("inf")):
             roll = gen.random()
-            if roll < 0.20:
+            # The other outcomes keep their widths and shift with the reversal
+            # band, so the default reproduces the original 0.20/0.45/0.60/0.65.
+            p_rev = float(params.get("direction_change_prob", 0.20))
+            if roll < p_rev:
                 data["direction"] = -data.get("direction", 1.0)  # reverse
-            elif roll < 0.45:
+            elif roll < p_rev + 0.25:
                 data["current_speed"] = _sample(  # change speed
                     params.get("walk_speed_range", {"min": 0.4, "max": 1.6}), gen
                 )
-            elif roll < 0.60:
+            elif roll < p_rev + 0.40:
                 data["current_speed"] = 0.0  # freeze
-            elif roll < 0.65:
+            elif roll < p_rev + 0.45:
                 # Brief sprint
                 data["current_speed"] = _sample({"min": 1.8, "max": 2.5}, gen)
             # else: keep current behaviour
