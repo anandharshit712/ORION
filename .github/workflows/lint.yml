@@ -20,11 +20,11 @@ jobs:
         # whatever ruff had published that morning, which is why Lint had been
         # red on every run since 0.16 changed the default rule set.
         #
-        # api and worker are installed for mypy, not for the linters. With only
-        # [dev] present, fastapi, sqlalchemy, stripe and celery are missing and
-        # mypy reports an unresolved import for each - checking a different
-        # program than the one that ships. Black and Ruff do not care either way.
-        run: pip install -e ".[dev,api,worker]"
+        # api, worker and ros2 are installed for mypy, not for the linters. With
+        # only [dev] present, fastapi, sqlalchemy, stripe, celery and zmq are
+        # missing and mypy reports an unresolved import for each - checking a
+        # different program than the one that ships. Black and Ruff do not care.
+        run: pip install -e ".[dev,api,worker,ros2]"
       - name: Black
         working-directory: arep_implementation
         run: black --check arep/ tests/ scripts/

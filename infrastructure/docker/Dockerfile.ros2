@@ -1,0 +1,31 @@
+# ORION ROS2 bridge — ROS2 Humble with ORION and the bridge node (Phase 4.1)
+#
+#   docker build -f infrastructure/docker/Dockerfile.ros2 -t orion-ros2 .
+#   docker run --rm --network host --ipc host orion-ros2 --scenario-id LON-003 --seed 42
+#
+# Both flags are needed for a stack outside the container to see /orion/*.
+# With --network host alone, a stack in another container received nothing. Fast
+# DDS sees one host and moves data through shared memory, which a private IPC
+# namespace hides. Measured: 0 messages without --ipc host, 49.8 Hz with it.
+# Ground truth only until Phase 6.
+FROM ros:humble-ros-base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-ackermann-msgs python3-pip && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /orion
+
+COPY arep_implementation/pyproject.toml arep_implementation/
+COPY arep_implementation/arep/ arep_implementation/arep/
+COPY arep_implementation/config/ arep_implementation/config/
+# Ubuntu 22.04 ships setuptools 59, too old for a pyproject editable install.
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir -e "arep_implementation[ros2]"
+
+COPY scenarios/ scenarios/
+COPY arep_implementation/ros2_bridge_node.py arep_implementation/
+
+WORKDIR /orion/arep_implementation
+# The ros base image's entrypoint sources /opt/ros/humble before running this.
+ENTRYPOINT ["/ros_entrypoint.sh", "python3", "ros2_bridge_node.py"]

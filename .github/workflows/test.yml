@@ -28,7 +28,7 @@ jobs:
         # failed here on an import while passing on every developer machine that
         # happened to have the packages. They skip if the extra is ever dropped,
         # but the point is to run them.
-        run: pip install -e ".[dev,api,worker,search]"
+        run: pip install -e ".[dev,api,worker,search,ros2]"
       - name: Run tests
         working-directory: arep_implementation
         # Captured so the failure can be summarised below. pipefail keeps
@@ -106,7 +106,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: arep_implementation
-        run: pip install -e ".[dev,api,worker,search]"
+        run: pip install -e ".[dev,api,worker,search,ros2]"
 
       - name: Alembic upgrade → downgrade → upgrade
         working-directory: arep_implementation

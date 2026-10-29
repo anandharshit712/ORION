@@ -348,6 +348,82 @@ def _pdf_report_sections():
     return "HTML report renders its numbers (PDF step needs GTK, Linux CI)"
 
 
+# ── 4.1 ROS2 bridge ───────────────────────────────────────────────────────
+
+
+def _ros2_bridge_protocol():
+    """ORION's half: handshake, a tick per step, a command drives the ego."""
+    import socket
+    import threading
+
+    import zmq
+
+    from arep.bridges.ros2_bridge import Ros2BridgeModel
+    from arep.execution.runner import EvaluationRunner
+
+    def port():
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    tick_ep, ctl_ep = f"tcp://127.0.0.1:{port()}", f"tcp://127.0.0.1:{port()}"
+    speeds: list = []
+    stop = threading.Event()
+
+    def bridge():
+        ctx = zmq.Context.instance()
+        push, sub = ctx.socket(zmq.PUSH), ctx.socket(zmq.SUB)
+        push.connect(ctl_ep)
+        sub.setsockopt(zmq.SUBSCRIBE, b"")
+        sub.connect(tick_ep)
+        while not stop.is_set():
+            push.send_json({"type": "control", "speed": 25.0})
+            if sub.poll(2):
+                msg = sub.recv_json()
+                if msg["type"] == "tick":
+                    speeds.append(msg["obs"]["ego"]["velocity"])
+        push.close(0)
+        sub.close(0)
+
+    t = threading.Thread(target=bridge, daemon=True)
+    t.start()
+    model = Ros2BridgeModel(tick_ep, ctl_ep, connect_timeout=5.0, tick_interval=0.0)
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "scenarios/basic/straight_road_empty.yaml"
+    )
+    try:
+        EvaluationRunner().run_single(str(path), model, master_seed=42)
+    finally:
+        model.close()
+        stop.set()
+        t.join(2.0)
+    assert speeds and max(speeds) > speeds[0] + 5.0, "the command did not drive the ego"
+    return f"{len(speeds)} ticks bridged, ego {speeds[0]:.1f} -> {max(speeds):.1f} m/s"
+
+
+def _ros2_acceptance():
+    """The four roadmap criteria, against a real ROS2 graph."""
+    import subprocess
+
+    try:
+        import rclpy  # noqa: F401
+    except ImportError:
+        raise NotImplementedError(
+            "needs ROS2 Humble: run tests/test_ros2_integration.py in the "
+            "infrastructure/docker/Dockerfile.ros2 image"
+        )
+    here = Path(__file__).resolve().parent.parent
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "tests/test_ros2_integration.py"],
+        cwd=here,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stdout[-500:]
+    return proc.stdout.strip().splitlines()[-1]
+
+
 # ── 4.2 / 4.4 interop ─────────────────────────────────────────────────────
 
 
@@ -699,6 +775,12 @@ CRITERIA = [
         _importance_sampling_biases_and_weights_back,
     ),
     ("4.3", "Sellable suites partition the library", _suites_partition_the_library),
+    ("4.1", "ORION side of the ROS2 bridge drives the ego", _ros2_bridge_protocol),
+    (
+        "4.1",
+        "ROS2: starts, odom ~50 Hz, /orion/cmd drives, node loss coasts",
+        _ros2_acceptance,
+    ),
     ("4.2", "Parsing TownSimple.xodr", _xodr_named_fixture),
     ("4.2", "XODR line+arc geometry parses to a RoadGraph", _xodr_parses_at_all),
     ("4.4", "Importing the ASAM CutIn.osc sample", _osc_named_fixture),
