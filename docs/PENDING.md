@@ -178,19 +178,6 @@ so neither has been exercised against a file this project did not write. Unblock
 sample with a clearly redistributable licence (MIT/Apache/CC0/BSD), committed with its source
 URL and licence beside it.
 
-### The lane-keeping controllers have the offset term backwards
-`lane_offset` is negative to the left, and positive `Action.steering` turns left (the physics
-heading increases with it: `θ' = v/L·tan(δ)`). `SimpleLaneKeep` and `ReferenceDriver` steer
-`-(kp·lane_offset + kd·heading_error)`, so the offset term pushes the car further from its
-lane and only the heading term corrects. Measured on LAT-001 with no traffic: SimpleLaneKeep
-started 0.5 m left of centre swings to +1.04 m right and ends `off_road`; started 0.5 m right
-it also ends `off_road`. Hidden on straight roads that start centred, fatal on a curve:
-XODR-001 is 0/10 for ReferenceDriver, and with `kp` flipped it tracks within ±0.2 m. CLAUDE.md
-said "negative = left" for `Action.steering`, which is how the controllers came to be written
-this way; customer models written against that doc would inherit it. Fixing the controllers
-moves ReferenceDriver's and SimpleLaneKeep's scores across the library, so it needs a
-METHODOLOGY change-log row and a re-measured library table.
-
 ### `POST /api/maps/upload` is not built (4.2)
 Nothing can reference an uploaded map: scenarios are library files resolved by path, OSC
 import is parse-only, and there is no scenario upload. `OpenDRIVEParser().read(bytes)` already

@@ -444,6 +444,7 @@ Scores are only comparable within a scoring version. Changes that moved numbers:
 
 | Phase | Change | Effect |
 | --- | --- | --- |
+| 4-fix | Bundled lane-keepers steer toward the lane, with damping | Scores move only for `SimpleLaneKeep` and `ReferenceDriver`; the scoring is unchanged. `ReferenceDriver` 32 → 39 of 59, off-road rate 0.141 → 0.107; `SimpleLaneKeep` stays at 12; `emergency_brake` is unaffected. See "The lane-keeper sign correction". |
 | 0.5 | Lane compliance computed for real (was hardcoded 1.0) | Compliance scores fall for any model that drifts |
 | 0.5 | Lane 0 centred on the travel line | Previously every vehicle straddled a lane boundary |
 | 0.5 | Load transfer uses current-step acceleration | Small changes in `DYNAMIC` mode only |
@@ -533,14 +534,47 @@ moves, so scores remain comparable across the change.
 
 Two consequences worth stating, because both were previously invisible:
 
-- **A PD lane-keeper is marginally stable and occasionally diverges.** On an
-  untouched scenario (LON-001) `SimpleLaneKeep` ends off the road on 1 seed in
-  20. That was always true; it simply never failed anything.
+- **`SimpleLaneKeep` occasionally left the road on an untouched scenario.** On
+  LON-001 it ended off the road on 1 seed in 20. This was first put down to a PD
+  lane-keeper being marginally stable; it was the sign error and the missing
+  damping described in "The lane-keeper sign correction" below.
 - **The roundabout template cannot be driven by anything in the repo.** Its
   circulating carriageway is a single lane on a curve, so a straight path
   across the circle is off-road at every point between the two crossings. Both
-  steering models leave it within four seconds. INT-004's former "pass" was
+  steering models leave it on every run, before and after the lane-keeper sign
+  correction. INT-004's former "pass" was
   entirely an artefact of this criterion.
+
+### The lane-keeper sign correction
+
+`lane_offset` is negative to the left and positive `Action.steering` turns left,
+so a lane-keeper that corrects steers `+kp·lane_offset`. Both bundled steering
+models steered `-(kp·lane_offset + kd·heading_error)`: the offset term pushed
+the car away from its lane and only the heading term pulled it back. On a
+straight road that starts centred this hides; on LAT-001 started 0.5 m off
+centre, `SimpleLaneKeep` swung across the lane and left the road either way.
+
+Flipping the sign alone was not enough. For the kinematic bicycle model the
+closed loop has damping ratio `ζ = kd / (4·√(0.5·kp·L))` with `L = 2.7 m` and
+the 0.5 rad steering limit, independent of speed. The old gains gave ζ ≈ 0.04
+(`SimpleLaneKeep`) and ≈ 0.055 (`ReferenceDriver`), so both oscillated. Both now
+use `kp = 0.1, kd = 1.0`, ζ ≈ 0.68.
+
+Measured at 10 runs per scenario, before and after:
+
+| model | passes | composite | collision rate | off-road rate |
+| --- | --- | --- | --- | --- |
+| `ReferenceDriver` | 32 → **39** | 0.807 → 0.811 | 0.117 → 0.103 | 0.141 → 0.107 |
+| `SimpleLaneKeep` | 12 → 12 | 0.630 → 0.629 | 0.510 → 0.527 | 0.181 → 0.164 |
+| `emergency_brake` | 52 → 52 | unchanged | unchanged | unchanged |
+
+`ReferenceDriver` newly passes LAT-002, LAT-005, LAT-006, MLT-006, VRU-005,
+VRU-008 and VRU-010. Each was an off-road failure that is now zero. Nothing it
+passed before fails. `SimpleLaneKeep` barely moves because it has no
+longitudinal control, so collisions dominate its failures, and a lane-keeper
+on a straight lane cannot follow a junction. This is a model change, not a
+scoring change: the evaluator is untouched, and results for these two models
+are not comparable across it.
 
 ### The 4.3 feasibility correction
 

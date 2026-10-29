@@ -245,8 +245,8 @@ The scenario library maps onto the SOTIF activities as follows:
 
 ### 5.4 The library
 
-- **Six scenarios are unproven**: EMG-002, EMG-008, LAT-003, LAT-007, MLT-005 and MLT-007.
-  No model in the repository passes them (measured 2026-10-01, 10 runs per scenario), so it
+- **Seven scenarios are unproven**: EMG-001, EMG-002, EMG-008, LAT-003, LAT-007, MLT-005 and
+  MLT-007. No model in the repository passes them (measured 2026-10-30, 10 runs per scenario), so it
   has not been shown that they can be passed. A FAIL there is not yet evidence against your
   model. Their verification gap says so.
 - **Silently ignored YAML keys are still possible.** DI-02 closed the event-type hole but its

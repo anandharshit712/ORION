@@ -13,7 +13,9 @@ scenario:
     Triggering condition: a large static object lies in the ego lane ahead. Hazardous
     event: collision with road debris at highway speed.
   verification_gap: >-
-    The debris is a stationary car-sized object observable from the first frame; the
+    Unproven as of 2026-10-30: no model in the repository passes it (emergency_brake
+    collides, and ReferenceDriver leaves the road on 1 run in 10 at 10 runs per scenario),
+    so it is not yet shown that the scenario is passable. The debris is a stationary car-sized object observable from the first frame; the
     50 m first-visibility distance in the description is not modelled.
   duration: 15.0
 
