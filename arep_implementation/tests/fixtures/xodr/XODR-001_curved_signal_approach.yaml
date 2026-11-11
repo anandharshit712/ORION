@@ -19,7 +19,7 @@ scenario:
   verification_gap: >-
     Red-light running is not detected, so a model that drives through the red
     passes; only lane keeping and off-road are checked on this geometry.
-  duration: 30.0
+  duration: 28.0   # faster seeds reach the end of the departure road at ~29.8 s
 
 ego:
   initial:
@@ -56,7 +56,7 @@ termination:
     - collision
     - off_road
     - timeout
-  timeout: 30.0
+  timeout: 28.0
 
 master_seed: 4201
 parameterization:

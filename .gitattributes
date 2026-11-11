@@ -34,3 +34,7 @@ Makefile    text eol=lf
 *.pkl       binary
 *.gz        binary
 *.zip       binary
+
+# Third-party fixtures are committed byte-for-byte as published upstream, so
+# their recorded SHA-256 keeps matching the source. No line-ending rewrite.
+arep_implementation/tests/fixtures/**/third_party/** -text

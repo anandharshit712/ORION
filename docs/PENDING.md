@@ -169,14 +169,30 @@ missing is `GET /api/compare/{id}/report.pdf`: the generator works and renders e
 section, but WeasyPrint needs GTK, which is absent on Windows, so the endpoint could not be
 exercised here.
 
-### Interop fixtures are not committed
-Two acceptance criteria name third-party files that are absent:
-`tests/fixtures/TownSimple.xodr` (4.2) and the ASAM `CutIn.osc` sample (4.4). Both parsers
-are tested against hand-authored or round-tripped input instead
-(`tests/fixtures/xodr/orion_junction.xodr`, `tests/fixtures/osc/cut_in_hand_authored.osc`),
-so neither has been exercised against a file this project did not write. Unblock: a
-sample with a clearly redistributable licence (MIT/Apache/CC0/BSD), committed with its source
+### No third-party OpenSCENARIO 2.0 sample is committed (4.4)
+The OSC importer is tested against `tests/fixtures/osc/cut_in_hand_authored.osc` and the
+library's own round trip, so it has not read a file this project did not write. The OpenDRIVE
+half of this gap is closed: three esmini maps (MPL-2.0) are in
+`tests/fixtures/xodr/third_party/esmini/`. esmini cannot close this half, because its
+scenarios are OpenSCENARIO 1.x XML (`.xosc`), not the 2.0 DSL. Unblock: an OSC2 `.osc` file
+with a redistributable licence (MIT/Apache/MPL/CC0/BSD), committed unmodified with its source
 URL and licence beside it.
+
+### Lane lookups scan the whole polyline every tick
+`get_signed_lateral_offset`, `get_closest_point` and `offset_and_heading` in `core/state.py`
+walk every point of every lane in pure Python, several times per tick. The library's roads are
+short enough not to notice; a long OpenDRIVE road is not. On esmini's 1154 m `curves.xodr`
+one 40 s run took 25 s with `EmergencyBrake` and 69 s with `ReferenceDriver`, about 13 million
+`Vector2D.__sub__` calls (profiled 2026-11-12). It is why XODR-002 drives 20 s of the road and
+not all of it. Unblock: a vectorised numpy nearest-segment search, or a windowed search from
+the previous tick's index. Results must stay bit-identical, since frame hashes depend on them.
+
+### The live viewer labels the safety score as a time-to-collision
+`SimulationViewer.jsx` shows `metrics.safety_score` (a 0–1 score) in the "Min TTC" readout with
+unit "s", so a run with no traffic reads "1.00 s". The tick frame carries no TTC to show.
+Either add one to `get_tick_frame()` (deterministic, and it changes every stored frame hash)
+or relabel the readout. Seen during the 4.2 browser check, 2026-11-12, along with the
+"Dashboard" button overlapping the scenario title in the top bar.
 
 ### `POST /api/maps/upload` is not built (4.2)
 Nothing can reference an uploaded map: scenarios are library files resolved by path, OSC

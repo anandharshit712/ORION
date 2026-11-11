@@ -232,7 +232,7 @@ def test_the_scenario_runs_to_completion():
     """Stopping on a curve keeps the car on the road until the timeout."""
     result = EvaluationRunner().run_single(str(SCENARIO), EmergencyBrakeModel(), 4201)
     assert result.termination_reason not in ("off_road", "collision")
-    assert result.duration == pytest.approx(30.0, abs=0.05)
+    assert result.duration == pytest.approx(28.0, abs=0.05)
     assert result.frame_hash
 
 

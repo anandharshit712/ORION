@@ -1,0 +1,56 @@
+# Test fixture, not a library scenario: `source: xodr` on a map this project did
+# not write (esmini's curves.xodr, MPL-2.0, see third_party/esmini/SOURCE.md).
+# It is not in scenarios/ and belongs to no suite.
+scenario:
+  name: "XODR-002 Lane Keeping on a Third-Party Curved Road"
+  version: "1.0"
+  description: >
+    Ego drives the S-bend of a two-lane rural road taken unmodified from the
+    esmini project: out of a left arc, through clothoids that reverse the
+    curvature, into a 100 m radius right arc. No traffic and no signals; the
+    only task is to follow the lane through geometry someone else authored.
+  behavioral_requirement: >-
+    The ego must stay in its lane through the S-bend for the whole run.
+  hazard: >-
+    Triggering condition: a sequence of curves and clothoid transitions.
+    Hazardous event: lane departure on a curve; no other road user is present.
+  verification_gap: >-
+    Only off-road is checked; drifting into the oncoming lane without leaving
+    the carriageway passes.
+  duration: 20.0
+
+ego:
+  initial:
+    velocity: 11.11   # x, y and heading come from the map
+  constraints:
+    max_velocity: 16.67
+    max_acceleration: 3.0
+    max_deceleration: 8.0
+    max_steering: 0.5
+
+environment:
+  road:
+    type: rural
+    source: xodr
+    file: third_party/esmini/curves.xodr
+    ego_start_road_id: "1"
+    ego_start_s: 300.0   # end of a left arc; clothoids then reverse into a 100 m radius right arc
+    ego_start_lane_id: "-1"
+  weather:
+    condition: clear
+    visibility: 1000.0
+
+traffic: []
+
+termination:
+  conditions:
+    - collision
+    - off_road
+    - timeout
+  timeout: 20.0
+
+master_seed: 4202
+parameterization:
+  ego_velocity:
+    min: 8.33      # 30 km/h
+    max: 13.89     # 50 km/h
