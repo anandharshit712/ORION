@@ -564,6 +564,37 @@ def _xodr_fixture_parses():
     )
 
 
+def _xodr_third_party_maps_parse():
+    """Maps this project did not write: esmini's, unmodified (MPL-2.0). Each
+    planView record must end where the authoring tool says the next begins."""
+    import math
+    import xml.etree.ElementTree as ET
+
+    from arep.maps.xodr_parser import OpenDRIVEParser, _dense_geometry
+
+    paths = sorted((XODR_DIR / "third_party" / "esmini").glob("*.xodr"))
+    assert paths, "no third-party maps committed"
+    worst = joins = 0
+    for path in paths:
+        roads = ET.parse(path).getroot().findall("road")
+        xmap = OpenDRIVEParser().read(path.read_bytes(), path.name)
+        assert len(xmap.graph.segments) == len(roads), f"{path.name}: roads skipped"
+        for road in roads:
+            records = list(road.find("planView"))
+            for this, following in zip(records, records[1:]):
+                _, x, y, _ = _dense_geometry(this)
+                gap = math.hypot(
+                    x[-1] - float(following.get("x")),
+                    y[-1] - float(following.get("y")),
+                )
+                worst, joins = max(worst, gap), joins + 1
+    assert worst < 1e-3, f"geometry gap {worst * 1000:.2f} mm"
+    return (
+        f"{len(paths)} esmini maps parse; {joins} geometry joins, "
+        f"worst {worst * 1000:.3f} mm"
+    )
+
+
 def _xodr_scenario_runs():
     from arep.core.observation import Observation
     from arep.core.random_manager import RandomManager
@@ -888,6 +919,11 @@ CRITERIA = [
         "OpenDRIVE fixture (line/arc/spiral/poly3/paramPoly3, junction, signal) "
         "parses to a RoadGraph",
         _xodr_fixture_parses,
+    ),
+    (
+        "4.2",
+        "Third-party OpenDRIVE maps parse with geometry matching their author",
+        _xodr_third_party_maps_parse,
     ),
     (
         "4.2",

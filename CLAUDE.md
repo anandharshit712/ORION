@@ -347,7 +347,9 @@ environment:
 - The map's SHA-256 is folded into the scenario content hash, and a map changed after parsing
   is refused at run time. Only `dynamic="yes"` signals make a traffic light.
 - Unmodelled content goes to `XodrMap.warnings`. OSC2 export and replay refuse xodr
-  scenarios (see PENDING). Fixtures: `tests/fixtures/xodr/` (hand-authored).
+  scenarios (see PENDING). Fixtures: `tests/fixtures/xodr/` — `orion_junction.xodr` is
+  hand-authored; `third_party/esmini/` holds three unmodified esmini maps (MPL-2.0, provenance
+  and hashes in `SOURCE.md`, committed `-text` so the bytes stay upstream's). Never edit them.
 
 ### Requirement metadata (Phase 4.5)
 

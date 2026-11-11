@@ -1484,16 +1484,19 @@ environment:
 - [x] OpenDRIVE parses to a `RoadGraph` — line, arc, spiral, poly3 and paramPoly3 (both
       pRange modes), a junction with connecting roads and a signal, on the hand-authored
       `tests/fixtures/xodr/orion_junction.xodr`. Arc and spiral end points match closed forms to
-      ~4 µm. `TownSimple.xodr` was never committed and no permissively licensed third-party map
-      is used. Unmodelled content (`<object>`, laneOffset, tapers, later laneSections) is
+      ~4 µm. `TownSimple.xodr` was never committed; instead three unmodified esmini maps
+      (MPL-2.0, `tests/fixtures/xodr/third_party/esmini/`) parse, and every planView record
+      ends within 0.05 mm of where the authoring tool says the next one starts. Unmodelled content (`<object>`, laneOffset, tapers, later laneSections) is
       reported in `XodrMap.warnings`.
 - [x] `is_off_road()` is correct for known on/off-road positions
-- [~] A scenario using `source: xodr` runs to completion; Three.js renders the geometry —
-      XODR-001 (test fixture, in no suite) runs 30 s and `emergency_brake` passes (0.9924).
-      `ReferenceDriver` leaves the road 10/10 on the first clothoid because of a pre-existing
-      sign error in its lane-keeping term (PENDING), not the map. Geometry reaches the viewer
-      via `GET /api/runs/{id}/road`, outside the hashed frames; rendering in a browser is not
-      verified.
+- [x] A scenario using `source: xodr` runs to completion; Three.js renders the geometry —
+      XODR-001 (test fixture, in no suite) runs its 28 s and `ReferenceDriver` completes 10/10
+      (0.950) since the lane-keeper sign fix (#9). XODR-002 drives the S-bend of esmini's
+      `curves.xodr` and both steering models complete 5/5. Geometry reaches the viewer via
+      `GET /api/runs/{id}/road`, outside the hashed frames. Rendering was checked in headless
+      Chromium on 2026-11-12 against a live stack: both maps draw their lanes, the junction
+      and the crossing road, with the car in its lane. A manual check, so `verify_roadmap.py`
+      still reports it as cannot-verify.
 - [ ] `POST /api/maps/upload` — not built: nothing can reference an uploaded map yet (PENDING).
 
 ## 4.3 — Scenario Library Expansion (18 → 60) — ✅ DONE (60 of 60, 2026-09-29)
